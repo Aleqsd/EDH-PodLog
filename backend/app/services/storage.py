@@ -49,7 +49,6 @@ async def upsert_user_decks(
         deck_doc = deck.model_dump(mode="python")
         deck_doc["user_name"] = payload.user.user_name
         deck_doc["synced_at"] = synced_at
-
         await decks.update_one(
             {"public_id": deck.public_id, "user_name": payload.user.user_name},
             {"$set": deck_doc},
@@ -86,7 +85,6 @@ async def upsert_user_deck_summaries(
         deck_doc = deck.model_dump(mode="python")
         deck_doc["user_name"] = payload.user.user_name
         deck_doc["synced_at"] = synced_at
-
         await deck_summaries.update_one(
             {"public_id": deck.public_id, "user_name": payload.user.user_name},
             {"$set": deck_doc},

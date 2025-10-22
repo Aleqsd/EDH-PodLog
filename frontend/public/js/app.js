@@ -222,10 +222,12 @@ const setMoxfieldIntegration = (updater) =>
     const next =
       typeof updater === "function" ? updater({ ...existing }) : { ...existing, ...updater };
 
+    const currentIntegrations = session.integrations ?? {};
+
     return {
       ...session,
       integrations: {
-        ...session.integrations,
+        ...currentIntegrations,
         moxfield: next,
       },
     };
@@ -269,6 +271,7 @@ const showDeckStatus = (message, variant = "neutral") => {
     deckStatusEl.classList.add("is-success");
   }
 };
+
 
 const getDeckIdentifier = (deck) =>
   deck?.publicId ?? deck?.public_id ?? deck?.slug ?? deck?.id ?? deck?.deckId ?? null;
@@ -459,9 +462,6 @@ async function handleDeckRemoval(deckId, deckName) {
     if (typeof renderMoxfieldPanel === "function") {
       renderMoxfieldPanel(finalSession, { preserveStatus: true });
     }
-    window.dispatchEvent(
-      new CustomEvent("edh:session-updated", { detail: finalSession })
-    );
     showDeckStatus("Deck supprimé de vos imports.", "success");
   } catch (error) {
     console.error("Unable to delete deck", error);
@@ -1262,15 +1262,12 @@ const fetchDeckSummariesFromBackend = async (handle, signal) => {
   const encodedHandle = encodeURIComponent(trimmedHandle);
   let response;
   try {
-    response = await fetch(
-      buildBackendUrl(`/users/${encodedHandle}/deck-summaries`),
-      {
-        signal,
-        headers: {
-          Accept: "application/json",
-        },
-      }
-    );
+    response = await fetch(buildBackendUrl(`/users/${encodedHandle}/deck-summaries`), {
+      signal,
+      headers: {
+        Accept: "application/json",
+      },
+    });
   } catch (error) {
     const networkError = new Error(
       "Impossible de contacter l'API EDH PodLog pour le moment. Réessayez plus tard."
@@ -1382,9 +1379,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentSession = getSession();
   let cachedDecksController = null;
 
-  window.addEventListener("edh:session-updated", (event) => {
-    currentSession = event.detail ?? getSession();
-  });
 
   const loadCachedDecksForHandle = async (
     handle,
