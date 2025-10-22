@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>EDH PodLog · Mes decks</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="app-shell" data-require-auth="true" data-page="decks">
+    <div class="app-background" aria-hidden="true"></div>
+    <header class="app-header">
+      <a class="brand brand-link" href="dashboard.html">
+        <div class="brand-icon">🜂</div>
+        <span class="brand-text">EDH PodLog</span>
+      </a>
+      <nav class="app-nav">
+        <a class="app-nav-link" href="dashboard.html">Tableau de bord</a>
+        <a class="app-nav-link" href="#">Parties</a>
+        <a class="app-nav-link is-active" href="decks.html">Decks</a>
+        <a class="app-nav-link" href="#">Statistiques</a>
+        <a class="app-nav-link" href="synchronisation.html">Synchronisation</a>
+      </nav>
+      <div class="profile-area">
+        <button
+          class="profile-button"
+          type="button"
+          id="profileMenuButton"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >
+          <span class="profile-name" id="profileName">Vous</span>
+          <span class="profile-avatar" id="profileAvatar" aria-hidden="true">VP</span>
+          <svg
+            class="profile-caret"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M4.47 6.97a.75.75 0 0 1 1.06 0L8 9.44l2.47-2.47a.75.75 0 1 1 1.06 1.06L8.53 11a.75.75 0 0 1-1.06 0L4.47 8.03a.75.75 0 0 1 0-1.06z"
+            />
+          </svg>
+        </button>
+        <div class="profile-dropdown" id="profileMenu" role="menu">
+          <a class="dropdown-link" href="profile.html" role="menuitem">Mon profil</a>
+          <button class="dropdown-link" type="button" id="signOutBtn" role="menuitem">
+            Se déconnecter
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="decks-main">
+      <section class="decks-section">
+        <header class="decks-header">
+          <div>
+            <h1>Vos decks importés</h1>
+            <p>
+              Retrouver ici les listes synchronisées depuis vos intégrations. Lancez une
+              nouvelle synchronisation pour mettre vos decks à jour.
+            </p>
+          </div>
+          <a class="primary-action action-with-icon" href="synchronisation.html">
+            <img
+              class="action-icon"
+              src="assets/moxfield_logo.png"
+              alt="Logo Moxfield"
+              width="24"
+              height="24"
+              loading="lazy"
+            />
+            <span>Synchroniser</span>
+          </a>
+        </header>
+        <p class="deck-status" id="deckStatus" role="status"></p>
+        <div class="deck-collection" id="deckCollection"></div>
+        <p class="deck-collection-empty" id="deckCollectionEmpty">
+          Aucun deck importé pour le moment. Lancez une synchronisation pour retrouver vos
+          listes.
+        </p>
+      </section>
+    </main>
+    <script
+      src="https://accounts.google.com/gsi/client"
+      async
+      defer
+      onload="window.dispatchEvent(new Event('google-loaded'))"
+    ></script>
+    <script src="config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
