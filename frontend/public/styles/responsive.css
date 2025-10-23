@@ -1,0 +1,40 @@
+@media (max-width: 640px) {
+  .site-header {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .brand-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 1.05rem;
+  }
+
+  .hero-card {
+    padding: 1.35rem;
+  }
+
+  .app-header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .app-nav {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .profile-area {
+    justify-self: center;
+  }
+
+  .profile-card {
+    border-radius: 22px;
+  }
+
+  .profile-overview {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

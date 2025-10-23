@@ -7,8 +7,12 @@ import { dirname, join } from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const appPath = join(__dirname, "../public/js/app.js");
-const appSource = await readFile(appPath, "utf8");
+const scriptNames = ["app-core.js", "app-features.js", "app-init.js"];
+const appSources = await Promise.all(
+  scriptNames.map((name) =>
+    readFile(join(__dirname, "../public/js", name), "utf8")
+  )
+);
 
 const createLocalStorage = () => {
   const store = new Map();
@@ -65,8 +69,12 @@ const loadInternals = () => {
   context.self = context.window;
 
   vm.createContext(context);
-  const script = new vm.Script(appSource, { filename: "app.js" });
-  script.runInContext(context);
+  for (let index = 0; index < appSources.length; index += 1) {
+    const source = appSources[index];
+    const filename = scriptNames[index];
+    const script = new vm.Script(source, { filename });
+    script.runInContext(context);
+  }
 
   return context.window.EDH_PODLOG_INTERNAL;
 };

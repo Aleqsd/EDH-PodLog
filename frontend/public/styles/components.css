@@ -1,0 +1,342 @@
+.card-layout {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.card-layout.-with-visual {
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+}
+
+.card-visual {
+  border-radius: 18px;
+  background: rgba(15, 20, 34, 0.78);
+  border: 1px solid rgba(66, 86, 140, 0.35);
+  padding: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-visual img {
+  width: 100%;
+  max-width: 280px;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(5, 10, 24, 0.45);
+}
+
+.card-info-panel {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.card-info-panel .back-link {
+  font-size: 0.85rem;
+  color: #98b6ff;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.card-info-panel .back-link:hover {
+  text-decoration: underline;
+}
+
+.card-info-headline {
+  margin: 0;
+  font-size: 1.75rem;
+  color: #f5f7fb;
+  font-weight: 700;
+}
+
+.card-info-subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(203, 214, 255, 0.68);
+}
+
+.card-meta-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+  color: rgba(203, 214, 255, 0.82);
+}
+
+.card-meta-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+  font-size: 0.95rem;
+  color: rgba(210, 220, 255, 0.86);
+}
+
+.card-meta-list strong {
+  color: rgba(235, 240, 255, 0.95);
+}
+
+.card-oracle {
+  margin: 0;
+  padding: 1.1rem 1.25rem;
+  border-radius: 16px;
+  background: rgba(18, 25, 44, 0.75);
+  border: 1px solid rgba(75, 96, 150, 0.35);
+  color: rgba(211, 222, 255, 0.86);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.card-oracle.is-placeholder {
+  color: rgba(203, 214, 255, 0.6);
+  font-style: italic;
+}
+
+.card-quantity {
+  font-size: 0.9rem;
+  color: rgba(203, 214, 255, 0.72);
+}
+
+@media (max-width: 960px) {
+  .deck-detail-main,
+  .card-detail-main {
+    padding: 2rem 1.5rem;
+  }
+
+  .deck-detail-section,
+  .card-detail-section {
+    padding: 1.8rem;
+  }
+
+  .deck-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+
+  .deck-commander-area {
+    gap: 0.9rem;
+  }
+
+  .deck-summary {
+    gap: 1rem;
+  }
+
+  .deck-summary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  .commander-preview-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .card-layout.-with-visual {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-visual {
+    max-width: 320px;
+    margin: 0 auto;
+  }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 9, 18, 0.78);
+  backdrop-filter: blur(6px);
+  z-index: 2000;
+  padding: 1.5rem;
+}
+
+.modal-backdrop.is-visible {
+  display: flex;
+}
+
+.modal {
+  width: min(640px, 100%);
+  background: rgba(13, 18, 32, 0.98);
+  border-radius: 22px;
+  border: 1px solid rgba(91, 110, 168, 0.4);
+  box-shadow: 0 28px 64px rgba(4, 6, 18, 0.55);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 1.75rem 1.25rem;
+  border-bottom: 1px solid rgba(91, 110, 168, 0.35);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #f5f7fb;
+}
+
+.modal-close {
+  border: none;
+  background: none;
+  color: rgba(203, 214, 255, 0.7);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.modal-close:hover {
+  color: #ffffff;
+}
+
+.modal-body {
+  padding: 1.25rem 1.75rem;
+  display: grid;
+  gap: 1.25rem;
+  overflow: hidden;
+}
+
+.modal-description {
+  margin: 0;
+  color: rgba(203, 214, 255, 0.72);
+  line-height: 1.6;
+}
+
+.modal-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.modal-quick-toggle {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(107, 167, 255, 0.35);
+  background: rgba(30, 45, 72, 0.85);
+  color: rgba(203, 214, 255, 0.85);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.modal-quick-toggle:hover {
+  transform: translateY(-1px);
+  border-color: rgba(107, 167, 255, 0.6);
+  box-shadow: 0 10px 18px rgba(12, 18, 32, 0.4);
+}
+
+.modal-quick-toggle:focus-visible {
+  outline: 2px solid rgba(107, 167, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.modal-deck-list {
+  max-height: 340px;
+  overflow-y: auto;
+  display: grid;
+  gap: 1rem;
+  padding-right: 0.5rem;
+}
+
+.modal-deck-item {
+  border-radius: 16px;
+  border: 1px solid rgba(91, 110, 168, 0.35);
+  background: rgba(9, 13, 24, 0.94);
+  padding: 1rem 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.modal-deck-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.modal-deck-title {
+  margin: 0;
+  font-size: 1rem;
+  color: #f5f7fb;
+}
+
+.modal-deck-meta {
+  font-size: 0.85rem;
+  color: rgba(203, 214, 255, 0.6);
+}
+
+.modal-deck-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.modal-choice-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(203, 214, 255, 0.78);
+}
+
+.modal-choice-label input {
+  accent-color: #6ba7ff;
+}
+
+.modal-footer {
+  padding: 1.25rem 1.75rem 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  border-top: 1px solid rgba(91, 110, 168, 0.35);
+}
+
+.modal-button {
+  min-width: 140px;
+  padding: 0.75rem 1.4rem;
+  border-radius: 14px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.modal-button.primary {
+  background: linear-gradient(90deg, #6ba7ff 0%, #8f84ff 100%);
+  color: #0a0f1f;
+  box-shadow: 0 12px 24px rgba(107, 167, 255, 0.35);
+}
+
+.modal-button.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 32px rgba(107, 167, 255, 0.4);
+}
+
+.modal-button.secondary {
+  background: rgba(22, 30, 51, 0.95);
+  color: rgba(203, 214, 255, 0.85);
+  border: 1px solid rgba(91, 110, 168, 0.35);
+}
+
+.modal-button.secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(6, 10, 22, 0.45);
+}
+
+.modal-empty-state {
+  color: rgba(203, 214, 255, 0.7);
+  font-size: 0.95rem;
+}
+
