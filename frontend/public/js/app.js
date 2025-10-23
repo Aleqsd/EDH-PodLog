@@ -5,6 +5,7 @@ const CONFIG = window.EDH_PODLOG_CONFIG ?? {};
 const GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_SCOPES = "openid email profile";
 const GOOGLE_CONFIG_PLACEHOLDER = "REMPLACEZ_MOI_PAR_VOTRE_CLIENT_ID";
+const NUMBER_FORMAT = new Intl.NumberFormat("fr-FR");
 const API_BASE_URL = (() => {
   const base = CONFIG.API_BASE_URL || "http://localhost:4310";
   return base.endsWith("/") ? base.replace(/\/+$/, "") : base;
@@ -38,6 +39,7 @@ let moxfieldDeckSummaryText = null;
 let moxfieldDeckSummaryAction = null;
 let moxfieldMetaEl = null;
 let defaultSyncLabel = "Synchroniser avec Moxfield";
+let deckSummaryEl = null;
 let currentSyncAbortController = null;
 let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;
@@ -2102,6 +2104,84 @@ const collectDeckCards = (deck) => {
   );
 };
 
+const updateDeckSummary = (summary) => {
+  if (!deckSummaryEl) {
+    return;
+  }
+
+  const shouldHide = !summary || !Array.isArray(summary.boards) || summary.boards.length === 0;
+  deckSummaryEl.classList.toggle("is-hidden", shouldHide);
+
+  if (shouldHide) {
+    deckSummaryEl.innerHTML = "";
+    return;
+  }
+
+  deckSummaryEl.innerHTML = "";
+
+  const stats = document.createElement("dl");
+  stats.className = "deck-summary-grid";
+
+  const statItems = [
+    {
+      label: "Cartes totales",
+      value: summary.totalCards,
+    },
+    {
+      label: "Cartes uniques",
+      value: summary.uniqueCards,
+    },
+    {
+      label: "Sections",
+      value: summary.boards.length,
+    },
+  ];
+
+  statItems.forEach((stat) => {
+    const group = document.createElement("div");
+    group.className = "deck-summary-item";
+
+    const term = document.createElement("dt");
+    term.className = "deck-summary-label";
+    term.textContent = stat.label;
+
+    const value = document.createElement("dd");
+    value.className = "deck-summary-value";
+    value.textContent =
+      typeof stat.value === "number" && Number.isFinite(stat.value)
+        ? NUMBER_FORMAT.format(stat.value)
+        : "—";
+
+    group.appendChild(term);
+    group.appendChild(value);
+    stats.appendChild(group);
+  });
+
+  deckSummaryEl.appendChild(stats);
+
+  const boardList = document.createElement("ul");
+  boardList.className = "deck-summary-board-list";
+
+  summary.boards.forEach((board) => {
+    const item = document.createElement("li");
+    item.className = "deck-summary-board-item";
+    const name = document.createElement("span");
+    name.className = "deck-summary-board-name";
+    name.textContent = board.label;
+    const count = document.createElement("span");
+    count.className = "deck-summary-board-count";
+    count.textContent =
+      typeof board.count === "number" && Number.isFinite(board.count)
+        ? NUMBER_FORMAT.format(board.count)
+        : "—";
+    item.appendChild(name);
+    item.appendChild(count);
+    boardList.appendChild(item);
+  });
+
+  deckSummaryEl.appendChild(boardList);
+};
+
 const getPrimaryCardIdentifier = (cardData) => {
   if (!cardData || typeof cardData !== "object") {
     return null;
@@ -2492,7 +2572,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const deckErrorEl = document.getElementById("deckError");
   const deckLoadingEl = document.getElementById("deckLoading");
   const deckHandleBadgeEl = document.getElementById("deckHandleBadge");
-  const deckHeroImageEl = document.getElementById("deckHeroImage");
+  deckSummaryEl = document.getElementById("deckSummary");
 
   const cardTitleEl = document.getElementById("cardTitle");
   const cardSubtitleEl = document.getElementById("cardSubtitle");
@@ -2525,6 +2605,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     deckErrorEl.textContent = message ?? "";
     deckErrorEl.classList.toggle("is-hidden", !message);
+    if (message) {
+      updateDeckSummary(null);
+    }
   };
 
   const showCardError = (message) => {
@@ -2543,17 +2626,20 @@ const renderDeckBoards = (deck, { handle } = {}) => {
 
   const boards = collectDeckBoards(deck);
   if (boards.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "deck-board-empty";
-      empty.textContent =
-        "Impossible de trouver la liste des cartes pour ce deck. Relancez une synchronisation.";
-      deckBoardsEl.appendChild(empty);
-      return;
-    }
+    const empty = document.createElement("p");
+    empty.className = "deck-board-empty";
+    empty.textContent =
+      "Impossible de trouver la liste des cartes pour ce deck. Relancez une synchronisation.";
+    deckBoardsEl.appendChild(empty);
+    updateDeckSummary(null);
+    return;
+  }
 
   const deckId = getDeckIdentifier(deck);
-
-  const commanderImages = [];
+  const uniqueCardIdentifiers = new Set();
+  let totalCardQuantity = 0;
+  const boardSummaries = [];
+  let hasRenderedBoard = false;
 
   boards.forEach((board) => {
     const cards = Array.isArray(board?.cards) ? [...board.cards] : [];
@@ -2564,31 +2650,45 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     const boardName = typeof board?.name === "string" ? board.name.toLowerCase() : "";
     const isCommanderBoard = boardName.includes("commander");
 
-    if (isCommanderBoard) {
-      cards.forEach((cardEntry) => {
-        const commanderCard = cardEntry?.card;
-        if (!commanderCard) {
-          return;
-        }
-        const baseId =
-          commanderCard.id ||
-          commanderCard.card_id ||
-          commanderCard.uniqueCardId ||
-          commanderCard.scryfall_id;
-        if (baseId) {
-          commanderImages.push({
-            id: baseId,
-            name: commanderCard.name || "",
-          });
-        }
-      });
-    }
-
     cards.sort((a, b) => {
       const nameA = a?.card?.name ?? "";
       const nameB = b?.card?.name ?? "";
       return nameA.localeCompare(nameB, "fr", { sensitivity: "base" });
     });
+
+    let boardQuantity = 0;
+    cards.forEach((cardEntry) => {
+      const quantity =
+        typeof cardEntry?.quantity === "number" && Number.isFinite(cardEntry.quantity)
+          ? cardEntry.quantity
+          : 0;
+      boardQuantity += quantity;
+
+      const cardData = cardEntry?.card ?? {};
+      const uniqueKey =
+        getPrimaryCardIdentifier(cardData) ||
+        cardData?.oracle_id ||
+        cardData?.oracleId ||
+        cardData?.name ||
+        null;
+      if (uniqueKey) {
+        uniqueCardIdentifiers.add(String(uniqueKey));
+      }
+    });
+
+    const normalizedBoardCount =
+      boardQuantity > 0
+        ? boardQuantity
+        : typeof board?.count === "number" && Number.isFinite(board.count) && board.count > 0
+        ? board.count
+        : cards.length;
+
+    const boardLabel = humanizeBoardName(board?.name);
+    boardSummaries.push({
+      label: boardLabel,
+      count: normalizedBoardCount,
+    });
+    totalCardQuantity += normalizedBoardCount;
 
     const section = document.createElement("section");
     section.className = "deck-board";
@@ -2600,9 +2700,7 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     header.className = "deck-board-header";
     const title = document.createElement("h2");
     title.className = "deck-board-title";
-    const boardLabel = humanizeBoardName(board?.name);
-    const cardCount = typeof board?.count === "number" ? board.count : cards.length;
-    title.textContent = `${boardLabel} (${cardCount})`;
+    title.textContent = `${boardLabel} (${normalizedBoardCount})`;
     header.appendChild(title);
     section.appendChild(header);
 
@@ -2686,6 +2784,7 @@ const renderDeckBoards = (deck, { handle } = {}) => {
 
       section.appendChild(commanderGrid);
       deckBoardsEl.appendChild(section);
+      hasRenderedBoard = true;
       return;
     }
 
@@ -2766,21 +2865,25 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     tableContainer.appendChild(table);
     section.appendChild(tableContainer);
     deckBoardsEl.appendChild(section);
+    hasRenderedBoard = true;
   });
 
-  if (deckHeroImageEl) {
-    if (commanderImages.length > 0) {
-      const primaryCommander = commanderImages[0];
-      deckHeroImageEl.src = `https://assets.moxfield.net/cards/card-${primaryCommander.id}-normal.webp`;
-      deckHeroImageEl.alt = primaryCommander.name
-        ? `Illustration de ${primaryCommander.name}`
-        : "Illustration du commandant";
-      deckHeroImageEl.classList.remove("is-hidden");
-    } else {
-      deckHeroImageEl.classList.add("is-hidden");
-      deckHeroImageEl.removeAttribute("src");
-      deckHeroImageEl.removeAttribute("alt");
-    }
+  if (!hasRenderedBoard) {
+    const empty = document.createElement("p");
+    empty.className = "deck-board-empty";
+    empty.textContent =
+      "Impossible de trouver la liste des cartes pour ce deck. Relancez une synchronisation.";
+    deckBoardsEl.appendChild(empty);
+  }
+
+  if (boardSummaries.length === 0) {
+    updateDeckSummary(null);
+  } else {
+    updateDeckSummary({
+      totalCards: totalCardQuantity,
+      uniqueCards: uniqueCardIdentifiers.size,
+      boards: boardSummaries,
+    });
   }
 };
 

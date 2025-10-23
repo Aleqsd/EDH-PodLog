@@ -1135,12 +1135,12 @@ body.modal-open {
 
 .deck-detail-main,
 .card-detail-main {
-  padding: 2.5rem 3.5rem;
-  max-width: 1100px;
+  padding: clamp(2rem, 4vw, 3rem) clamp(1.5rem, 4vw, 3.5rem);
+  max-width: 1400px;
+  width: min(96vw, 1400px);
   margin: 0 auto;
-  width: 100%;
   display: grid;
-  gap: 1.75rem;
+  gap: 2rem;
 }
 
 .deck-detail-section,
@@ -1148,34 +1148,90 @@ body.modal-open {
   background: rgba(10, 14, 26, 0.78);
   border-radius: 24px;
   border: 1px solid rgba(91, 110, 168, 0.35);
-  padding: 2.4rem;
+  padding: clamp(2rem, 3vw, 2.8rem);
   box-shadow: 0 18px 40px rgba(5, 9, 20, 0.45);
   display: grid;
-  gap: 1.8rem;
+  gap: 2rem;
 }
 
 .deck-hero {
   display: grid;
-  gap: 1.5rem;
-  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
-  align-items: stretch;
+  gap: 2.2rem;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
+  align-items: start;
 }
 
-.deck-hero-visual {
-  border-radius: 18px;
-  background: rgba(15, 20, 34, 0.78);
-  border: 1px solid rgba(66, 86, 140, 0.35);
-  padding: 1rem;
+.deck-hero-copy {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.deck-summary {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+}
+
+.deck-summary-grid {
+  margin: 0;
+  display: grid;
+  gap: 1.2rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.deck-summary-item {
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 155, 255, 0.32);
+  background: rgba(12, 18, 32, 0.78);
+  box-shadow: 0 16px 32px rgba(8, 12, 26, 0.4);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.deck-summary-label {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(188, 205, 255, 0.7);
+}
+
+.deck-summary-value {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #f5f7ff;
+}
+
+.deck-summary-board-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.deck-summary-board-item {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 12px;
+  background: rgba(19, 26, 44, 0.72);
+  border: 1px solid rgba(101, 132, 208, 0.28);
+  color: rgba(217, 226, 255, 0.85);
+  font-size: 0.92rem;
 }
 
-.deck-hero-visual img {
-  width: 100%;
-  max-width: 280px;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(5, 10, 24, 0.45);
+.deck-summary-board-name {
+  font-weight: 500;
+}
+
+.deck-summary-board-count {
+  font-variant-numeric: tabular-nums;
+  color: rgba(235, 242, 255, 0.85);
 }
 
 .deck-detail-header {
@@ -1267,7 +1323,7 @@ body.modal-open {
 .deck-board-list {
   display: grid;
   gap: 1.6rem;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   align-items: start;
 }
 
@@ -1397,6 +1453,7 @@ body.modal-open {
   box-shadow: 0 24px 48px rgba(10, 12, 30, 0.5);
   padding: 1.5rem;
   gap: 1.5rem;
+  grid-column: 1 / -1;
 }
 
 .deck-board--commanders .deck-board-header {
@@ -1497,7 +1554,7 @@ body.modal-open {
 
 @media (max-width: 1200px) {
   .deck-board-list {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   }
 }
 
@@ -1630,11 +1687,15 @@ body.modal-open {
 
   .deck-hero {
     grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
   }
 
-  .deck-hero-visual {
-    max-width: 320px;
-    margin: 0 auto;
+  .deck-summary {
+    gap: 1rem;
+  }
+
+  .deck-summary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 
   .card-layout.-with-visual {
