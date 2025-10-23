@@ -199,10 +199,15 @@
       hasRenderedBoard = true;
     });
 
+    const deckStats = computeDeckStatistics(deck);
+
     updateDeckSummary({
-      cardCount: totalCardQuantity,
+      totalCards: totalCardQuantity,
       uniqueCards: uniqueCardIdentifiers.size,
       boards: boardSummaries,
+      stats: deckStats,
+      deckId,
+      deckName: deck?.name ?? null,
     });
 
     renderCommanderHighlight(commanderEntries, deck, { deckId, handle });

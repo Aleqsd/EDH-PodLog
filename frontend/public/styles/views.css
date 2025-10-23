@@ -1203,6 +1203,246 @@
   color: var(--color-text-contrast);
 }
 
+.deck-stats-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.deck-stats-card {
+  padding: 1.1rem 1.25rem;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-card-highlight) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border-deck) 32%, transparent);
+  box-shadow: 0 20px 40px color-mix(in srgb, var(--color-base-080c18) 28%, transparent);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.deck-stats-card-title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.deck-stats-card-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+  line-height: 1.45;
+}
+
+.deck-stats-card-colors {
+  text-align: center;
+  justify-items: center;
+}
+
+.deck-stats-card-impact,
+.deck-stats-card-evaluation {
+  align-content: start;
+}
+
+.deck-mana-chart {
+  --deck-mana-max-height: 140px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.5rem 0;
+}
+
+.deck-mana-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deck-mana-bar-fill {
+  width: 100%;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-brand-primary) 82%, transparent),
+    color-mix(in srgb, var(--color-brand-secondary) 82%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--color-border-brand) 50%, transparent);
+  height: calc((var(--deck-mana-value, 0) / var(--deck-mana-max, 1)) * var(--deck-mana-max-height));
+  min-height: 6px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 0.35rem;
+  transition: height 160ms ease-out;
+}
+
+.deck-mana-bar-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-shadow: 0 0 8px rgba(5, 10, 24, 0.4);
+}
+
+.deck-mana-bar-label {
+  font-size: 0.8rem;
+  color: var(--color-text-subtle-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.deck-mana-average {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle-strong);
+}
+
+.deck-color-chart {
+  width: min(180px, 48vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-border-brand) 42%, transparent);
+  box-shadow: 0 18px 32px color-mix(in srgb, var(--color-base-080c18) 36%, transparent);
+}
+
+.deck-color-legend {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.deck-color-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+.deck-color-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--deck-color-swatch, var(--color-mana-colorless));
+  border: 1px solid color-mix(in srgb, var(--color-border-soft) 55%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--deck-color-swatch, var(--color-mana-colorless)) 25%, transparent);
+}
+
+.deck-color-legend-label {
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+}
+
+.deck-impact-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.deck-impact-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.deck-impact-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.deck-impact-value {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.deck-impact-footnote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-subtle-soft);
+}
+
+.deck-rating-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.deck-rating-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.deck-rating-field {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) 1fr 2.5rem;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.deck-rating-label {
+  font-size: 0.85rem;
+  color: var(--color-text-subtle-strong);
+  font-weight: 500;
+}
+
+.deck-rating-slider {
+  width: 100%;
+  accent-color: var(--color-brand-primary);
+}
+
+.deck-rating-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+.deck-radar-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.deck-radar-svg {
+  width: min(220px, 60vw);
+  height: auto;
+}
+
+.deck-radar-grid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-border-soft) 55%, transparent);
+  stroke-width: 1;
+}
+
+.deck-radar-axis {
+  stroke: color-mix(in srgb, var(--color-border-soft) 45%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.deck-radar-shape {
+  fill: color-mix(in srgb, var(--color-brand-primary) 24%, transparent);
+  stroke: color-mix(in srgb, var(--color-brand-primary) 82%, transparent);
+  stroke-width: 1.6;
+}
+
+.deck-radar-point {
+  fill: var(--color-brand-primary);
+  stroke: color-mix(in srgb, var(--color-border-brand) 65%, transparent);
+  stroke-width: 1;
+}
+
+.deck-rating-footnote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
 .deck-detail-header {
   display: grid;
   gap: 0.85rem;

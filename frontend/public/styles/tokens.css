@@ -137,6 +137,12 @@
     --color-status-warning: #ffacb3;
     --color-surface-danger: #0d1424;
     --color-status-danger-dark: #c75151;
+    --color-mana-white: #f8f4d8;
+    --color-mana-blue: #4a8fff;
+    --color-mana-black: #1f1b2a;
+    --color-mana-red: var(--color-status-danger-strong);
+    --color-mana-green: #60d89c;
+    --color-mana-colorless: var(--color-base-cbd6ff);
     --color-white: #ffffff;
     --color-text-bright: #f8f9ff;
     --color-text-soft: #f5f7ff;

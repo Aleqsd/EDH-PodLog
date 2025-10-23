@@ -39,4 +39,26 @@
       align-items: flex-start;
     }
   }
+
+  @media (max-width: 720px) {
+    .deck-stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .deck-rating-field {
+      grid-template-columns: 1fr;
+      gap: 0.45rem;
+    }
+
+    .deck-rating-value {
+      text-align: left;
+    }
+  }
+
+  @media (min-width: 960px) {
+    .deck-rating-layout {
+      grid-template-columns: minmax(0, 1fr) 260px;
+      align-items: center;
+    }
+  }
 }

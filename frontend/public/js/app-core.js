@@ -1,6 +1,7 @@
 const STORAGE_KEY = "edhPodlogSession";
 const LAST_DECK_STORAGE_KEY = "edhPodlogLastDeckSelection";
 const LAST_CARD_STORAGE_KEY = "edhPodlogLastCardSelection";
+const DECK_EVALUATIONS_STORAGE_KEY = "edhPodlogDeckEvaluations";
 const CONFIG = window.EDH_PODLOG_CONFIG ?? {};
 const GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_SCOPES = "openid email profile";
@@ -122,6 +123,18 @@ const trimMoxfieldDeckForStorage = (deck) => {
                     mana_cost: cardEntry.card.mana_cost ?? cardEntry.card.manaCost ?? null,
                     type_line: cardEntry.card.type_line ?? cardEntry.card.typeLine ?? null,
                     oracle_text: cardEntry.card.oracle_text ?? cardEntry.card.oracleText ?? null,
+                    cmc:
+                      typeof cardEntry.card.cmc === "number" && Number.isFinite(cardEntry.card.cmc)
+                        ? cardEntry.card.cmc
+                        : typeof cardEntry.card.mana_value === "number" &&
+                          Number.isFinite(cardEntry.card.mana_value)
+                        ? cardEntry.card.mana_value
+                        : null,
+                    mana_value:
+                      typeof cardEntry.card.mana_value === "number" &&
+                      Number.isFinite(cardEntry.card.mana_value)
+                        ? cardEntry.card.mana_value
+                        : null,
                     colors: Array.isArray(cardEntry.card.colors) ? [...cardEntry.card.colors] : [],
                     image_uris:
                       cardEntry.card.image_uris && typeof cardEntry.card.image_uris === "object"
@@ -207,6 +220,71 @@ const persistSession = (session) => {
 
 const clearSession = () => {
   localStorage.removeItem(STORAGE_KEY);
+};
+
+const loadDeckEvaluations = () => {
+  const raw = localStorage.getItem(DECK_EVALUATIONS_STORAGE_KEY);
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.warn("Évaluations de deck invalides, nettoyage…", error);
+    localStorage.removeItem(DECK_EVALUATIONS_STORAGE_KEY);
+    return {};
+  }
+};
+
+const getDeckEvaluation = (deckId) => {
+  if (!deckId) {
+    return null;
+  }
+  const evaluations = loadDeckEvaluations();
+  const evaluation = evaluations?.[deckId];
+  if (!evaluation || typeof evaluation !== "object") {
+    return null;
+  }
+
+  const sanitized = {};
+  Object.entries(evaluation).forEach(([key, value]) => {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      sanitized[key] = Math.min(Math.max(Math.round(numeric), 1), 5);
+    }
+  });
+  return sanitized;
+};
+
+const setDeckEvaluation = (deckId, evaluation) => {
+  if (!deckId || !evaluation || typeof evaluation !== "object") {
+    return null;
+  }
+  const current = loadDeckEvaluations();
+  const sanitized = {};
+  Object.entries(evaluation).forEach(([key, value]) => {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      sanitized[key] = Math.min(Math.max(Math.round(numeric), 1), 5);
+    }
+  });
+  current[deckId] = sanitized;
+
+  try {
+    localStorage.setItem(DECK_EVALUATIONS_STORAGE_KEY, JSON.stringify(current));
+  } catch (error) {
+    if (isQuotaExceededError(error)) {
+      console.warn("Stockage local saturé : impossible d'enregistrer l'évaluation du deck.", error);
+      const quotaError = new Error("Local storage quota exceeded while saving deck evaluation.");
+      quotaError.code = "STORAGE_QUOTA";
+      throw quotaError;
+    }
+    throw error;
+  }
+
+  return sanitized;
 };
 
 const cloneSession = (session) => {
