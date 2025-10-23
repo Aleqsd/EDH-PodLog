@@ -193,7 +193,10 @@
         tbody.appendChild(row);
       });
       table.appendChild(tbody);
-      section.appendChild(table);
+      const tableContainer = document.createElement("div");
+      tableContainer.className = "card-table-container";
+      tableContainer.appendChild(table);
+      section.appendChild(tableContainer);
 
       deckBoardsEl.appendChild(section);
       hasRenderedBoard = true;
