@@ -1649,8 +1649,7 @@
   width: 28%;
 }
 
-.card-table-mana,
-.card-table-energy {
+.card-table-mana {
   font-size: 0.85rem;
   color: var(--color-text-subtle);
 }

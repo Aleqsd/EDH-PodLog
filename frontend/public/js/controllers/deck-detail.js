@@ -126,7 +126,7 @@
       table.className = "card-table";
       const thead = document.createElement("thead");
       const headerRow = document.createElement("tr");
-      ["Qté", "Carte", "Type", "Coût", "Énergies"].forEach((label) => {
+      ["Qté", "Carte", "Type", "Coût"].forEach((label) => {
         const th = document.createElement("th");
         th.scope = "col";
         th.textContent = label;
@@ -181,14 +181,7 @@
         const manaCostCell = document.createElement("td");
         manaCostCell.className = "card-table-mana";
         manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
-
-        const energyCell = document.createElement("td");
-        energyCell.className = "card-table-energy";
-        energyCell.textContent = formatManaBreakdownText(cardData?.mana_cost);
-
-        [quantityCell, nameCell, typeCell, manaCostCell, energyCell].forEach((cell) =>
-          row.appendChild(cell)
-        );
+        [quantityCell, nameCell, typeCell, manaCostCell].forEach((cell) => row.appendChild(cell));
 
         tbody.appendChild(row);
       });
