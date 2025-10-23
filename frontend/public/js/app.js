@@ -873,10 +873,8 @@ const createDeckCardElement = (deck) => {
       const currentIntegration = getMoxfieldIntegration(getSession());
       const handle = currentIntegration?.handle || currentIntegration?.handleLower || null;
       try {
-        window.sessionStorage.setItem(
-          LAST_DECK_STORAGE_KEY,
-          JSON.stringify({ deckId, handle })
-        );
+        const snapshot = createDeckSnapshot(deck, { handle }) ?? { deckId, handle };
+        window.sessionStorage.setItem(LAST_DECK_STORAGE_KEY, JSON.stringify(snapshot));
       } catch (error) {
         console.warn("Impossible d'enregistrer la sélection du deck :", error);
       }
@@ -2218,6 +2216,105 @@ const createCardSnapshot = (deck, board, cardEntry, { handle } = {}) => {
   };
 };
 
+const sanitizeDeckBoardsForSnapshot = (deck) => {
+  const rawBoards = Array.isArray(deck?.raw?.boards) ? deck.raw.boards : [];
+  return rawBoards
+    .map((board) => {
+      const entries = Array.isArray(board?.cards) ? board.cards : [];
+      const cards = entries
+        .map((entry) => {
+          if (!entry || typeof entry !== "object" || !entry.card) {
+            return null;
+          }
+          const quantity =
+            typeof entry.quantity === "number" && Number.isFinite(entry.quantity)
+              ? entry.quantity
+              : 0;
+          const sanitizedCard = sanitizeCardData(entry.card);
+          const primaryId = getPrimaryCardIdentifier(sanitizedCard);
+          if (!primaryId) {
+            return null;
+          }
+          return {
+            quantity,
+            card: sanitizedCard,
+          };
+        })
+        .filter(Boolean);
+
+      if (cards.length === 0) {
+        return null;
+      }
+
+      const normalizedCount =
+        typeof board?.count === "number" && Number.isFinite(board.count)
+          ? board.count
+          : cards.reduce((sum, entry) => sum + (entry.quantity || 0), 0);
+
+      return {
+        name: board?.name ?? "",
+        identifier: board?.identifier ?? null,
+        count: normalizedCount,
+        cards,
+      };
+    })
+    .filter(Boolean);
+};
+
+const createDeckSnapshot = (deck, { handle } = {}) => {
+  if (!deck || !deckHasCardDetails(deck)) {
+    return null;
+  }
+
+  const deckId = getDeckIdentifier(deck);
+  if (!deckId) {
+    return null;
+  }
+
+  const boards = sanitizeDeckBoardsForSnapshot(deck);
+  if (boards.length === 0) {
+    return null;
+  }
+
+  const normalizedHandle =
+    typeof handle === "string" && handle.trim().length > 0 ? handle.trim() : null;
+
+  const sanitizedDeck = {
+    id: deck.id ?? deck.slug ?? deck.publicId ?? deck.public_id ?? deckId,
+    slug: deck.slug ?? null,
+    name: deck.name ?? null,
+    format: deck.format ?? null,
+    updatedAt: deck.updatedAt ?? null,
+    cardCount: deck.cardCount ?? null,
+    url: deck.url ?? null,
+    publicId: deck.publicId ?? deck.public_id ?? null,
+    syncedAt: deck.syncedAt ?? deck.raw?.synced_at ?? deck.raw?.syncedAt ?? null,
+    raw: {
+      description: deck?.raw?.description ?? null,
+      summary: deck?.raw?.summary ?? null,
+      synced_at: deck?.raw?.synced_at ?? deck?.raw?.syncedAt ?? deck?.syncedAt ?? null,
+      syncedAt: deck?.raw?.syncedAt ?? deck?.raw?.synced_at ?? deck?.syncedAt ?? null,
+      boards: boards.map((board) => ({
+        name: board.name,
+        identifier: board.identifier,
+        count: board.count,
+        cards: board.cards.map((entry) => ({
+          quantity: entry.quantity,
+          card: entry.card,
+        })),
+      })),
+    },
+  };
+
+  return {
+    version: 1,
+    storedAt: Date.now(),
+    deckId,
+    handle: normalizedHandle,
+    deck: sanitizedDeck,
+  };
+};
+
 const findCardInDeckById = (deck, cardId) => {
   if (!deck || !cardId) {
     return null;
@@ -2352,6 +2449,7 @@ if (typeof window !== "undefined") {
     createCardSnapshot,
     sanitizeCardData,
     getPrimaryCardIdentifier,
+    createDeckSnapshot,
   };
 }
 
@@ -2827,19 +2925,21 @@ const renderDeckBoards = (deck, { handle } = {}) => {
 
     let deckId = getQueryParam("deck");
     let handleHint = getQueryParam("handle");
+    let storedDeck = null;
 
-    if (!deckId) {
-      try {
-        const stored = JSON.parse(window.sessionStorage.getItem(LAST_DECK_STORAGE_KEY) || "null");
-        if (stored?.deckId) {
-          deckId = stored.deckId;
-          if (!handleHint && stored.handle) {
-            handleHint = stored.handle;
-          }
-        }
-      } catch (error) {
-        console.warn("Impossible de lire la sélection du deck :", error);
-      }
+    try {
+      storedDeck = JSON.parse(window.sessionStorage.getItem(LAST_DECK_STORAGE_KEY) || "null");
+    } catch (error) {
+      console.warn("Impossible de lire la sélection du deck :", error);
+      storedDeck = null;
+    }
+
+    if (!deckId && storedDeck?.deckId) {
+      deckId = storedDeck.deckId;
+    }
+
+    if (!handleHint && storedDeck?.handle) {
+      handleHint = storedDeck.handle;
     }
 
     if (!deckId) {
@@ -2848,7 +2948,22 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       return;
     }
 
-    setDeckLoading(true);
+    let prefilledFromSnapshot = false;
+    if (
+      storedDeck &&
+      storedDeck.deck &&
+      storedDeck.deckId === deckId &&
+      deckHasCardDetails(storedDeck.deck)
+    ) {
+      populateDeckDetail(storedDeck.deck, { handle: handleHint });
+      setDeckLoading(false);
+      prefilledFromSnapshot = true;
+    }
+
+    if (!prefilledFromSnapshot) {
+      setDeckLoading(true);
+    }
+
     try {
       const { deck, session } = await ensureDeckDetails(deckId, {
         handle: handleHint,
@@ -2870,9 +2985,11 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       }
     } catch (error) {
       console.error("Unable to load deck detail", error);
-      showDeckError(
-        "Nous n'avons pas pu charger ce deck. Vérifiez qu'il est toujours public sur Moxfield."
-      );
+      if (!prefilledFromSnapshot) {
+        showDeckError(
+          "Nous n'avons pas pu charger ce deck. Vérifiez qu'il est toujours public sur Moxfield."
+        );
+      }
     } finally {
       setDeckLoading(false);
     }

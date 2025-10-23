@@ -149,3 +149,69 @@ test("createCardSnapshot preserves core card data for fast detail rendering", ()
   assert.ok(!("foil" in snapshot.entry.card.prices));
   assert.ok(!("extra_field" in snapshot.entry.card));
 });
+
+test("createDeckSnapshot serialises decks with sanitised boards for fast rendering", () => {
+  const { createDeckSnapshot } = loadInternals();
+  const deck = {
+    id: "deck-abc",
+    name: "Jeskai Value",
+    format: "Commander",
+    updatedAt: "2024-04-01T10:00:00Z",
+    cardCount: 99,
+    url: "https://www.moxfield.com/decks/deck-abc",
+    raw: {
+      description: "An interactive control list.",
+      summary: "Keep the board clear and win with value.",
+      synced_at: "2024-04-02T09:00:00Z",
+      boards: [
+        {
+          name: "mainboard",
+          count: 3,
+          cards: [
+            {
+              quantity: 2,
+              card: {
+                id: "card-001",
+                name: "Mulldrifter",
+                mana_cost: "{4}{U}",
+                type_line: "Creature — Elemental",
+                oracle_text: "Flying\nWhen Mulldrifter enters the battlefield, draw two cards.",
+                power: "2",
+                toughness: "2",
+                color_identity: ["U"],
+                prices: { usd: "0.35", eur: "0.28", foil: "1.20" },
+                faces: [{ name: "Mulldrifter", oracle_text: "Flying" }],
+                extraneous: "remove me",
+              },
+            },
+            {
+              quantity: 1,
+              card: {
+                card_id: "card-002",
+                name: "Supreme Verdict",
+                mana_cost: "{1}{W}{W}{U}",
+                type_line: "Sorcery",
+                oracle_text: "Supreme Verdict can't be countered.\nDestroy all creatures.",
+              },
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const snapshot = createDeckSnapshot(deck, { handle: " SnapshotUser " });
+
+  assert.equal(snapshot.deckId, "deck-abc");
+  assert.equal(snapshot.handle, "SnapshotUser");
+  assert.ok(Array.isArray(snapshot.deck.raw.boards));
+  assert.equal(snapshot.deck.raw.boards.length, 1);
+  assert.equal(snapshot.deck.raw.boards[0].cards.length, 2);
+  assert.equal(snapshot.deck.raw.boards[0].cards[0].quantity, 2);
+  assert.equal(snapshot.deck.raw.boards[0].cards[0].card.name, "Mulldrifter");
+  assert.equal(snapshot.deck.raw.boards[0].cards[1].card.name, "Supreme Verdict");
+  assert.ok(!("extraneous" in snapshot.deck.raw.boards[0].cards[0].card));
+  assert.ok(!("foil" in snapshot.deck.raw.boards[0].cards[0].card.prices));
+  assert.equal(snapshot.deck.raw.description, "An interactive control list.");
+  assert.equal(snapshot.deck.raw.synced_at, "2024-04-02T09:00:00Z");
+});
