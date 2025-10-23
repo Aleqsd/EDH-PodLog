@@ -1,11 +1,5 @@
 # EDH PodLog · Change Plans
 
-## Frontend Page Controllers & Script Routing
-- Status: completed — router logic now lives in `js/app-init.js` and page controllers register from `js/controllers/`.
-- The bootstrap inspects `document.body.dataset.page` to invoke the matching controller.
-- Shared utilities continue to live in `app-core.js` / `app-features.js`; controllers consume them through the shared namespace.
-- Page-specific behaviours (landing, dashboard, decks, deck detail, card detail, profile, synchronisation) are encapsulated in their respective controller files.
-
 ## CSS Design Tokens & Layering
 - Extract color, spacing, typography tokens into a dedicated source (e.g. `frontend/public/styles/tokens.css` or JSON feeding a build step).
 - Split styles into layers: tokens/utilities, base layout, components, views.
@@ -19,6 +13,7 @@
 - Update tests to import the new routers so coverage maps 1:1 with features.
 
 ## Mongo Repository & Index Audit
+- Status: completed — repository layer now consolidates canonical username handling, replace_one upserts, and startup index creation.
 - Implement a repository layer (e.g. `backend/app/repositories/moxfield_cache.py`) that encapsulates canonical username handling and upsert behaviour.
 - Use single `replace_one(..., upsert=True)` calls instead of manual matched-count branching.
 - Define and enforce indexes: `{ user_key: 1 }`, `{ user_key: 1, public_id: 1 }` unique, etc.

@@ -75,6 +75,7 @@ class _StubCollection:
 
     def __init__(self) -> None:
         self.documents: list[dict[str, Any]] = []
+        self.created_indexes: list[dict[str, Any]] = []
 
     def _matches(self, document: dict[str, Any], filter_: dict[str, Any]) -> bool:
         for key, value in filter_.items():
@@ -128,6 +129,31 @@ class _StubCollection:
         ]
         return _StubCursor(results)
 
+    async def replace_one(
+        self,
+        filter_: dict[str, Any],
+        replacement: dict[str, Any],
+        *,
+        upsert: bool = False,
+        **_: Any,
+    ):
+        for index, document in enumerate(self.documents):
+            if self._matches(document, filter_):
+                self.documents[index] = deepcopy(replacement)
+                return type(
+                    "ReplaceResult",
+                    (),
+                    {"matched_count": 1, "upserted_id": None},
+                )()
+        if upsert:
+            self.documents.append(deepcopy(replacement))
+            return type(
+                "ReplaceResult",
+                (),
+                {"matched_count": 0, "upserted_id": object()},
+            )()
+        return type("ReplaceResult", (), {"matched_count": 0, "upserted_id": None})()
+
     async def delete_one(self, filter_: dict[str, Any]):
         for index, document in enumerate(self.documents):
             if self._matches(document, filter_):
@@ -137,6 +163,20 @@ class _StubCollection:
 
     async def count_documents(self, filter_: dict[str, Any]) -> int:
         return sum(1 for document in self.documents if self._matches(document, filter_))
+
+    async def create_indexes(self, indexes: list[Any]):
+        for raw in indexes:
+            document = getattr(raw, "document", raw)
+            name = document.get("name")
+            key_spec = document.get("key")
+            if isinstance(key_spec, dict):
+                keys = tuple(key_spec.items())
+            elif isinstance(key_spec, list):
+                keys = tuple(tuple(item) for item in key_spec)
+            else:
+                keys = ()
+            self.created_indexes.append({"name": name, "keys": keys})
+        return [entry["name"] for entry in self.created_indexes]
 
 
 class _StubDatabase:

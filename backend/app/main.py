@@ -20,6 +20,7 @@ from .schemas import (
 from .logging_utils import get_logger
 from .services.moxfield import build_user_deck_summaries_response, build_user_decks_response
 from .services.profiles import fetch_user_profile, upsert_user_profile
+from .repositories import ensure_moxfield_cache_indexes
 from .services.storage import (
     delete_user_deck,
     fetch_user_deck_summaries,
@@ -53,6 +54,15 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    async def startup_event() -> None:
+        """Prepare database collections (indexes, etc.)."""
+        database = get_mongo_database()
+        try:
+            await ensure_moxfield_cache_indexes(database)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to ensure Mongo indexes during startup.")
 
     @app.on_event("shutdown")
     async def shutdown_event() -> None:

@@ -26,6 +26,7 @@ from app.schemas import (
     UserDecksResponse,
     UserSummary,
 )
+from app.repositories import ensure_moxfield_cache_indexes
 from app.services.storage import (
     delete_user_deck,
     fetch_user_deck_summaries,
@@ -56,6 +57,7 @@ class _StubCollection:
 
     def __init__(self) -> None:
         self.documents: list[dict[str, Any]] = []
+        self.created_indexes: list[dict[str, Any]] = []
 
     def _matches(self, document: dict[str, Any], filter_: dict[str, Any]) -> bool:
         for key, value in filter_.items():
@@ -109,6 +111,31 @@ class _StubCollection:
         ]
         return _StubCursor(results)
 
+    async def replace_one(
+        self,
+        filter_: dict[str, Any],
+        replacement: dict[str, Any],
+        *,
+        upsert: bool = False,
+        **_: Any,
+    ):
+        for index, document in enumerate(self.documents):
+            if self._matches(document, filter_):
+                self.documents[index] = deepcopy(replacement)
+                return type(
+                    "ReplaceResult",
+                    (),
+                    {"matched_count": 1, "upserted_id": None},
+                )()
+        if upsert:
+            self.documents.append(deepcopy(replacement))
+            return type(
+                "ReplaceResult",
+                (),
+                {"matched_count": 0, "upserted_id": object()},
+            )()
+        return type("ReplaceResult", (), {"matched_count": 0, "upserted_id": None})()
+
     async def delete_one(self, filter_: dict[str, Any]):
         for index, document in enumerate(self.documents):
             if self._matches(document, filter_):
@@ -118,6 +145,22 @@ class _StubCollection:
 
     async def count_documents(self, filter_: dict[str, Any]) -> int:
         return sum(1 for document in self.documents if self._matches(document, filter_))
+
+    async def create_indexes(self, indexes: list[Any]):
+        created_names: list[str] = []
+        for raw in indexes:
+            document = getattr(raw, "document", raw)
+            name = document.get("name")
+            key_spec = document.get("key")
+            if isinstance(key_spec, dict):
+                keys = tuple(key_spec.items())
+            elif isinstance(key_spec, list):
+                keys = tuple(tuple(item) for item in key_spec)
+            else:
+                keys = ()
+            self.created_indexes.append({"name": name, "keys": keys})
+            created_names.append(name or f"idx_{len(self.created_indexes)}")
+        return created_names
 
 
 class _StubDatabase:
@@ -297,3 +340,22 @@ async def test_fetch_user_deck_summaries_returns_none_when_missing() -> None:
     database = _StubDatabase()
     cached = await fetch_user_deck_summaries(database, "Unknown")
     assert cached is None
+
+
+@pytest.mark.anyio("asyncio")
+async def test_ensure_moxfield_cache_indexes_creates_expected_indexes() -> None:
+    """Repository index helper should register the required index definitions."""
+    database = _StubDatabase()
+
+    await ensure_moxfield_cache_indexes(database)
+
+    user_indexes = database["moxfield_users"].created_indexes
+    deck_indexes = database["decks"].created_indexes
+    summary_indexes = database["deck_summaries"].created_indexes
+
+    assert any(index["name"] == "user_key_unique" for index in user_indexes)
+    assert any(index["name"] == "deck_user_key_lookup" for index in deck_indexes)
+    assert any(index["name"] == "user_public_id_unique" for index in deck_indexes)
+    assert any(
+        index["name"] == "summary_user_public_id_unique" for index in summary_indexes
+    )
