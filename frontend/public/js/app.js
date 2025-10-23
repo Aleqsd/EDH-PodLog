@@ -64,7 +64,7 @@ const getSession = () => {
   }
 
   try {
-    return JSON.parse(raw);
+    return sanitizeSessionForStorage(JSON.parse(raw));
   } catch (error) {
     console.warn("Session invalide, nettoyage…", error);
     localStorage.removeItem(STORAGE_KEY);
@@ -72,8 +72,119 @@ const getSession = () => {
   }
 };
 
+const summariseBoardForStorage = (board) => {
+  if (!board || typeof board !== "object") {
+    return null;
+  }
+  const name = typeof board.name === "string" ? board.name : null;
+  let count = null;
+  if (typeof board.count === "number" && Number.isFinite(board.count)) {
+    count = board.count;
+  } else if (Array.isArray(board.cards)) {
+    count = board.cards.reduce(
+      (total, entry) =>
+        total + (typeof entry?.quantity === "number" ? entry.quantity : 0),
+      0
+    );
+  }
+  return {
+    name,
+    count,
+  };
+};
+
+const trimMoxfieldDeckForStorage = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return null;
+  }
+
+  const trimmed = { ...deck };
+
+  if (trimmed.raw && typeof trimmed.raw === "object") {
+    const rawDeck = { ...trimmed.raw };
+
+    if (Array.isArray(rawDeck.boards)) {
+      rawDeck.boards = rawDeck.boards
+        .map(summariseBoardForStorage)
+        .filter(Boolean);
+    }
+
+    delete rawDeck.cards;
+    delete rawDeck.cardsByBoard;
+    delete rawDeck.mainboard;
+    delete rawDeck.maybeboard;
+    delete rawDeck.sideboard;
+    delete rawDeck.commanders;
+    delete rawDeck.maybeboardCards;
+    delete rawDeck.companions;
+    delete rawDeck.signature_spells;
+    delete rawDeck.attractions;
+    delete rawDeck.stickers;
+    delete rawDeck.tokens;
+    delete rawDeck.inventory;
+
+    trimmed.raw = rawDeck;
+  }
+
+  return trimmed;
+};
+
+const sanitizeSessionForStorage = (session) => {
+  if (!session || typeof session !== "object") {
+    return session;
+  }
+
+  const sanitized = { ...session };
+
+  if (sanitized.integrations && typeof sanitized.integrations === "object") {
+    sanitized.integrations = { ...sanitized.integrations };
+    const moxfield = sanitized.integrations.moxfield;
+    if (moxfield && typeof moxfield === "object") {
+      const trimmedIntegration = { ...moxfield };
+      if (Array.isArray(moxfield.decks)) {
+        trimmedIntegration.decks = moxfield.decks
+          .map(trimMoxfieldDeckForStorage)
+          .filter(Boolean);
+        trimmedIntegration.deckCount = trimmedIntegration.decks.length;
+      }
+      sanitized.integrations.moxfield = trimmedIntegration;
+    }
+  }
+
+  return sanitized;
+};
+
+const isQuotaExceededError = (error) => {
+  if (!error) {
+    return false;
+  }
+  return (
+    error.name === "QuotaExceededError" ||
+    error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    error.code === 22 ||
+    error.code === 1014
+  );
+};
+
 const persistSession = (session) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  const sanitized = sanitizeSessionForStorage(session);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+  } catch (error) {
+    if (isQuotaExceededError(error)) {
+      console.warn(
+        "Stockage local saturé : impossible d'enregistrer l'état de la session.",
+        error
+      );
+      const quotaError = new Error(
+        "Local storage quota exceeded while saving session."
+      );
+      quotaError.code = "STORAGE_QUOTA";
+      throw quotaError;
+    }
+    throw error;
+  }
+  return sanitized;
 };
 
 const clearSession = () => {
@@ -111,8 +222,7 @@ const updateSessionData = (mutator) => {
 
   const draft = cloneSession(current);
   const result = mutator ? mutator(draft) ?? draft : draft;
-  persistSession(result);
-  return result;
+  return persistSession(result);
 };
 
 const toISOStringIfValid = (value) => {
@@ -1223,6 +1333,11 @@ const performDeckSync = async (handle, selections, previewMeta) => {
         "Impossible de trouver ce pseudo Moxfield. Vérifiez l'orthographe et réessayez.",
         "error"
       );
+    } else if (error.code === "STORAGE_QUOTA") {
+      showMoxfieldStatus(
+        "Synchronisation trop volumineuse pour le stockage local de ce navigateur. Supprimez quelques decks ou videz la session depuis le profil.",
+        "error"
+      );
     } else if (error.code === "HTTP_ERROR") {
       showMoxfieldStatus(
         `L'API EDH PodLog a renvoyé une erreur (${error.status ?? "inconnue"}).`,
@@ -1919,7 +2034,18 @@ const ensureDeckDetails = async (deckId, { handle, preferLive = false } = {}) =>
         continue;
       }
 
-      setMoxfieldIntegration((current) => replaceDeckInIntegration(current, matched));
+      try {
+        setMoxfieldIntegration((current) => replaceDeckInIntegration(current, matched));
+      } catch (storageError) {
+        if (storageError?.code === "STORAGE_QUOTA") {
+          console.warn(
+            "Stockage local saturé lors de la mise à jour du deck. Les détails ne seront pas conservés pour la session.",
+            storageError
+          );
+        } else {
+          throw storageError;
+        }
+      }
       session = getSession();
       const refreshed = findDeckInIntegration(getMoxfieldIntegration(session), deckId);
       if (refreshed && deckHasCardDetails(refreshed)) {
