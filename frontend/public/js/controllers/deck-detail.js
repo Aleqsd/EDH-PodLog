@@ -21,6 +21,9 @@
   let currentDeckData = null;
   let currentDeckHandle = null;
   let deckSortMode = SORT_MODES.TYPE;
+  let deckSortToolbarEl = null;
+  let deckSortSelectEl = null;
+  const SORT_CONTROL_ID = "deckSortMode";
 
   const CARD_NAME_COLLATOR = new Intl.Collator("fr", { sensitivity: "base" });
 
@@ -213,27 +216,22 @@
     return row;
   };
 
-  const buildSortControls = (board) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "deck-board-actions";
-
-    const baseId = typeof board?.name === "string" && board.name.trim().length > 0
-      ? board.name
-      : "deck";
-    const controlId = `deckSortMode-${baseId
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "deck"}`;
+  const initializeDeckSortControls = () => {
+    if (!deckSortToolbarEl || deckSortSelectEl) {
+      if (deckSortSelectEl) {
+        deckSortSelectEl.value = deckSortMode;
+      }
+      return;
+    }
 
     const label = document.createElement("label");
     label.className = "card-sort-label";
-    label.setAttribute("for", controlId);
+    label.setAttribute("for", SORT_CONTROL_ID);
     label.textContent = "Trier par";
-    wrapper.appendChild(label);
 
     const select = document.createElement("select");
     select.className = "card-sort-select";
-    select.id = controlId;
+    select.id = SORT_CONTROL_ID;
 
     const options = [
       { value: SORT_MODES.MANA, label: "Coût de mana" },
@@ -265,8 +263,9 @@
       }
     });
 
-    wrapper.appendChild(select);
-    return wrapper;
+    deckSortToolbarEl.appendChild(label);
+    deckSortToolbarEl.appendChild(select);
+    deckSortSelectEl = select;
   };
 
   const setDeckLoading = (isLoading) => {
@@ -284,6 +283,9 @@
     if (message) {
       updateDeckSummary(null);
       renderCommanderHighlight([], null);
+      if (deckSortToolbarEl) {
+        deckSortToolbarEl.classList.add("is-hidden");
+      }
     }
   };
 
@@ -303,6 +305,9 @@
 
     const boards = collectDeckBoards(deck);
     if (boards.length === 0) {
+      if (deckSortToolbarEl) {
+        deckSortToolbarEl.classList.add("is-hidden");
+      }
       const empty = document.createElement("p");
       empty.className = "deck-board-empty";
       empty.textContent =
@@ -318,6 +323,14 @@
     let totalCardQuantity = 0;
     const boardSummaries = [];
     const commanderEntries = [];
+
+    initializeDeckSortControls();
+    if (deckSortToolbarEl) {
+      deckSortToolbarEl.classList.remove("is-hidden");
+    }
+    if (deckSortSelectEl) {
+      deckSortSelectEl.value = deckSortMode;
+    }
 
     boards.forEach((board) => {
       const cards = Array.isArray(board?.cards) ? [...board.cards] : [];
@@ -381,9 +394,6 @@
       title.className = "deck-board-title";
       title.textContent = `${boardLabel} (${normalizedBoardCount})`;
       header.appendChild(title);
-      if (cards.length > 1) {
-        header.appendChild(buildSortControls(board));
-      }
       section.appendChild(header);
 
       const table = document.createElement("table");
@@ -465,6 +475,9 @@
       : null;
     if (!previousDeckId || previousDeckId !== nextDeckId) {
       deckSortMode = SORT_MODES.TYPE;
+    }
+    if (deckSortSelectEl) {
+      deckSortSelectEl.value = deckSortMode;
     }
 
     if (deckDescriptionEl) {
@@ -617,6 +630,12 @@
     deckTitleEl = document.getElementById("deckTitle");
     deckMetaEl = document.getElementById("deckMeta");
     deckDescriptionEl = document.getElementById("deckDescription");
+    deckSortToolbarEl = document.getElementById("deckBoardsToolbar");
+    if (deckSortToolbarEl) {
+      deckSortToolbarEl.innerHTML = "";
+      deckSortToolbarEl.classList.add("is-hidden");
+    }
+    deckSortSelectEl = null;
     deckBoardsEl = document.getElementById("deckBoards");
     deckErrorEl = document.getElementById("deckError");
     deckLoadingEl = document.getElementById("deckLoading");

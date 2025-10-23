@@ -1560,11 +1560,13 @@
   color: var(--color-text-soft-alt);
 }
 
-.deck-board-actions {
+.deck-board-toolbar {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin-left: auto;
+  justify-content: flex-end;
+  margin-bottom: 0.9rem;
+  flex-wrap: wrap;
 }
 
 .card-sort-label {
