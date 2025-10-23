@@ -1560,6 +1560,46 @@
   color: var(--color-text-soft-alt);
 }
 
+.deck-board-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.card-sort-label {
+  font-size: 0.74rem;
+  color: var(--color-text-subtle-soft);
+}
+
+.card-sort-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: color-mix(in srgb, var(--color-base-080c18) 72%, transparent);
+  color: var(--color-text-contrast);
+  border: 1px solid var(--color-border-deck-soft);
+  border-radius: 999px;
+  padding: 0.38rem 0.9rem;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.card-sort-select:hover {
+  border-color: var(--color-border-brand);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-border-brand) 38%, transparent);
+}
+
+.card-sort-select:focus {
+  outline: 2px solid var(--color-border-brand-focus);
+  outline-offset: 2px;
+}
+
+.card-sort-select option[disabled] {
+  color: var(--color-text-subtle-soft);
+}
+
 .deck-board-empty {
   margin: 0;
   font-size: 0.95rem;
@@ -1619,6 +1659,24 @@
   font-size: 0.85rem;
   color: var(--color-text-contrast);
   border-bottom: 1px solid color-mix(in srgb, var(--color-base-364268) 32%, transparent);
+}
+
+.card-table-group th {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle-soft);
+  background: color-mix(in srgb, var(--color-base-202c48) 58%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-364268) 40%, transparent);
+}
+
+.card-table tbody tr.card-table-group {
+  cursor: default;
+}
+
+.card-table tbody tr.card-table-group:hover {
+  background: color-mix(in srgb, var(--color-base-202c48) 58%, transparent);
 }
 
 .card-table tbody tr:last-child td {

@@ -11,6 +11,263 @@
   let deckErrorEl = null;
   let deckLoadingEl = null;
   let deckHandleBadgeEl = null;
+  const SORT_MODES = {
+    TYPE: "type",
+    MANA: "mana",
+    ALPHABETICAL: "alphabetical",
+    TAG: "tag",
+  };
+
+  let currentDeckData = null;
+  let currentDeckHandle = null;
+  let deckSortMode = SORT_MODES.TYPE;
+
+  const CARD_NAME_COLLATOR = new Intl.Collator("fr", { sensitivity: "base" });
+
+  const CARD_TYPE_GROUPS = [
+    { key: "creature", label: "Créatures", tokens: ["creature", "créature"] },
+    { key: "planeswalker", label: "Planeswalkers", tokens: ["planeswalker", "arpenteur"] },
+    { key: "artifact", label: "Artefacts", tokens: ["artifact", "artefact"] },
+    { key: "enchantment", label: "Enchantements", tokens: ["enchantment", "enchantement"] },
+    { key: "instant", label: "Éphémères", tokens: ["instant", "éphémère"] },
+    { key: "sorcery", label: "Rituels", tokens: ["sorcery", "rituel"] },
+    { key: "battle", label: "Batailles", tokens: ["battle", "bataille"] },
+    { key: "land", label: "Terrains", tokens: ["land", "terrain"] },
+    { key: "other", label: "Autres", tokens: [] },
+  ];
+
+  const CARD_TYPE_LOOKUP = new Map();
+  const CARD_TYPE_TOKEN_LOOKUP = new Map();
+  CARD_TYPE_GROUPS.forEach((group, index) => {
+    const meta = { ...group, weight: index };
+    CARD_TYPE_LOOKUP.set(group.key, meta);
+    group.tokens.forEach((token) => {
+      CARD_TYPE_TOKEN_LOOKUP.set(token, meta);
+    });
+  });
+
+  const getCardTypeMeta = (cardData) => {
+    const typeLineRaw = cardData?.type_line ?? cardData?.typeLine ?? "";
+    if (typeof typeLineRaw !== "string" || typeLineRaw.trim().length === 0) {
+      return CARD_TYPE_LOOKUP.get("other");
+    }
+    const normalized = typeLineRaw.toLowerCase();
+    const baseSection = normalized.split("—")[0] ?? normalized;
+    const tokens = baseSection
+      .split(/[\s/]+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+    for (let index = tokens.length - 1; index >= 0; index -= 1) {
+      const lookup = CARD_TYPE_TOKEN_LOOKUP.get(tokens[index]);
+      if (lookup) {
+        return lookup;
+      }
+    }
+    for (const [token, meta] of CARD_TYPE_TOKEN_LOOKUP.entries()) {
+      if (baseSection.includes(token)) {
+        return meta;
+      }
+    }
+    if (normalized.includes("land") || normalized.includes("terrain")) {
+      return CARD_TYPE_LOOKUP.get("land");
+    }
+    return CARD_TYPE_LOOKUP.get("other");
+  };
+
+  const getEntryQuantity = (cardEntry) => {
+    const raw = typeof cardEntry?.quantity === "number" ? cardEntry.quantity : 1;
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+  };
+
+  const sortCardEntries = (entries, mode) => {
+    const items = Array.isArray(entries) ? [...entries] : [];
+    items.sort((a, b) => {
+      const cardA = a?.card ?? {};
+      const cardB = b?.card ?? {};
+      const nameA = typeof cardA?.name === "string" ? cardA.name : "";
+      const nameB = typeof cardB?.name === "string" ? cardB.name : "";
+      const manaValueA = getCardManaValue(cardA);
+      const manaValueB = getCardManaValue(cardB);
+      const safeManaA = manaValueA === null ? Number.POSITIVE_INFINITY : manaValueA;
+      const safeManaB = manaValueB === null ? Number.POSITIVE_INFINITY : manaValueB;
+      const typeA = getCardTypeMeta(cardA);
+      const typeB = getCardTypeMeta(cardB);
+
+      switch (mode) {
+        case SORT_MODES.MANA: {
+          if (safeManaA !== safeManaB) {
+            return safeManaA - safeManaB;
+          }
+          if (typeA.weight !== typeB.weight) {
+            return typeA.weight - typeB.weight;
+          }
+          return CARD_NAME_COLLATOR.compare(nameA, nameB);
+        }
+        case SORT_MODES.TYPE: {
+          if (typeA.weight !== typeB.weight) {
+            return typeA.weight - typeB.weight;
+          }
+          if (safeManaA !== safeManaB) {
+            return safeManaA - safeManaB;
+          }
+          return CARD_NAME_COLLATOR.compare(nameA, nameB);
+        }
+        case SORT_MODES.ALPHABETICAL:
+        case SORT_MODES.TAG:
+        default: {
+          const comparison = CARD_NAME_COLLATOR.compare(nameA, nameB);
+          if (comparison !== 0) {
+            return comparison;
+          }
+          if (typeA.weight !== typeB.weight) {
+            return typeA.weight - typeB.weight;
+          }
+          return safeManaA - safeManaB;
+        }
+      }
+    });
+    return items;
+  };
+
+  const buildTypeGroups = (entries, mode) => {
+    const groups = new Map();
+    entries.forEach((entry) => {
+      const meta = getCardTypeMeta(entry?.card ?? {});
+      const key = meta?.key ?? "other";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label: meta?.label ?? "Autres",
+          weight: meta?.weight ?? CARD_TYPE_LOOKUP.get("other")?.weight ?? CARD_TYPE_GROUPS.length,
+          cards: [],
+          quantity: 0,
+        });
+      }
+      const bucket = groups.get(key);
+      bucket.cards.push(entry);
+      bucket.quantity += getEntryQuantity(entry);
+    });
+
+    const sortModeForCards =
+      mode === SORT_MODES.MANA ? SORT_MODES.MANA : SORT_MODES.ALPHABETICAL;
+
+    const ordered = Array.from(groups.values());
+    ordered.forEach((group) => {
+      group.cards = sortCardEntries(group.cards, sortModeForCards);
+    });
+    ordered.sort((a, b) => {
+      if (a.weight !== b.weight) {
+        return a.weight - b.weight;
+      }
+      return CARD_NAME_COLLATOR.compare(a.label, b.label);
+    });
+    return ordered;
+  };
+
+  const createCardRow = (cardEntry, board, { deck, deckId, handle }) => {
+    const cardData = cardEntry?.card ?? {};
+    const row = document.createElement("tr");
+    row.className = "card-table-row";
+
+    const quantityCell = document.createElement("td");
+    quantityCell.textContent = String(cardEntry?.quantity ?? 1);
+    quantityCell.className = "card-table-quantity";
+
+    const nameCell = document.createElement("td");
+    nameCell.className = "card-table-name";
+    if (cardData?.name) {
+      const link = document.createElement("a");
+      link.className = "card-link";
+      const primaryId = getPrimaryCardIdentifier(cardData);
+      if (deckId && primaryId) {
+        link.href = `card.html?deck=${encodeURIComponent(deckId)}&card=${encodeURIComponent(primaryId)}`;
+        link.addEventListener("click", () => {
+          try {
+            const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
+            if (snapshot) {
+              window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
+            }
+          } catch (error) {
+            console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+          }
+        });
+      } else {
+        link.href = "#";
+      }
+      link.textContent = cardData.name;
+      nameCell.appendChild(link);
+    } else {
+      nameCell.textContent = "Carte inconnue";
+    }
+
+    const typeCell = document.createElement("td");
+    typeCell.className = "card-table-type";
+    typeCell.textContent = cardData?.type_line ?? "—";
+
+    const manaCostCell = document.createElement("td");
+    manaCostCell.className = "card-table-mana";
+    manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
+
+    [quantityCell, nameCell, typeCell, manaCostCell].forEach((cell) => row.appendChild(cell));
+
+    return row;
+  };
+
+  const buildSortControls = (board) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "deck-board-actions";
+
+    const baseId = typeof board?.name === "string" && board.name.trim().length > 0
+      ? board.name
+      : "deck";
+    const controlId = `deckSortMode-${baseId
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "deck"}`;
+
+    const label = document.createElement("label");
+    label.className = "card-sort-label";
+    label.setAttribute("for", controlId);
+    label.textContent = "Trier par";
+    wrapper.appendChild(label);
+
+    const select = document.createElement("select");
+    select.className = "card-sort-select";
+    select.id = controlId;
+
+    const options = [
+      { value: SORT_MODES.MANA, label: "Coût de mana" },
+      { value: SORT_MODES.TYPE, label: "Type de carte" },
+      { value: SORT_MODES.ALPHABETICAL, label: "Ordre alphabétique" },
+      { value: SORT_MODES.TAG, label: "Tag (bientôt)", disabled: true },
+    ];
+
+    options.forEach((definition) => {
+      const option = document.createElement("option");
+      option.value = definition.value;
+      option.textContent = definition.label;
+      if (definition.disabled) {
+        option.disabled = true;
+      }
+      select.appendChild(option);
+    });
+
+    select.value = deckSortMode;
+    select.addEventListener("change", (event) => {
+      const nextValue = event.target.value;
+      if (nextValue === SORT_MODES.TAG) {
+        event.target.value = deckSortMode;
+        return;
+      }
+      deckSortMode = nextValue;
+      if (currentDeckData) {
+        renderDeckBoards(currentDeckData, { handle: currentDeckHandle });
+      }
+    });
+
+    wrapper.appendChild(select);
+    return wrapper;
+  };
 
   const setDeckLoading = (isLoading) => {
     if (deckLoadingEl) {
@@ -34,6 +291,14 @@
     if (!deckBoardsEl) {
       return;
     }
+
+    if (deck) {
+      currentDeckData = deck;
+    }
+    if (typeof handle !== "undefined") {
+      currentDeckHandle = handle ?? null;
+    }
+
     deckBoardsEl.innerHTML = "";
 
     const boards = collectDeckBoards(deck);
@@ -52,7 +317,6 @@
     const uniqueCardIdentifiers = new Set();
     let totalCardQuantity = 0;
     const boardSummaries = [];
-    let hasRenderedBoard = false;
     const commanderEntries = [];
 
     boards.forEach((board) => {
@@ -61,14 +325,12 @@
         return;
       }
 
-      const boardName = typeof board?.name === "string" ? board.name.toLowerCase() : "";
+      const boardNameRaw = typeof board?.name === "string" ? board.name : "";
+      const boardName = boardNameRaw.toLowerCase();
+      const boardLabel = humanizeBoardName(board?.name);
       const isCommanderBoard = boardName.includes("commander");
-
-      cards.sort((a, b) => {
-        const nameA = a?.card?.name ?? "";
-        const nameB = b?.card?.name ?? "";
-        return nameA.localeCompare(nameB, "fr", { sensitivity: "base" });
-      });
+      const isMainboard =
+        boardName === "mainboard" || boardLabel.toLowerCase() === "bibliothèque principale";
 
       let boardQuantity = 0;
       cards.forEach((cardEntry) => {
@@ -97,7 +359,6 @@
           ? board.count
           : cards.length;
 
-      const boardLabel = humanizeBoardName(board?.name);
       boardSummaries.push({
         label: boardLabel,
         count: normalizedBoardCount,
@@ -120,6 +381,9 @@
       title.className = "deck-board-title";
       title.textContent = `${boardLabel} (${normalizedBoardCount})`;
       header.appendChild(title);
+      if (cards.length > 1) {
+        header.appendChild(buildSortControls(board));
+      }
       section.appendChild(header);
 
       const table = document.createElement("table");
@@ -136,55 +400,31 @@
       table.appendChild(thead);
 
       const tbody = document.createElement("tbody");
-      cards.forEach((cardEntry) => {
-        const cardData = cardEntry?.card ?? {};
-        const row = document.createElement("tr");
-        row.className = "card-table-row";
-
-        const quantityCell = document.createElement("td");
-        quantityCell.textContent = String(cardEntry?.quantity ?? 1);
-        quantityCell.className = "card-table-quantity";
-
-        const nameCell = document.createElement("td");
-        nameCell.className = "card-table-name";
-        if (cardData?.name) {
-          const link = document.createElement("a");
-          link.className = "card-link";
-          const primaryId = getPrimaryCardIdentifier(cardData);
-          if (deckId && primaryId) {
-            link.href = `card.html?deck=${encodeURIComponent(
-              deckId
-            )}&card=${encodeURIComponent(primaryId)}`;
-            link.addEventListener("click", () => {
-              try {
-                const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
-                if (snapshot) {
-                  window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
-                }
-              } catch (error) {
-                console.warn("Impossible d'enregistrer la sélection de la carte :", error);
-              }
-            });
-          } else {
-            link.href = "#";
+      if (isMainboard) {
+        const groups = buildTypeGroups(cards, deckSortMode);
+        groups.forEach((group) => {
+          if (!group || !Array.isArray(group.cards) || group.cards.length === 0) {
+            return;
           }
-          link.textContent = cardData.name;
-          nameCell.appendChild(link);
-        } else {
-          nameCell.textContent = "Carte inconnue";
-        }
+          const groupRow = document.createElement("tr");
+          groupRow.className = "card-table-group";
+          const groupHeader = document.createElement("th");
+          groupHeader.scope = "colgroup";
+          groupHeader.colSpan = 4;
+          groupHeader.textContent = `${group.label} (${group.quantity})`;
+          groupRow.appendChild(groupHeader);
+          tbody.appendChild(groupRow);
+          group.cards.forEach((cardEntry) => {
+            tbody.appendChild(createCardRow(cardEntry, board, { deck, deckId, handle }));
+          });
+        });
+      } else {
+        const sortedCards = sortCardEntries(cards, deckSortMode);
+        sortedCards.forEach((cardEntry) => {
+          tbody.appendChild(createCardRow(cardEntry, board, { deck, deckId, handle }));
+        });
+      }
 
-        const typeCell = document.createElement("td");
-        typeCell.className = "card-table-type";
-        typeCell.textContent = cardData?.type_line ?? "—";
-
-        const manaCostCell = document.createElement("td");
-        manaCostCell.className = "card-table-mana";
-        manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
-        [quantityCell, nameCell, typeCell, manaCostCell].forEach((cell) => row.appendChild(cell));
-
-        tbody.appendChild(row);
-      });
       table.appendChild(tbody);
       const tableContainer = document.createElement("div");
       tableContainer.className = "card-table-container";
@@ -192,7 +432,6 @@
       section.appendChild(tableContainer);
 
       deckBoardsEl.appendChild(section);
-      hasRenderedBoard = true;
     });
 
     const deckStats = computeDeckStatistics(deck);
@@ -218,6 +457,14 @@
     showDeckError("");
     if (deckTitleEl) {
       deckTitleEl.textContent = deck?.name ?? "Deck sans nom";
+    }
+
+    const nextDeckId = getDeckIdentifier(deck) ?? deck?.id ?? null;
+    const previousDeckId = currentDeckData
+      ? getDeckIdentifier(currentDeckData) ?? currentDeckData?.id ?? null
+      : null;
+    if (!previousDeckId || previousDeckId !== nextDeckId) {
+      deckSortMode = SORT_MODES.TYPE;
     }
 
     if (deckDescriptionEl) {
