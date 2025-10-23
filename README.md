@@ -55,6 +55,7 @@ The frontend automatically reads `API_BASE_URL` from `.env.local` (defaults to `
 - `make db-preview` – preview up to three documents from every Mongo collection.
 - `make db-test` – run configuration checks for the database layer.
 - `make vps-deploy` – on the VPS, rebuild frontend config, restart MongoDB + backend services, and deploy the static assets to Netlify.
+- `make log-db` / `make log-back` / `make log-front` – stream MongoDB, backend systemd, or Nginx logs (Ctrl+C to exit).
 - `make test` – aggregate frontend, backend, and db tests.
 - `make doctor` – verify required tooling and sanity-check environment variables.
 - `make deps` – convenience shortcut for installing backend dependencies with the system interpreter.
@@ -100,6 +101,10 @@ See `backend/README.md` for more detail on testing and contributing changes to t
 - **Reverse proxy (Nginx)**  
   - Config stored in `/etc/nginx/sites-available/edh-podlog` (symlinked into `sites-enabled`).  
   - Reload after edits: `nginx -t && systemctl reload nginx`. Use `certbot --nginx -d vps.zqsdev.com` for TLS.
+- **Log streaming**  
+  - `make log-db` pour `journalctl -u mongod`.  
+  - `make log-back` pour `journalctl -u edh-podlog`.  
+  - `make log-front` pour `tail -f /var/log/nginx/access.log /var/log/nginx/error.log`.
 - **Frontend on Netlify**  
   - Production deploy: `make front-build` then `netlify deploy --prod --dir frontend/public --site <SITE_ID>` (requires `NETLIFY_AUTH_TOKEN` or `netlify login`).  
   - Ensure Netlify env vars include `API_BASE_URL=https://vps.zqsdev.com/api` and `API_CORS_ALLOW_ORIGINS` is mirrored in `.env` for the backend. Trigger rebuilds from the Netlify UI if needed.

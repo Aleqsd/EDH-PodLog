@@ -27,7 +27,7 @@ NETLIFY_SITE_FLAG := $(if $(NETLIFY_SITE),--site $(NETLIFY_SITE),)
 	front-config front-build front-serve front-preview front-deploy front-clean front-test \
 	backend backend-install backend-run backend-test backend-openapi backend-deps \
 	db-start db-stop db-status db-clean db-preview db-test \
-	check-env check-tools test vps-deploy
+	check-env check-tools test vps-deploy log-db log-back log-front
 
 front: front-serve
 
@@ -99,6 +99,18 @@ vps-deploy: front-build
 	@echo "Deploying frontend to Netlify..."
 	@$(NETLIFY_CMD) deploy $(NETLIFY_SITE_FLAG) --dir $(FRONT_PUBLIC_DIR) --prod
 	@echo "VPS deployment complete."
+
+log-db:
+	@echo "Streaming MongoDB logs (CTRL+C to stop)..."
+	@journalctl -u mongod -n 100 -f
+
+log-back:
+	@echo "Streaming FastAPI backend logs (CTRL+C to stop)..."
+	@journalctl -u edh-podlog -n 100 -f
+
+log-front:
+	@echo "Streaming Nginx access/error logs (CTRL+C to stop)..."
+	@tail -n 200 -f /var/log/nginx/access.log /var/log/nginx/error.log
 
 db-start:
 	@command -v mongod >/dev/null || (echo "mongod not found. Install MongoDB Community Edition to use this target." && exit 1)
