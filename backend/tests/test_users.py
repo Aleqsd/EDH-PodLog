@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from app.dependencies import get_mongo_database, get_moxfield_client
 from app.main import create_app
 from app.moxfield import MoxfieldError, MoxfieldNotFoundError
+from app.routers import cache_router, profiles_router, users_router
 
 
 class _StubMoxfieldClient:
@@ -201,6 +202,14 @@ def api_client() -> TestClient:
     client = TestClient(app)
     yield client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_router_prefixes() -> None:
+    """Simple sanity check that routers expose the expected prefixes."""
+    assert users_router.prefix == "/users"
+    assert profiles_router.prefix == "/profiles"
+    assert cache_router.prefix == "/cache"
 
 
 def test_get_user_decks_success(api_client: TestClient) -> None:
