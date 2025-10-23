@@ -40,6 +40,7 @@ let moxfieldDeckSummaryAction = null;
 let moxfieldMetaEl = null;
 let defaultSyncLabel = "Synchroniser avec Moxfield";
 let deckSummaryEl = null;
+let deckCommanderEl = null;
 let currentSyncAbortController = null;
 let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;
@@ -2182,6 +2183,117 @@ const updateDeckSummary = (summary) => {
   deckSummaryEl.appendChild(boardList);
 };
 
+const renderCommanderHighlight = (entries, deck, { deckId, handle } = {}) => {
+  if (!deckCommanderEl) {
+    return;
+  }
+
+  deckCommanderEl.innerHTML = "";
+  deckCommanderEl.classList.add("is-hidden");
+
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return;
+  }
+
+  const container = document.createElement("div");
+  container.className = "commander-preview";
+
+  const title = document.createElement("p");
+  title.className = "commander-preview-title";
+  title.textContent = entries.length > 1 ? "Commandants" : "Commandant";
+  container.appendChild(title);
+
+  const grid = document.createElement("div");
+  grid.className = "commander-preview-grid";
+
+  entries.forEach(({ cardEntry, board }) => {
+    if (!cardEntry) {
+      return;
+    }
+
+    const cardData = cardEntry?.card ?? {};
+    const primaryId = getPrimaryCardIdentifier(cardData);
+    const quantity =
+      typeof cardEntry?.quantity === "number" && Number.isFinite(cardEntry.quantity)
+        ? cardEntry.quantity
+        : 1;
+
+    const card = document.createElement("article");
+    card.className = "commander-preview-card";
+
+    const link = document.createElement("a");
+    link.className = "commander-preview-link";
+
+    if (deckId && primaryId) {
+      link.href = `card.html?deck=${encodeURIComponent(deckId)}&card=${encodeURIComponent(primaryId)}`;
+      link.addEventListener("click", () => {
+        try {
+          const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
+          if (snapshot) {
+            window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
+          }
+        } catch (error) {
+          console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+        }
+      });
+    } else {
+      link.href = "#";
+    }
+
+    const visual = document.createElement("div");
+    visual.className = "commander-preview-visual";
+    const baseId =
+      cardData.id || cardData.card_id || cardData.uniqueCardId || cardData.scryfall_id;
+    if (baseId) {
+      const image = document.createElement("img");
+      image.src = `https://assets.moxfield.net/cards/card-${baseId}-normal.webp`;
+      image.alt = cardData?.name
+        ? `Illustration de ${cardData.name}`
+        : "Illustration du commandant";
+      visual.appendChild(image);
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.className = "commander-preview-placeholder";
+      placeholder.textContent = cardData?.name ?? "Commandant";
+      visual.appendChild(placeholder);
+    }
+
+    const info = document.createElement("div");
+    info.className = "commander-preview-info";
+
+    const name = document.createElement("h3");
+    name.className = "commander-preview-name";
+    name.textContent = cardData?.name ?? "Commandant inconnu";
+
+    const typeLine = document.createElement("p");
+    typeLine.className = "commander-preview-type";
+    typeLine.textContent = cardData?.type_line ?? "—";
+
+    const stats = document.createElement("p");
+    stats.className = "commander-preview-stats";
+    const manaText = formatManaCostText(cardData?.mana_cost) || "—";
+    const colors = Array.isArray(cardData?.color_identity) ? cardData.color_identity.join("") : "";
+    const statsParts = [manaText, `x${quantity}`];
+    if (colors) {
+      statsParts.push(colors);
+    }
+    stats.textContent = statsParts.join(" • ");
+
+    info.appendChild(name);
+    info.appendChild(typeLine);
+    info.appendChild(stats);
+
+    link.appendChild(visual);
+    link.appendChild(info);
+    card.appendChild(link);
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+  deckCommanderEl.appendChild(container);
+  deckCommanderEl.classList.remove("is-hidden");
+};
+
 const getPrimaryCardIdentifier = (cardData) => {
   if (!cardData || typeof cardData !== "object") {
     return null;
@@ -2573,6 +2685,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const deckLoadingEl = document.getElementById("deckLoading");
   const deckHandleBadgeEl = document.getElementById("deckHandleBadge");
   deckSummaryEl = document.getElementById("deckSummary");
+  deckCommanderEl = document.getElementById("deckCommanderHighlight");
 
   const cardTitleEl = document.getElementById("cardTitle");
   const cardSubtitleEl = document.getElementById("cardSubtitle");
@@ -2607,6 +2720,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     deckErrorEl.classList.toggle("is-hidden", !message);
     if (message) {
       updateDeckSummary(null);
+      renderCommanderHighlight([], null);
     }
   };
 
@@ -2632,6 +2746,7 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       "Impossible de trouver la liste des cartes pour ce deck. Relancez une synchronisation.";
     deckBoardsEl.appendChild(empty);
     updateDeckSummary(null);
+    renderCommanderHighlight([], deck);
     return;
   }
 
@@ -2640,6 +2755,8 @@ const renderDeckBoards = (deck, { handle } = {}) => {
   let totalCardQuantity = 0;
   const boardSummaries = [];
   let hasRenderedBoard = false;
+  let hasCommanderContent = false;
+  const commanderEntries = [];
 
   boards.forEach((board) => {
     const cards = Array.isArray(board?.cards) ? [...board.cards] : [];
@@ -2690,11 +2807,16 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     });
     totalCardQuantity += normalizedBoardCount;
 
+    if (isCommanderBoard) {
+      cards.forEach((cardEntry) => {
+        commanderEntries.push({ cardEntry, board });
+      });
+      hasCommanderContent = true;
+      return;
+    }
+
     const section = document.createElement("section");
     section.className = "deck-board";
-    if (isCommanderBoard) {
-      section.classList.add("deck-board--commanders");
-    }
 
     const header = document.createElement("header");
     header.className = "deck-board-header";
@@ -2703,90 +2825,6 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     title.textContent = `${boardLabel} (${normalizedBoardCount})`;
     header.appendChild(title);
     section.appendChild(header);
-
-    if (isCommanderBoard) {
-      const commanderGrid = document.createElement("div");
-      commanderGrid.className = "commander-highlight-grid";
-
-      cards.forEach((cardEntry) => {
-        const cardData = cardEntry?.card ?? {};
-        const primaryId = getPrimaryCardIdentifier(cardData);
-        const commanderTile = document.createElement("article");
-        commanderTile.className = "commander-highlight-card";
-
-        const link = document.createElement("a");
-        link.className = "commander-card-link";
-        if (deckId && primaryId) {
-          link.href = `card.html?deck=${encodeURIComponent(
-            deckId
-          )}&card=${encodeURIComponent(primaryId)}`;
-          link.addEventListener("click", () => {
-            try {
-              const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
-              if (snapshot) {
-                window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
-              }
-            } catch (error) {
-              console.warn("Impossible d'enregistrer la sélection de la carte :", error);
-            }
-          });
-        } else {
-          link.href = "#";
-        }
-
-        const visual = document.createElement("div");
-        visual.className = "commander-card-visual";
-        const baseId =
-          cardData.id || cardData.card_id || cardData.uniqueCardId || cardData.scryfall_id;
-        if (baseId) {
-          const image = document.createElement("img");
-          image.src = `https://assets.moxfield.net/cards/card-${baseId}-normal.webp`;
-          image.alt = cardData?.name
-            ? `Illustration de ${cardData.name}`
-            : "Illustration du commandant";
-          visual.appendChild(image);
-        } else {
-          visual.classList.add("commander-card-visual--empty");
-          const placeholder = document.createElement("span");
-          placeholder.className = "commander-card-fallback";
-          placeholder.textContent = cardData?.name ?? "Commandant";
-          visual.appendChild(placeholder);
-        }
-
-        const body = document.createElement("div");
-        body.className = "commander-card-body";
-
-        const nameEl = document.createElement("h3");
-        nameEl.className = "commander-card-name";
-        nameEl.textContent = cardData?.name ?? "Commandant inconnu";
-
-        const typeEl = document.createElement("p");
-        typeEl.className = "commander-card-type";
-        typeEl.textContent = cardData?.type_line ?? "—";
-
-        const stats = document.createElement("p");
-        stats.className = "commander-card-stats";
-        const quantity = cardEntry?.quantity ?? 1;
-        const manaCostText = formatManaCostText(cardData?.mana_cost) || "—";
-        const manaBreakdownText = formatManaBreakdownText(cardData?.mana_cost) || "—";
-        stats.textContent = `${manaCostText} • ${manaBreakdownText} • x${quantity}`;
-
-        body.appendChild(nameEl);
-        body.appendChild(typeEl);
-        body.appendChild(stats);
-
-        link.appendChild(visual);
-        link.appendChild(body);
-
-        commanderTile.appendChild(link);
-        commanderGrid.appendChild(commanderTile);
-      });
-
-      section.appendChild(commanderGrid);
-      deckBoardsEl.appendChild(section);
-      hasRenderedBoard = true;
-      return;
-    }
 
     const table = document.createElement("table");
     table.className = "card-table";
@@ -2868,7 +2906,7 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     hasRenderedBoard = true;
   });
 
-  if (!hasRenderedBoard) {
+  if (!hasRenderedBoard && !hasCommanderContent) {
     const empty = document.createElement("p");
     empty.className = "deck-board-empty";
     empty.textContent =
@@ -2885,6 +2923,8 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       boards: boardSummaries,
     });
   }
+
+  renderCommanderHighlight(commanderEntries, deck, { deckId, handle });
 };
 
   const populateDeckDetail = (deck, { handle } = {}) => {
