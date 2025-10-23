@@ -1322,12 +1322,16 @@ const buildImpactCard = (stats) => {
           ? `${Math.round((nonPermanentValue / totalRelevant) * 1000) / 10}% du total des cartes`
           : null,
     },
-    {
-      label: "Game changers",
-      value: NUMBER_FORMAT.format(Math.max(0, stats.gameChangerCount ?? 0)),
-      footnote: 'Cartes taggées "Game changer" sur Moxfield.',
-    },
   ];
+
+  const gameChangerTotal = Math.max(0, stats.gameChangerCount ?? 0);
+  if (gameChangerTotal > 0) {
+    impactItems.push({
+      label: "Game changers",
+      value: NUMBER_FORMAT.format(gameChangerTotal),
+      footnote: 'Cartes taggées "Game changer" sur Moxfield.',
+    });
+  }
 
   impactItems.forEach((item) => {
     const entry = document.createElement("div");
@@ -1636,7 +1640,7 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
       value: bracketInfo.bracket,
     });
   }
-  if (gameChangerCount !== null) {
+  if (gameChangerCount !== null && gameChangerCount > 0) {
     metaItems.push({
       label: "Game changers",
       value: NUMBER_FORMAT.format(gameChangerCount),

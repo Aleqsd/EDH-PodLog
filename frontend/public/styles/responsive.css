@@ -62,8 +62,19 @@
 
   @media (min-width: 960px) {
     .deck-rating-layout {
-      grid-template-columns: minmax(0, 1fr) 260px;
-      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .deck-rating-grid {
+      flex: 1 1 320px;
+      min-width: 260px;
+    }
+
+    .deck-radar-container {
+      flex: 0 0 220px;
+      max-width: 100%;
     }
   }
 }

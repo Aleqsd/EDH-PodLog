@@ -70,7 +70,7 @@
   align-items: center;
   width: min(1100px, 90vw);
   margin: 0 auto;
-  padding: clamp(2rem, 4vw, 4rem) 0 4rem;
+  padding: clamp(var(--space-xl), 4vw, var(--space-3xl)) 0 var(--space-2xl);
   position: relative;
   z-index: 1;
 }
@@ -212,7 +212,7 @@
 }
 
 .landing-footer {
-  padding: 2.5rem clamp(1.5rem, 5vw, 3.5rem);
+  padding: var(--space-2xl) clamp(1.5rem, 5vw, 3.5rem) var(--space-xl);
   text-align: center;
   color: var(--color-text-footnote-ghost);
   font-size: 0.9rem;
@@ -229,6 +229,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow-x: hidden;
 }
 
 .app-background {
@@ -1469,6 +1470,7 @@
 }
 .deck-rating-grid {
   display: grid;
+  min-width: 0;
   gap: 0.75rem;
 }
 
@@ -1528,7 +1530,7 @@
 }
 
 .deck-radar-svg {
-  width: min(220px, 60vw);
+  width: min(220px, 100%);
   height: auto;
 }
 
