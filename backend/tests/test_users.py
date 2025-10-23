@@ -288,6 +288,75 @@ def test_get_user_decks_success(api_client: TestClient) -> None:
     assert body["decks"][0]["tags"][0]["tags"] == ["Tag 1", "Tag 2"]
 
 
+def test_get_user_decks_color_identity_from_cards(api_client: TestClient) -> None:
+    """Deck color identity should derive from the contained card data."""
+    stub_payload = {
+        "user": {
+            "userName": "ColorUser",
+            "displayName": "Color User",
+            "profileImageUrl": None,
+            "badges": [],
+        },
+        "decks": [
+            {
+                "id": "deck-color",
+                "publicId": "deck-color",
+                "name": "Color Deck",
+                "format": "commander",
+                "visibility": "public",
+                "description": None,
+                "publicUrl": "https://moxfield.com/decks/deck-color",
+                "createdAtUtc": None,
+                "lastUpdatedAtUtc": None,
+                "likeCount": 0,
+                "viewCount": 0,
+                "commentCount": 0,
+                "bookmarkCount": 0,
+                "createdByUser": None,
+                "authors": [],
+                "authorTags": {},
+                "hubs": [],
+                "colors": [],
+                "colorIdentity": [],
+                "boards": {
+                    "mainboard": {
+                        "count": 2,
+                        "cards": {
+                            "entry-1": {
+                                "quantity": 1,
+                                "card": {
+                                    "name": "Card A",
+                                    "color_identity": ["B", "U"],
+                                },
+                            },
+                            "entry-2": {
+                                "quantity": 1,
+                                "card": {
+                                    "name": "Card B",
+                                    "colorIdentity": ["R"],
+                                },
+                            },
+                        },
+                    }
+                },
+                "tokens": [],
+            }
+        ],
+    }
+
+    stub_client = _StubMoxfieldClient(stub_payload)
+
+    app = api_client.app
+    app.dependency_overrides[get_moxfield_client] = lambda: stub_client
+
+    response = api_client.get("/users/ColorUser/decks")
+
+    assert response.status_code == 200
+    body = response.json()
+    deck = body["decks"][0]
+    assert deck["color_identity"] == ["U", "B", "R"]
+
+
 def test_get_user_profile_not_found(api_client: TestClient) -> None:
     """Fetching a profile that does not exist should yield 404."""
     response = api_client.get("/profiles/unknown-sub")

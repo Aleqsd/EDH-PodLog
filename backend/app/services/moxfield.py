@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from ..moxfield import MoxfieldClient
 from ..schemas import (
@@ -77,7 +77,7 @@ def _transform_deck(raw: Dict[str, Any]) -> DeckDetail:
         tags=_transform_tags(raw.get("authorTags")),
         hubs=[hub.get("name") for hub in raw.get("hubs", []) if isinstance(hub, dict)],
         colors=raw.get("colors", []),
-        color_identity=raw.get("colorIdentity", []),
+        color_identity=_compute_color_identity_from_cards(boards, raw.get("colorIdentity")),
         boards=boards,
         tokens=raw.get("tokens", []),
     )
@@ -178,3 +178,40 @@ def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+COLOR_IDENTITY_ORDER: tuple[str, ...] = ("W", "U", "B", "R", "G", "C")
+
+
+def _normalise_color_codes(values: Iterable[Any]) -> Set[str]:
+    colors: Set[str] = set()
+    for value in values:
+        if isinstance(value, str):
+            code = value.strip().upper()
+            if code:
+                colors.add(code)
+    return colors
+
+
+def _sort_color_codes(codes: Set[str]) -> List[str]:
+    ordered = [color for color in COLOR_IDENTITY_ORDER if color in codes]
+    ordered.extend(sorted(code for code in codes if code not in COLOR_IDENTITY_ORDER))
+    return ordered
+
+
+def _compute_color_identity_from_cards(
+    boards: List[DeckBoard], fallback: Optional[Iterable[Any]]
+) -> List[str]:
+    colors: Set[str] = set()
+    for board in boards:
+        for card_entry in board.cards:
+            card_data = card_entry.card or {}
+            raw_identity = card_data.get("color_identity") or card_data.get("colorIdentity") or []
+            colors.update(_normalise_color_codes(raw_identity))
+
+    if colors:
+        return _sort_color_codes(colors)
+
+    fallback_colors = _normalise_color_codes(fallback or [])
+    if fallback_colors:
+        return _sort_color_codes(fallback_colors)
+
+    return []
