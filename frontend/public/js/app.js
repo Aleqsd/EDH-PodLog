@@ -184,7 +184,7 @@ const persistSession = (session) => {
     }
     throw error;
   }
-  return sanitized;
+  return session;
 };
 
 const clearSession = () => {
@@ -2051,7 +2051,7 @@ const ensureDeckDetails = async (deckId, { handle, preferLive = false } = {}) =>
       if (refreshed && deckHasCardDetails(refreshed)) {
         return { deck: refreshed, session };
       }
-      deck = refreshed ?? matched;
+      deck = matched;
     } catch (error) {
       if (mode === "cache-only") {
         if (error.code && error.code !== "CACHE_MISS") {
