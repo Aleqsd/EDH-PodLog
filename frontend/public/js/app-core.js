@@ -22,6 +22,7 @@ const buildBackendUrl = (path) => {
 let tokenClient = null;
 let googleAccessToken = null;
 let isGoogleLibraryReady = false;
+let currentSession = null;
 
 let landingSignInButton = null;
 let landingFootnoteTextEl = null;
@@ -1500,4 +1501,3 @@ const performDeckSync = async (handle, selections, previewMeta) => {
     setMoxfieldSyncLoading(false);
   }
 };
-

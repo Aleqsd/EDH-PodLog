@@ -27,7 +27,7 @@
 ## Knowledge Map
 - Product vision notes live in `docs/edh-podlog-trashdraft.md`.
 - Frontend runtime config is generated via `frontend/scripts/generate-config.mjs`.
-- Frontend scripts now live in `frontend/public/js/app-core.js`, `app-features.js`, and `app-init.js` (load after `config.js`).
+- Frontend runtime splits into `frontend/public/js/app-core.js` & `app-features.js` for shared utilities, `app-init.js` for the router, and per-page controllers under `frontend/public/js/controllers/`.
 - Shared styles sit under `frontend/public/styles/` and are aggregated via `frontend/public/styles.css`.
 - Identity assets now ship as `frontend/public/favicon.ico` and `frontend/public/apple-touch-icon.png`; additional logos stay under `frontend/public/assets/`.
 - Backend API surface and persistence logic sit under `backend/app/` (Moxfield proxy, Mongo upserts, cache endpoints).
