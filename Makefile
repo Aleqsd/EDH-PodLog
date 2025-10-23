@@ -126,7 +126,11 @@ log-front:
 	@echo "Streaming Nginx access/error logs (CTRL+C to stop)..."
 	@mkdir -p $(VPS_LOG_ROOT)
 	@touch $(VPS_FRONT_LOG)
-	@tail -n 200 -F $(VPS_FRONT_LOG)
+	@if [ -f /var/log/nginx/access.log ] || [ -f /var/log/nginx/error.log ]; then \
+		tail -n 200 -f /var/log/nginx/access.log /var/log/nginx/error.log 2>/dev/null | stdbuf -oL tee -a $(VPS_FRONT_LOG); \
+	else \
+		tail -n 200 -F $(VPS_FRONT_LOG); \
+	fi
 
 db-start:
 	@command -v mongod >/dev/null || (echo "mongod not found. Install MongoDB Community Edition to use this target." && exit 1)

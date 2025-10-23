@@ -24,7 +24,7 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 mkdir -p "$LOG_ROOT"
-touch "${LOG_ROOT}/back.log" "${LOG_ROOT}/db.log" "${LOG_ROOT}/front.log" "${LOG_ROOT}/front-error.log"
+touch "${LOG_ROOT}/back.log" "${LOG_ROOT}/db.log" "${LOG_ROOT}/front.log"
 chmod 644 "${LOG_ROOT}/"*.log
 
 back_override_dir="/etc/systemd/system/${EDH_SERVICE}.d"
@@ -49,7 +49,7 @@ systemctl restart "$EDH_SERVICE"
 systemctl restart "$MONGO_SERVICE"
 
 ACCESS_LOG="${LOG_ROOT}/front.log"
-ERROR_LOG="${LOG_ROOT}/front-error.log"
+ERROR_LOG="${LOG_ROOT}/front.log"
 
 if [ -f "$NGINX_CONFIG" ]; then
   if ! grep -q "$ACCESS_LOG" "$NGINX_CONFIG"; then

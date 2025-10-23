@@ -71,17 +71,27 @@
               nouvelle synchronisation pour mettre vos decks à jour.
             </p>
           </div>
-          <a class="primary-action action-with-icon" href="synchronisation.html">
-            <img
-              class="action-icon"
-              src="assets/moxfield_logo.png"
-              alt="Logo Moxfield"
-              width="24"
-              height="24"
-              loading="lazy"
-            />
-            <span>Synchroniser</span>
-          </a>
+          <div class="decks-actions">
+            <a class="primary-action action-with-icon" href="synchronisation.html">
+              <img
+                class="action-icon"
+                src="assets/moxfield_logo.png"
+                alt="Logo Moxfield"
+                width="24"
+                height="24"
+                loading="lazy"
+              />
+              <span>Synchroniser</span>
+            </a>
+            <button
+              class="danger-action is-hidden"
+              type="button"
+              id="deckBulkDelete"
+              disabled
+            >
+              Supprimer tous les decks
+            </button>
+          </div>
         </header>
         <p class="deck-status" id="deckStatus" role="status"></p>
         <div class="deck-collection" id="deckCollection"></div>

@@ -33,13 +33,16 @@ let moxfieldHandleInput = null;
 let moxfieldSaveButton = null;
 let moxfieldSyncButton = null;
 let moxfieldStatusEl = null;
-let moxfieldDeckListEl = null;
+let moxfieldDeckSummaryEl = null;
+let moxfieldDeckSummaryText = null;
+let moxfieldDeckSummaryAction = null;
 let moxfieldMetaEl = null;
 let defaultSyncLabel = "Synchroniser avec Moxfield";
 let currentSyncAbortController = null;
 let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;
 let deckStatusEl = null;
+let deckBulkDeleteBtn = null;
 let deckSelectionModal = null;
 let deckSelectionListEl = null;
 let deckSelectionForm = null;
@@ -918,18 +921,41 @@ const renderDeckCardsInto = (target, decks) => {
   return true;
 };
 
-const renderMoxfieldDeckList = (decks) => {
-  if (!moxfieldDeckListEl) {
+const updateMoxfieldDeckSummary = (session) => {
+  if (!moxfieldDeckSummaryEl || !moxfieldDeckSummaryText) {
     return;
   }
 
-  const hasDecks = renderDeckCardsInto(moxfieldDeckListEl, decks);
-  if (!hasDecks) {
-    const placeholder = document.createElement("p");
-    placeholder.className = "deck-placeholder";
-    placeholder.textContent = "Aucun deck synchronisé pour le moment.";
-    moxfieldDeckListEl.innerHTML = "";
-    moxfieldDeckListEl.appendChild(placeholder);
+  const integration = getMoxfieldIntegration(session);
+  const decks = Array.isArray(integration?.decks) ? integration.decks : [];
+  const deckCount = decks.length;
+  const totalDecks =
+    typeof integration?.totalDecks === "number" && integration.totalDecks >= deckCount
+      ? integration.totalDecks
+      : deckCount;
+
+  if (deckCount === 0) {
+    moxfieldDeckSummaryText.textContent = "Aucun deck synchronisé pour le moment.";
+    if (moxfieldDeckSummaryAction) {
+      moxfieldDeckSummaryAction.hidden = true;
+    }
+    return;
+  }
+
+  const descriptor = deckCount > 1 ? "decks" : "deck";
+  const pluralSuffix = deckCount > 1 ? "s" : "";
+  if (totalDecks > deckCount) {
+    moxfieldDeckSummaryText.textContent = `${deckCount} ${descriptor} importé${pluralSuffix} sur ${totalDecks}. Gérez vos listes depuis l'espace Decks.`;
+  } else {
+    moxfieldDeckSummaryText.textContent = `${deckCount} ${descriptor} importé${pluralSuffix}. Gérez vos listes depuis l'espace Decks.`;
+  }
+
+  if (moxfieldDeckSummaryAction) {
+    moxfieldDeckSummaryAction.hidden = false;
+    moxfieldDeckSummaryAction.setAttribute(
+      "aria-label",
+      deckCount > 1 ? "Ouvrir la page Decks" : "Ouvrir la page Deck"
+    );
   }
 };
 
@@ -943,6 +969,10 @@ const refreshDeckCollection = (session) => {
   const hasDecks = renderDeckCardsInto(deckCollectionEl, decks);
   if (deckCollectionEmptyEl) {
     deckCollectionEmptyEl.classList.toggle("is-visible", !hasDecks);
+  }
+  if (deckBulkDeleteBtn) {
+    deckBulkDeleteBtn.disabled = !hasDecks;
+    deckBulkDeleteBtn.classList.toggle("is-hidden", !hasDecks);
   }
 };
 
@@ -1023,6 +1053,94 @@ async function handleDeckRemoval(deckId, deckName) {
     console.error("Unable to delete deck", error);
     showDeckStatus(
       "Impossible de supprimer le deck pour le moment. Réessayez plus tard.",
+      "error"
+    );
+  }
+}
+
+async function handleDeckBulkRemoval() {
+  const session = getSession();
+  if (!session) {
+    redirectToLanding();
+    return;
+  }
+
+  const integration = getMoxfieldIntegration(session);
+  const decks = Array.isArray(integration?.decks) ? integration.decks : [];
+  if (decks.length === 0) {
+    showDeckStatus("Aucun deck à supprimer.", "neutral");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Supprimer ${decks.length} deck${decks.length > 1 ? "s" : ""} importé${
+      decks.length > 1 ? "s" : ""
+    } ? Cette action est définitive.`
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const handle = integration?.handle || integration?.handleLower;
+  if (!handle) {
+    showDeckStatus(
+      "Impossible d'identifier votre pseudo Moxfield. Lancez une synchronisation avant de supprimer vos decks.",
+      "error"
+    );
+    return;
+  }
+
+  showDeckStatus("Suppression de tous les decks en cours…");
+
+  const deckIds = decks.map((deck) => getDeckIdentifier(deck)).filter(Boolean);
+  const failures = [];
+
+  for (const deckId of deckIds) {
+    const endpoint = buildBackendUrl(
+      `/users/${encodeURIComponent(handle)}/decks/${encodeURIComponent(deckId)}`
+    );
+    try {
+      const response = await fetch(endpoint, { method: "DELETE" });
+      if (response.status === 404) {
+        continue;
+      }
+      if (!response.ok) {
+        throw new Error(`Suppression refusée (${response.status})`);
+      }
+    } catch (error) {
+      console.error("Unable to delete deck", deckId, error);
+      failures.push(deckId);
+    }
+  }
+
+  const updatedSession = setMoxfieldIntegration((current) => ({
+    ...current,
+    decks: [],
+    deckCount: 0,
+    totalDecks: 0,
+  }));
+
+  let finalSession = updatedSession ?? getSession();
+  finalSession = (await persistIntegrationToProfile(finalSession, { decks: [] })) ?? finalSession;
+
+  if (typeof currentSession !== "undefined") {
+    currentSession = finalSession ?? currentSession;
+  }
+
+  renderMoxfieldPanel(finalSession, { preserveStatus: true });
+
+  if (failures.length === 0) {
+    showDeckStatus("Tous les decks ont été supprimés de vos imports.", "success");
+  } else if (failures.length === deckIds.length) {
+    showDeckStatus(
+      "Impossible de supprimer les decks pour le moment. Réessayez plus tard.",
+      "error"
+    );
+  } else {
+    showDeckStatus(
+      `${deckIds.length - failures.length} suppression${deckIds.length - failures.length > 1 ? "s" : ""} effectuée${
+        deckIds.length - failures.length > 1 ? "s" : ""
+      }. ${failures.length} deck${failures.length > 1 ? "s" : ""} reste à supprimer.`,
       "error"
     );
   }
@@ -1434,7 +1552,7 @@ const renderMoxfieldPanel = (session, { preserveStatus = false } = {}) => {
     );
   }
 
-  renderMoxfieldDeckList(integration?.decks ?? []);
+  updateMoxfieldDeckSummary(session);
   refreshDeckCollection(session);
 };
 
@@ -2888,11 +3006,14 @@ const renderDeckBoards = (deck, { handle } = {}) => {
   moxfieldSaveButton = moxfieldForm?.querySelector(".inline-button") ?? null;
   moxfieldSyncButton = document.getElementById("moxfieldSync");
   moxfieldStatusEl = document.getElementById("moxfieldStatus");
-  moxfieldDeckListEl = document.getElementById("moxfieldDeckList");
+  moxfieldDeckSummaryEl = document.getElementById("moxfieldDeckSummary");
+  moxfieldDeckSummaryText = document.getElementById("moxfieldDeckSummaryText");
+  moxfieldDeckSummaryAction = document.getElementById("moxfieldDeckSummaryAction");
   moxfieldMetaEl = document.getElementById("moxfieldSyncMeta");
   deckCollectionEl = document.getElementById("deckCollection");
   deckCollectionEmptyEl = document.getElementById("deckCollectionEmpty");
   deckStatusEl = document.getElementById("deckStatus");
+  deckBulkDeleteBtn = document.getElementById("deckBulkDelete");
   deckSelectionModal = document.getElementById("deckSelectionModal");
   deckSelectionListEl = document.getElementById("deckSelectionList");
   deckSelectionForm = document.getElementById("deckSelectionForm");
@@ -2917,6 +3038,8 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       }
     });
   }
+
+  deckBulkDeleteBtn?.addEventListener("click", handleDeckBulkRemoval);
 
   if (moxfieldSyncButton && moxfieldSyncButton.textContent.trim().length > 0) {
     defaultSyncLabel = moxfieldSyncButton.textContent.trim();

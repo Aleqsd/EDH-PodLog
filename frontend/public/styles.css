@@ -538,6 +538,32 @@ body.modal-open {
   color: #f5f7fb;
 }
 
+.danger-action {
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.4rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease,
+    color 150ms ease;
+  background: linear-gradient(135deg, #ff6b6b, #c75151);
+  color: #fff;
+  box-shadow: 0 18px 30px rgba(255, 93, 93, 0.25);
+}
+
+.danger-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 40px rgba(255, 93, 93, 0.35);
+}
+
+.danger-action:disabled {
+  cursor: not-allowed;
+  background: rgba(203, 214, 255, 0.18);
+  color: rgba(203, 214, 255, 0.45);
+  box-shadow: none;
+}
+
 .profile-main {
   flex: 1;
   padding: 3rem clamp(1.5rem, 6vw, 6rem) 5rem;
@@ -848,6 +874,17 @@ body.modal-open {
   gap: 1rem;
 }
 
+.deck-summary {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.deck-summary .secondary-action {
+  align-self: flex-start;
+}
+
 .deck-placeholder {
   margin: 0;
   font-size: 0.9rem;
@@ -1054,6 +1091,13 @@ body.modal-open {
   align-items: flex-start;
   justify-content: space-between;
   gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.decks-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   flex-wrap: wrap;
 }
 
