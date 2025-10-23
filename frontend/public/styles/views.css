@@ -1393,27 +1393,6 @@
   gap: 1.25rem;
 }
 
-.deck-rating-edit {
-  margin-top: 0.75rem;
-  align-self: flex-start;
-  padding: 0.45rem 0.9rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-border-soft) 48%, transparent);
-  background: color-mix(in srgb, var(--color-base-141c30) 80%, transparent);
-  color: var(--color-text-subtle);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
-}
-
-.deck-rating-edit:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--color-border-brand) 55%, transparent);
-  color: var(--color-text-primary);
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--color-base-070b18) 40%, transparent);
-}
-
 .deck-profile-meta {
   margin: 0;
   display: grid;

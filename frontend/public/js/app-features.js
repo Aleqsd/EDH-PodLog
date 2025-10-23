@@ -1495,45 +1495,13 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   const fields = document.createElement("div");
   fields.className = "deck-rating-grid";
   layout.appendChild(fields);
-  fields.hidden = true;
-  let isEditing = false;
 
   if (radar) {
     const radarContainer = document.createElement("div");
     radarContainer.className = "deck-radar-container";
     radarContainer.appendChild(radar.element);
-
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "deck-rating-edit";
-    editButton.textContent = "Modifier les notes";
-    editButton.setAttribute("aria-expanded", "false");
-
-    const toggleEditing = (force) => {
-      const nextState = typeof force === "boolean" ? force : !isEditing;
-      isEditing = nextState;
-      fields.hidden = !isEditing;
-      fields.classList.toggle("is-editing", isEditing);
-      editButton.textContent = isEditing ? "Terminer l'édition" : "Modifier les notes";
-      editButton.setAttribute("aria-expanded", String(isEditing));
-      if (isEditing) {
-        const firstSlider = fields.querySelector("input");
-        if (firstSlider) {
-          firstSlider.focus();
-        }
-      }
-    };
-
-    editButton.addEventListener("click", () => toggleEditing());
-
-    radarContainer.appendChild(editButton);
     layout.appendChild(radarContainer);
   }
-  if (!radar) {
-    fields.hidden = false;
-    isEditing = true;
-  }
-  fields.classList.toggle("is-editing", isEditing);
 
   DECK_RATING_CATEGORIES.forEach((category) => {
     const field = document.createElement("label");
