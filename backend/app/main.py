@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
-from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -114,11 +113,7 @@ def create_app() -> FastAPI:
         database: AsyncIOMotorDatabase = Depends(get_mongo_database),
     ) -> UserDeckSummariesResponse:
         try:
-            response = await run_in_threadpool(
-                build_user_deck_summaries_response,
-                client,
-                username,
-            )
+            response = await build_user_deck_summaries_response(client, username)
             logger.info(
                 "Deck summary sync succeeded for user '%s' with %d deck summaries.",
                 username,
@@ -152,7 +147,7 @@ def create_app() -> FastAPI:
         database: AsyncIOMotorDatabase = Depends(get_mongo_database),
     ) -> UserDecksResponse:
         try:
-            response = await run_in_threadpool(build_user_decks_response, client, username)
+            response = await build_user_decks_response(client, username)
             logger.info(
                 "Deck sync succeeded for user '%s' with %d deck(s).",
                 username,

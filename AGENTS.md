@@ -18,6 +18,7 @@
 - Run `make doctor` before handoff to verify prerequisites and environment variables (requires `GOOGLE_CLIENT_ID`, `MONGO_URI`, etc.).
 - Keep credentials out of Git; rely on `.env.local` merged by `frontend/scripts/generate-config.mjs` and backend env loading.
 - Extend or update tests alongside features. `make test` aggregates Node + pytest suites and guards against regressions.
+- After `make test`, exercise a manual `/users/{username}/decks` fetch (e.g. via `httpie` or `curl` against a multi-deck account like `BimboLegrand`) and inspect backend logs to confirm batched fetch timings and retry/backoff behaviour remain healthy.
 
 ## Workflow Checklists
 - **Bootstrap**: `make deps` (system Python deps if no venv) or `make backend-install`, then `make front`, `make back`, `make db`.

@@ -66,4 +66,4 @@ With the server running, open <http://127.0.0.1:4310/docs> for FastAPI's interac
   selected decks. Cached Moxfield payloads now live in the dedicated `MONGO_MOXFIELD_USERS_COLLECTION`.
 - Only public decks are returned; private decks remain inaccessible without Moxfield authentication.
 - Responses include the raw Moxfield card payload so the frontend can decide how much detail to surface.
-- Requests are intentionally sequential to avoid hammering Moxfield. Tweak `MoxfieldClient.collect_user_decks_with_details` if you need concurrency.
+- Moxfield deck detail fetches run through a concurrency-limited task pool (`detail_concurrency_limit`) to balance throughput with upstream friendliness.

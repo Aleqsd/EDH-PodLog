@@ -37,12 +37,12 @@ class _StubMoxfieldClient:
         self._summary_payload = summary_payload or {}
         self._deck_summaries = list(deck_summaries or [])
 
-    def collect_user_decks_with_details(self, username: str, **_: Any) -> Dict[str, Any]:
+    async def collect_user_decks_with_details(self, username: str, **_: Any) -> Dict[str, Any]:
         if self._error:
             raise self._error
         return self._payload or {}
 
-    def get_user_summary(self, username: str, **_: Any) -> Dict[str, Any]:
+    async def get_user_summary(self, username: str, **_: Any) -> Dict[str, Any]:
         if self._error:
             raise self._error
         if self._summary_payload:
@@ -54,7 +54,7 @@ class _StubMoxfieldClient:
             "badges": [],
         }
 
-    def get_user_deck_summaries(self, username: str, **_: Any) -> List[Dict[str, Any]]:
+    async def get_user_deck_summaries(self, username: str, **_: Any) -> List[Dict[str, Any]]:
         if self._error:
             raise self._error
         return self._deck_summaries

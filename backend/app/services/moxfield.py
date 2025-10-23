@@ -20,20 +20,23 @@ from ..schemas import (
 )
 
 
-def build_user_decks_response(client: MoxfieldClient, username: str) -> UserDecksResponse:
+async def build_user_decks_response(
+    client: MoxfieldClient,
+    username: str,
+) -> UserDecksResponse:
     """Fetch and normalize the payload returned by the API endpoint."""
-    raw_payload = client.collect_user_decks_with_details(username)
+    raw_payload = await client.collect_user_decks_with_details(username)
     user_summary = _transform_user_summary(raw_payload["user"])
     decks = [_transform_deck(detail) for detail in raw_payload["decks"]]
     return UserDecksResponse(user=user_summary, total_decks=len(decks), decks=decks)
 
 
-def build_user_deck_summaries_response(
+async def build_user_deck_summaries_response(
     client: MoxfieldClient, username: str
 ) -> UserDeckSummariesResponse:
     """Fetch deck summaries for a user without fetching card data."""
-    raw_user = client.get_user_summary(username)
-    raw_decks = client.get_user_deck_summaries(raw_user["userName"])
+    raw_user = await client.get_user_summary(username)
+    raw_decks = await client.get_user_deck_summaries(raw_user["userName"])
     user_summary = _transform_user_summary(raw_user)
     decks = [_transform_deck_summary(deck) for deck in raw_decks]
     return UserDeckSummariesResponse(user=user_summary, total_decks=len(decks), decks=decks)
