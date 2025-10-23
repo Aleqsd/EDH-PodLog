@@ -826,7 +826,19 @@ const computeDeckStatistics = (deck) => {
   const cards = Array.isArray(mainboard?.cards) ? mainboard.cards : [];
 
   const bucketOrder = ["0", "1", "2", "3", "4", "5", "6", "7", "8+"];
-  const buckets = bucketOrder.reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+  const bucketMap = new Map(
+    bucketOrder.map((label) => [
+      label,
+      {
+        label,
+        total: 0,
+        permanentCount: 0,
+        spellCount: 0,
+        permanentCards: [],
+        spellCards: [],
+      },
+    ])
+  );
   let nonLandCount = 0;
   let manaValueSum = 0;
 
@@ -916,18 +928,41 @@ const computeDeckStatistics = (deck) => {
     const cardData = cardEntry.card ?? {};
     const manaValue = getCardManaValue(cardData);
     const land = isLandCard(cardData);
+    const permanent = isPermanentCard(cardData);
 
     if (!land && manaValue !== null) {
       const bucketKey = manaValue >= 8 ? "8+" : String(Math.max(0, Math.floor(manaValue)));
-      buckets[bucketKey] = (buckets[bucketKey] ?? 0) + quantity;
+      const bucket = bucketMap.get(bucketKey);
+      if (bucket) {
+        bucket.total += quantity;
+        if (permanent) {
+          bucket.permanentCount += quantity;
+          bucket.permanentCards.push({
+            name: cardData?.name ?? "Carte inconnue",
+            quantity,
+            typeLine: cardData?.type_line ?? cardData?.typeLine ?? "—",
+            manaCost: cardData?.mana_cost ?? null,
+          });
+        } else {
+          bucket.spellCount += quantity;
+          bucket.spellCards.push({
+            name: cardData?.name ?? "Carte inconnue",
+            quantity,
+            typeLine: cardData?.type_line ?? cardData?.typeLine ?? "—",
+            manaCost: cardData?.mana_cost ?? null,
+          });
+        }
+      }
       manaValueSum += manaValue * quantity;
       nonLandCount += quantity;
     }
 
-    if (isPermanentCard(cardData)) {
-      permanentCount += quantity;
-    } else {
-      nonPermanentCount += quantity;
+    if (!land) {
+      if (permanent) {
+        permanentCount += quantity;
+      } else {
+        nonPermanentCount += quantity;
+      }
     }
 
     const cardName = typeof cardData?.name === "string" ? cardData.name.toLowerCase() : null;
@@ -971,11 +1006,29 @@ const computeDeckStatistics = (deck) => {
     }
   });
 
-  const manaCurve = bucketOrder.map((label) => ({
-    label,
-    value: Math.round(buckets[label] ?? 0),
-  }));
-  const manaCurveMax = manaCurve.reduce((max, bucket) => Math.max(max, bucket.value), 0);
+  const manaCurve = bucketOrder.map((label) => {
+    const bucket = bucketMap.get(label) ?? {
+      label,
+      total: 0,
+      permanentCount: 0,
+      spellCount: 0,
+      permanentCards: [],
+      spellCards: [],
+    };
+    const total = Math.round(bucket.total ?? 0);
+    const permanentTotal = Math.round(bucket.permanentCount ?? 0);
+    const spellTotal = Math.round(bucket.spellCount ?? 0);
+    return {
+      label,
+      value: total,
+      total,
+      permanentCount: permanentTotal,
+      spellCount: spellTotal,
+      permanentCards: bucket.permanentCards ?? [],
+      spellCards: bucket.spellCards ?? [],
+    };
+  });
+  const manaCurveMax = manaCurve.reduce((max, bucket) => Math.max(max, bucket.total ?? 0), 0);
   const averageManaValue =
     nonLandCount > 0 ? Number((manaValueSum / nonLandCount).toFixed(2)) : null;
 
@@ -1112,7 +1165,8 @@ const buildManaCurveCard = (stats) => {
 
   const subtitle = document.createElement("p");
   subtitle.className = "deck-stats-card-subtitle";
-  subtitle.textContent = "Répartition des sorts par coût converti (hors terrains).";
+  subtitle.textContent =
+    "Répartition des permanents et des sorts (hors terrains) par coût converti.";
   card.appendChild(subtitle);
 
   const chart = document.createElement("div");
@@ -1120,40 +1174,209 @@ const buildManaCurveCard = (stats) => {
   const maxValue = Math.max(stats.manaCurveMax ?? 0, 1);
   chart.style.setProperty("--deck-mana-max", String(maxValue));
   chart.setAttribute("role", "list");
-  chart.setAttribute("aria-label", "Répartition des sorts par coût converti");
+  chart.setAttribute(
+    "aria-label",
+    "Répartition des permanents et des sorts par coût converti (hors terrains)."
+  );
 
-  stats.manaCurve.forEach((bucket) => {
+  const bars = [];
+  const detail = document.createElement("section");
+  detail.className = "deck-mana-detail";
+  detail.setAttribute("role", "region");
+  detail.setAttribute("aria-live", "polite");
+  detail.setAttribute(
+    "aria-label",
+    "Cartes associées au coût de mana sélectionné"
+  );
+
+  const buildDetailColumn = (label, cards) => {
+    const column = document.createElement("div");
+    column.className = "deck-mana-detail-column";
+    const total = Array.isArray(cards)
+      ? cards.reduce((sum, entry) => sum + Math.max(1, Number(entry?.quantity ?? 1)), 0)
+      : 0;
+    const heading = document.createElement("h5");
+    heading.className = "deck-mana-detail-heading";
+    heading.textContent = `${label} (${NUMBER_FORMAT.format(total)})`;
+    column.appendChild(heading);
+
+    if (!total) {
+      const empty = document.createElement("p");
+      empty.className = "deck-mana-detail-empty";
+      empty.textContent = "Aucune carte";
+      column.appendChild(empty);
+      return column;
+    }
+
+    const list = document.createElement("ul");
+    list.className = "deck-mana-detail-list";
+
+    const sorted = [...cards].sort((a, b) =>
+      CARD_NAME_COLLATOR.compare(a?.name ?? "", b?.name ?? "")
+    );
+    sorted.forEach((entry) => {
+      const safeQuantity = Math.max(1, Number(entry?.quantity ?? 1));
+      const item = document.createElement("li");
+      item.className = "deck-mana-detail-item";
+
+      const line = document.createElement("div");
+      line.className = "deck-mana-detail-line";
+
+      const quantityBadge = document.createElement("span");
+      quantityBadge.className = "deck-mana-detail-quantity";
+      quantityBadge.textContent = `x${safeQuantity}`;
+      line.appendChild(quantityBadge);
+
+      const name = document.createElement("span");
+      name.className = "deck-mana-detail-name";
+      name.textContent = entry?.name ?? "Carte inconnue";
+      line.appendChild(name);
+
+      item.appendChild(line);
+
+      const typeLine = document.createElement("span");
+      typeLine.className = "deck-mana-detail-type";
+      typeLine.textContent = entry?.typeLine ?? "—";
+      item.appendChild(typeLine);
+
+      list.appendChild(item);
+    });
+
+    column.appendChild(list);
+    return column;
+  };
+
+  const renderDetail = (index) => {
+    detail.innerHTML = "";
+    const safeIndex = index >= 0 && index < stats.manaCurve.length ? index : 0;
+    const bucket = stats.manaCurve[safeIndex];
+    if (!bucket) {
+      const empty = document.createElement("p");
+      empty.className = "deck-mana-detail-empty";
+      empty.textContent = "Sélectionnez une barre pour afficher les cartes correspondantes.";
+      detail.appendChild(empty);
+      return;
+    }
+
+    const heading = document.createElement("h4");
+    heading.className = "deck-mana-detail-title";
+    heading.textContent = `Cartes pour un coût ${bucket.label ?? "—"}`;
+    detail.appendChild(heading);
+
+    const grid = document.createElement("div");
+    grid.className = "deck-mana-detail-grid";
+    grid.appendChild(buildDetailColumn("Permanents", bucket?.permanentCards ?? []));
+    grid.appendChild(buildDetailColumn("Sorts", bucket?.spellCards ?? []));
+    detail.appendChild(grid);
+  };
+
+  const handleSelect = (index) => {
+    bars.forEach((bar, idx) => {
+      const isActive = idx === index;
+      bar.classList.toggle("is-active", isActive);
+      bar.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    renderDetail(index);
+  };
+
+  stats.manaCurve.forEach((bucket, index) => {
+    const total = Math.max(0, bucket?.total ?? bucket?.value ?? 0);
+    const permanentCount = Math.max(0, bucket?.permanentCount ?? 0);
+    const spellCount = Math.max(0, bucket?.spellCount ?? 0);
+    const permanentRatio = total > 0 ? Math.min(1, permanentCount / total) : 0;
+    const spellRatio = total > 0 ? Math.min(1, spellCount / total) : 0;
+
     const bar = document.createElement("div");
     bar.className = "deck-mana-bar";
-    const value = Math.max(0, bucket?.value ?? 0);
-    bar.style.setProperty("--deck-mana-value", String(value));
     bar.setAttribute("role", "listitem");
+    bar.tabIndex = 0;
     bar.dataset.cost = bucket?.label ?? "";
+    bar.style.setProperty("--deck-mana-value", String(total));
     bar.setAttribute(
       "aria-label",
-      `Coût ${bucket?.label ?? "?"}, ${NUMBER_FORMAT.format(value)} carte${
-        value > 1 ? "s" : ""
-      }`
+      `Coût ${bucket?.label ?? "?"}, ${NUMBER_FORMAT.format(
+        permanentCount
+      )} permanent${permanentCount > 1 ? "s" : ""}, ${NUMBER_FORMAT.format(spellCount)} sort${
+        spellCount > 1 ? "s" : ""
+      }. Sélectionner pour afficher les cartes correspondantes.`
     );
+    bar.setAttribute("aria-selected", "false");
 
     const barFill = document.createElement("div");
     barFill.className = "deck-mana-bar-fill";
     bar.appendChild(barFill);
 
-    const count = document.createElement("span");
-    count.className = "deck-mana-bar-count";
-    count.textContent = NUMBER_FORMAT.format(value);
-    barFill.appendChild(count);
+    const spellSegment = document.createElement("div");
+    spellSegment.className = "deck-mana-segment deck-mana-segment-spells";
+    spellSegment.style.height = `${Math.max(0, Math.min(1, spellRatio)) * 100}%`;
+    spellSegment.style.order = "1";
+    barFill.appendChild(spellSegment);
+
+    const permanentSegment = document.createElement("div");
+    permanentSegment.className = "deck-mana-segment deck-mana-segment-permanents";
+    permanentSegment.style.height = `${Math.max(0, Math.min(1, permanentRatio)) * 100}%`;
+    permanentSegment.style.order = "2";
+    barFill.appendChild(permanentSegment);
+
+    const breakdown = document.createElement("div");
+    breakdown.className = "deck-mana-bar-breakdown";
+    const permanentBadge = document.createElement("span");
+    permanentBadge.className = "deck-mana-breakdown-item deck-mana-breakdown-permanents";
+    permanentBadge.textContent = `Perm. ${NUMBER_FORMAT.format(permanentCount)}`;
+    breakdown.appendChild(permanentBadge);
+    const spellBadge = document.createElement("span");
+    spellBadge.className = "deck-mana-breakdown-item deck-mana-breakdown-spells";
+    spellBadge.textContent = `Sorts ${NUMBER_FORMAT.format(spellCount)}`;
+    breakdown.appendChild(spellBadge);
 
     const label = document.createElement("span");
     label.className = "deck-mana-bar-label";
     label.textContent = bucket?.label ?? "—";
-    bar.appendChild(label);
 
+    const activate = () => handleSelect(index);
+    bar.addEventListener("click", (event) => {
+      event.preventDefault();
+      activate();
+    });
+    bar.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activate();
+      }
+    });
+
+    bar.appendChild(breakdown);
+    bar.appendChild(label);
     chart.appendChild(bar);
+    bars.push(bar);
   });
 
   card.appendChild(chart);
+
+  const legend = document.createElement("div");
+  legend.className = "deck-mana-legend-split";
+  const buildLegendItem = (label, className) => {
+    const item = document.createElement("span");
+    item.className = `deck-mana-legend-item ${className}`;
+    const swatch = document.createElement("span");
+    swatch.className = "deck-mana-legend-swatch";
+    item.appendChild(swatch);
+    const text = document.createElement("span");
+    text.className = "deck-mana-legend-label";
+    text.textContent = label;
+    item.appendChild(text);
+    return item;
+  };
+  legend.appendChild(buildLegendItem("Permanents", "deck-mana-legend-permanents"));
+  legend.appendChild(buildLegendItem("Sorts", "deck-mana-legend-spells"));
+  card.appendChild(legend);
+
+  card.appendChild(detail);
+
+  const initialIndex = stats.manaCurve.findIndex(
+    (bucket) => (bucket?.total ?? bucket?.value ?? 0) > 0
+  );
+  handleSelect(initialIndex >= 0 ? initialIndex : 0);
 
   if (typeof stats.averageManaValue === "number") {
     const average = document.createElement("p");

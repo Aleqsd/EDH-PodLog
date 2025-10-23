@@ -167,53 +167,71 @@
     return ordered;
   };
 
-  const createCardRow = (cardEntry, board, { deck, deckId, handle }) => {
-    const cardData = cardEntry?.card ?? {};
-    const row = document.createElement("tr");
-    row.className = "card-table-row";
-
-    const quantityCell = document.createElement("td");
-    quantityCell.textContent = String(cardEntry?.quantity ?? 1);
-    quantityCell.className = "card-table-quantity";
-
-    const nameCell = document.createElement("td");
-    nameCell.className = "card-table-name";
-    if (cardData?.name) {
-      const link = document.createElement("a");
-      link.className = "card-link";
-      const primaryId = getPrimaryCardIdentifier(cardData);
-      if (deckId && primaryId) {
-        link.href = `card.html?deck=${encodeURIComponent(deckId)}&card=${encodeURIComponent(primaryId)}`;
-        link.addEventListener("click", () => {
-          try {
-            const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
-            if (snapshot) {
-              window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
-            }
-          } catch (error) {
-            console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+  const createCardLink = (cardData, board, cardEntry, { deck, deckId, handle }) => {
+    if (!cardData || typeof cardData !== "object" || !cardData.name) {
+      return null;
+    }
+    const link = document.createElement("a");
+    link.className = "card-link";
+    const primaryId = getPrimaryCardIdentifier(cardData);
+    if (deckId && primaryId) {
+      link.href = `card.html?deck=${encodeURIComponent(deckId)}&card=${encodeURIComponent(primaryId)}`;
+      link.addEventListener("click", () => {
+        try {
+          const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
+          if (snapshot) {
+            window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
           }
-        });
-      } else {
-        link.href = "#";
-      }
-      link.textContent = cardData.name;
-      nameCell.appendChild(link);
+        } catch (error) {
+          console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+        }
+      });
     } else {
-      nameCell.textContent = "Carte inconnue";
+      link.href = "#";
+    }
+    link.textContent = cardData.name;
+    return link;
+  };
+
+  const createCardListItem = (cardEntry, board, { deck, deckId, handle }) => {
+    const cardData = cardEntry?.card ?? {};
+    const quantity = getEntryQuantity(cardEntry);
+
+    const item = document.createElement("li");
+    item.className = "deck-card-item";
+
+    const header = document.createElement("div");
+    header.className = "deck-card-item-header";
+
+    const quantityBadge = document.createElement("span");
+    quantityBadge.className = "deck-card-quantity";
+    quantityBadge.textContent = `x${quantity}`;
+    header.appendChild(quantityBadge);
+
+    const link = createCardLink(cardData, board, cardEntry, { deck, deckId, handle });
+    if (link) {
+      link.classList.add("deck-card-name");
+      header.appendChild(link);
+    } else {
+      const name = document.createElement("span");
+      name.className = "deck-card-name";
+      name.textContent = cardData?.name ?? "Carte inconnue";
+      header.appendChild(name);
     }
 
-    const typeCell = document.createElement("td");
-    typeCell.className = "card-table-type";
-    typeCell.textContent = cardData?.type_line ?? "—";
+    const mana = document.createElement("span");
+    mana.className = "deck-card-mana";
+    renderManaCost(mana, cardData?.mana_cost);
+    header.appendChild(mana);
 
-    const manaCostCell = document.createElement("td");
-    manaCostCell.className = "card-table-mana mana-cost";
-    renderManaCost(manaCostCell, cardData?.mana_cost);
+    item.appendChild(header);
 
-    [quantityCell, nameCell, typeCell, manaCostCell].forEach((cell) => row.appendChild(cell));
+    const type = document.createElement("span");
+    type.className = "deck-card-type";
+    type.textContent = cardData?.type_line ?? "—";
+    item.appendChild(type);
 
-    return row;
+    return item;
   };
 
   const initializeDeckSortControls = () => {
@@ -331,6 +349,9 @@
       deckSortSelectEl.value = deckSortMode;
     }
 
+    let mainboardMeta = null;
+    let sideboardMeta = null;
+
     boards.forEach((board) => {
       const cards = Array.isArray(board?.cards) ? [...board.cards] : [];
       if (cards.length === 0) {
@@ -376,64 +397,105 @@
         return;
       }
 
+      const boardInfo = {
+        board,
+        cards,
+        label: boardLabel,
+        count: normalizedBoardCount,
+      };
+
+      if (isMainboard) {
+        mainboardMeta = boardInfo;
+      } else if (isSideboard) {
+        sideboardMeta = boardInfo;
+      }
+    });
+
+    if (!mainboardMeta && sideboardMeta) {
+      mainboardMeta = {
+        ...sideboardMeta,
+        label: sideboardMeta.label || "Réserve",
+      };
+      sideboardMeta = null;
+    }
+
+    if (mainboardMeta && Array.isArray(mainboardMeta.cards) && mainboardMeta.cards.length > 0) {
       const section = document.createElement("section");
-      section.className = "deck-board";
+      section.className = "deck-board deck-board-groups";
 
       const header = document.createElement("header");
       header.className = "deck-board-header";
       const title = document.createElement("h2");
       title.className = "deck-board-title";
-      title.textContent = `${boardLabel} (${normalizedBoardCount})`;
+      title.textContent = `${mainboardMeta.label} (${mainboardMeta.count})`;
       header.appendChild(title);
       section.appendChild(header);
 
-      const table = document.createElement("table");
-      table.className = "card-table";
-      const thead = document.createElement("thead");
-      const headerRow = document.createElement("tr");
-      ["Qté", "Carte", "Type", "Coût"].forEach((label) => {
-        const th = document.createElement("th");
-        th.scope = "col";
-        th.textContent = label;
-        headerRow.appendChild(th);
+      const groups = buildTypeGroups(mainboardMeta.cards, deckSortMode);
+      groups.forEach((group) => {
+        group.originBoard = mainboardMeta.board;
       });
-      thead.appendChild(headerRow);
-      table.appendChild(thead);
 
-      const tbody = document.createElement("tbody");
-      if (isMainboard) {
-        const groups = buildTypeGroups(cards, deckSortMode);
-        groups.forEach((group) => {
-          if (!group || !Array.isArray(group.cards) || group.cards.length === 0) {
-            return;
-          }
-          const groupRow = document.createElement("tr");
-          groupRow.className = "card-table-group";
-          const groupHeader = document.createElement("th");
-          groupHeader.scope = "colgroup";
-          groupHeader.colSpan = 4;
-          groupHeader.textContent = `${group.label} (${group.quantity})`;
-          groupRow.appendChild(groupHeader);
-          tbody.appendChild(groupRow);
-          group.cards.forEach((cardEntry) => {
-            tbody.appendChild(createCardRow(cardEntry, board, { deck, deckId, handle }));
-          });
-        });
-      } else {
-        const sortedCards = sortCardEntries(cards, deckSortMode);
-        sortedCards.forEach((cardEntry) => {
-          tbody.appendChild(createCardRow(cardEntry, board, { deck, deckId, handle }));
+      const groupSortMode =
+        deckSortMode === SORT_MODES.MANA ? SORT_MODES.MANA : SORT_MODES.ALPHABETICAL;
+
+      if (
+        sideboardMeta &&
+        Array.isArray(sideboardMeta.cards) &&
+        sideboardMeta.cards.length > 0
+      ) {
+        const reserveCards = sortCardEntries(sideboardMeta.cards, groupSortMode);
+        const reserveQuantity = reserveCards.reduce(
+          (sum, entry) => sum + getEntryQuantity(entry),
+          0
+        );
+        groups.push({
+          key: "reserve",
+          label: "Réserve",
+          cards: reserveCards,
+          quantity: reserveQuantity,
+          originBoard: sideboardMeta.board,
         });
       }
 
-      table.appendChild(tbody);
-      const tableContainer = document.createElement("div");
-      tableContainer.className = "card-table-container";
-      tableContainer.appendChild(table);
-      section.appendChild(tableContainer);
+      const columns = document.createElement("div");
+      columns.className = "deck-card-columns";
 
+      groups.forEach((group) => {
+        if (!group || !Array.isArray(group.cards) || group.cards.length === 0) {
+          return;
+        }
+
+        const groupSection = document.createElement("article");
+        groupSection.className = "deck-card-group";
+
+        const groupHeader = document.createElement("header");
+        groupHeader.className = "deck-card-group-header";
+        const groupTitle = document.createElement("h3");
+        groupTitle.className = "deck-card-group-title";
+        groupTitle.textContent = `${group.label} (${group.quantity})`;
+        groupHeader.appendChild(groupTitle);
+        groupSection.appendChild(groupHeader);
+
+        const list = document.createElement("ul");
+        list.className = "deck-card-list";
+        group.cards.forEach((cardEntry) => {
+          list.appendChild(
+            createCardListItem(cardEntry, group.originBoard ?? mainboardMeta.board, {
+              deck,
+              deckId,
+              handle,
+            })
+          );
+        });
+        groupSection.appendChild(list);
+
+        columns.appendChild(groupSection);
+      });
+
+      section.appendChild(columns);
       deckBoardsEl.appendChild(section);
-    });
+    }
 
     const deckStats = computeDeckStatistics(deck);
 
