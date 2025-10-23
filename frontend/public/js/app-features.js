@@ -839,6 +839,7 @@ const computeDeckStatistics = (deck) => {
     C: 0,
   };
   let colorWeightTotal = 0;
+  const allowedColorCodes = new Set(Object.keys(COLOR_DISTRIBUTION_META));
 
   const manaPipCounts = {
     W: 0,
@@ -939,17 +940,21 @@ const computeDeckStatistics = (deck) => {
       }
     }
 
-    const identity = Array.isArray(cardData?.color_identity) ? cardData.color_identity : [];
-    if (identity.length === 0) {
+    const colors = Array.isArray(cardData?.colors) ? cardData.colors : [];
+    const normalizedColors = Array.from(
+      new Set(
+        colors
+          .map((color) => String(color || "").toUpperCase())
+          .filter((code) => code && allowedColorCodes.has(code))
+      )
+    );
+
+    if (normalizedColors.length === 0) {
       colorWeights.C += quantity;
       colorWeightTotal += quantity;
     } else {
-      const share = quantity / identity.length;
-      identity.forEach((color) => {
-        const code = String(color || "").toUpperCase();
-        if (!code) {
-          return;
-        }
+      const share = quantity / normalizedColors.length;
+      normalizedColors.forEach((code) => {
         if (!Object.prototype.hasOwnProperty.call(colorWeights, code)) {
           colorWeights[code] = 0;
         }
@@ -1176,12 +1181,12 @@ const buildColorDistributionCard = (stats) => {
 
   const title = document.createElement("h3");
   title.className = "deck-stats-card-title";
-  title.textContent = "Identités de couleur";
+  title.textContent = "Répartition des symboles";
   card.appendChild(title);
 
   const subtitle = document.createElement("p");
   subtitle.className = "deck-stats-card-subtitle";
-  subtitle.textContent = "Identités du deck et symboles requis par les coûts de mana.";
+  subtitle.textContent = "Symboles de mana présents dans le deck et symboles requis par les coûts de mana.";
   card.appendChild(subtitle);
 
   const chart = document.createElement("div");
@@ -1210,7 +1215,10 @@ const buildColorDistributionCard = (stats) => {
   const legend = document.createElement("ul");
   legend.className = "deck-color-legend";
   legend.setAttribute("role", "list");
-  legend.setAttribute("aria-label", "Répartition des identités de couleur et symboles requis");
+  legend.setAttribute(
+    "aria-label",
+    "Répartition des symboles de mana et symboles requis par les coûts"
+  );
   stats.colorDistribution.forEach((entry) => {
     const item = document.createElement("li");
     item.className = "deck-color-legend-item";
@@ -1225,7 +1233,7 @@ const buildColorDistributionCard = (stats) => {
 
     const label = document.createElement("span");
     label.className = "deck-color-legend-label";
-    const identityPercentage =
+    const cardPercentage =
       stats.colorWeightTotal > 0
         ? Math.round((Math.max(0, entry?.ratio ?? 0) * 1000)) / 10
         : 0;
@@ -1242,10 +1250,10 @@ const buildColorDistributionCard = (stats) => {
         : null;
     const parts = [
       entry?.label ?? "?",
-      `${identityPercentage.toLocaleString("fr-FR", {
+      `${cardPercentage.toLocaleString("fr-FR", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 1,
-      })}% identité`,
+      })}% des cartes`,
     ];
     if (pipCount && Number(entry?.pipCount ?? 0) > 0) {
       const details = pipPercentage !== null ? `${pipCount} symboles (${pipPercentage.toLocaleString("fr-FR", {
@@ -1541,38 +1549,80 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
     slider.dataset.ratingKey = category.key;
     slider.setAttribute("aria-label", `${category.label} (note de 1 à 5)`);
 
-    const value = document.createElement("span");
-    value.className = "deck-rating-value";
-    value.textContent = String(ratings[category.key]);
+    const valueInput = document.createElement("input");
+    valueInput.type = "number";
+    valueInput.min = "1";
+    valueInput.max = "5";
+    valueInput.step = "1";
+    valueInput.inputMode = "numeric";
+    valueInput.value = String(ratings[category.key]);
+    valueInput.className = "deck-rating-value-input";
+    valueInput.setAttribute("aria-label", `${category.label} (saisie numérique de 1 à 5)`);
+
+    const valueWrapper = document.createElement("span");
+    valueWrapper.className = "deck-rating-value";
+    valueWrapper.appendChild(valueInput);
 
     field.appendChild(label);
     field.appendChild(slider);
-    field.appendChild(value);
+    field.appendChild(valueWrapper);
     fields.appendChild(field);
 
-    slider.addEventListener("input", () => {
-      const numeric = Number(slider.value);
-      const clamped = Number.isFinite(numeric) ? Math.min(Math.max(Math.round(numeric), 1), 5) : defaultValue;
+    const normalizeRating = (rawValue) => {
+      const numeric = Number(rawValue);
+      if (Number.isFinite(numeric)) {
+        return Math.min(Math.max(Math.round(numeric), 1), 5);
+      }
+      const existing = ratings[category.key];
+      return Number.isFinite(existing) ? existing : defaultValue;
+    };
+
+    const applyAndRender = (rawValue) => {
+      const clamped = normalizeRating(rawValue);
       ratings[category.key] = clamped;
-      value.textContent = String(clamped);
+      slider.value = String(clamped);
+      valueInput.value = String(clamped);
       if (radar) {
         const nextValues = DECK_RATING_CATEGORIES.map((cat) => ratings[cat.key]);
         radar.update(nextValues);
       }
-    });
+    };
 
-    slider.addEventListener("change", () => {
+    const persistRatings = () => {
       try {
         const persisted = setDeckEvaluation(deckId, ratings) ?? ratings;
         Object.assign(ratings, persisted);
-        slider.value = String(ratings[category.key]);
-        value.textContent = String(ratings[category.key]);
       } catch (error) {
         console.warn("Impossible d'enregistrer l'évaluation du deck :", error);
       }
-      if (radar) {
-        const nextValues = DECK_RATING_CATEGORIES.map((cat) => ratings[cat.key]);
-        radar.update(nextValues);
+      applyAndRender(ratings[category.key]);
+    };
+
+    slider.addEventListener("input", () => {
+      applyAndRender(slider.value);
+    });
+
+    slider.addEventListener("change", () => {
+      applyAndRender(slider.value);
+      persistRatings();
+    });
+
+    valueInput.addEventListener("input", () => {
+      if (valueInput.value === "") {
+        return;
+      }
+      applyAndRender(valueInput.value);
+    });
+
+    valueInput.addEventListener("change", () => {
+      applyAndRender(valueInput.value);
+      persistRatings();
+    });
+
+    valueInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        valueInput.blur();
       }
     });
   });

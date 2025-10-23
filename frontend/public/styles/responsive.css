@@ -51,7 +51,12 @@
     }
 
     .deck-rating-value {
+      justify-content: flex-start;
       text-align: left;
+    }
+
+    .deck-rating-value-input {
+      max-width: 4rem;
     }
   }
 
