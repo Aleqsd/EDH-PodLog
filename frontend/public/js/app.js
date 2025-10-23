@@ -1091,6 +1091,13 @@ async function handleDeckBulkRemoval() {
   }
 
   showDeckStatus("Suppression de tous les decks en cours…");
+  if (deckBulkDeleteBtn) {
+    deckBulkDeleteBtn.disabled = true;
+    deckBulkDeleteBtn.classList.add("is-loading");
+  }
+  if (deckCollectionEl) {
+    deckCollectionEl.classList.add("is-loading");
+  }
 
   const deckIds = decks.map((deck) => getDeckIdentifier(deck)).filter(Boolean);
   const failures = [];
@@ -1128,6 +1135,14 @@ async function handleDeckBulkRemoval() {
   }
 
   renderMoxfieldPanel(finalSession, { preserveStatus: true });
+  refreshDeckCollection(finalSession);
+
+  if (deckBulkDeleteBtn) {
+    deckBulkDeleteBtn.classList.remove("is-loading");
+  }
+  if (deckCollectionEl) {
+    deckCollectionEl.classList.remove("is-loading");
+  }
 
   if (failures.length === 0) {
     showDeckStatus("Tous les decks ont été supprimés de vos imports.", "success");

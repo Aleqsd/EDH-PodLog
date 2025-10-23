@@ -274,6 +274,7 @@ body.modal-open {
   );
   filter: blur(120px);
   z-index: 0;
+  pointer-events: none;
 }
 
 .app-header {
@@ -562,6 +563,30 @@ body.modal-open {
   background: rgba(203, 214, 255, 0.18);
   color: rgba(203, 214, 255, 0.45);
   box-shadow: none;
+}
+
+.danger-action.is-loading {
+  position: relative;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.danger-action.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff;
+  animation: button-spin 0.8s linear infinite;
+}
+
+.deck-collection.is-loading {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .profile-main {
