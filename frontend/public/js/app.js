@@ -2561,7 +2561,10 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       return;
     }
 
-    if (board?.name && board.name.toLowerCase() === "commanders") {
+    const boardName = typeof board?.name === "string" ? board.name.toLowerCase() : "";
+    const isCommanderBoard = boardName.includes("commander");
+
+    if (isCommanderBoard) {
       cards.forEach((cardEntry) => {
         const commanderCard = cardEntry?.card;
         if (!commanderCard) {
@@ -2582,98 +2585,187 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     }
 
     cards.sort((a, b) => {
-        const nameA = a?.card?.name ?? "";
-        const nameB = b?.card?.name ?? "";
-        return nameA.localeCompare(nameB, "fr", { sensitivity: "base" });
-      });
+      const nameA = a?.card?.name ?? "";
+      const nameB = b?.card?.name ?? "";
+      return nameA.localeCompare(nameB, "fr", { sensitivity: "base" });
+    });
 
-      const section = document.createElement("section");
-      section.className = "deck-board";
+    const section = document.createElement("section");
+    section.className = "deck-board";
+    if (isCommanderBoard) {
+      section.classList.add("deck-board--commanders");
+    }
 
-      const header = document.createElement("header");
-      header.className = "deck-board-header";
-      const title = document.createElement("h2");
-      title.className = "deck-board-title";
-      const boardLabel = humanizeBoardName(board?.name);
-      const cardCount = typeof board?.count === "number" ? board.count : cards.length;
-      title.textContent = `${boardLabel} (${cardCount})`;
-      header.appendChild(title);
-      section.appendChild(header);
+    const header = document.createElement("header");
+    header.className = "deck-board-header";
+    const title = document.createElement("h2");
+    title.className = "deck-board-title";
+    const boardLabel = humanizeBoardName(board?.name);
+    const cardCount = typeof board?.count === "number" ? board.count : cards.length;
+    title.textContent = `${boardLabel} (${cardCount})`;
+    header.appendChild(title);
+    section.appendChild(header);
 
-      const table = document.createElement("table");
-      table.className = "card-table";
-      const thead = document.createElement("thead");
-      const headerRow = document.createElement("tr");
-      ["Qté", "Carte", "Type", "Coût", "Énergies"].forEach((label) => {
-        const th = document.createElement("th");
-        th.scope = "col";
-        th.textContent = label;
-        headerRow.appendChild(th);
-      });
-      thead.appendChild(headerRow);
-      table.appendChild(thead);
+    if (isCommanderBoard) {
+      const commanderGrid = document.createElement("div");
+      commanderGrid.className = "commander-highlight-grid";
 
-      const tbody = document.createElement("tbody");
       cards.forEach((cardEntry) => {
         const cardData = cardEntry?.card ?? {};
-        const row = document.createElement("tr");
-        row.className = "card-table-row";
+        const primaryId = getPrimaryCardIdentifier(cardData);
+        const commanderTile = document.createElement("article");
+        commanderTile.className = "commander-highlight-card";
 
-        const quantityCell = document.createElement("td");
-        quantityCell.textContent = String(cardEntry?.quantity ?? 1);
-        quantityCell.className = "card-table-quantity";
-
-        const nameCell = document.createElement("td");
-        nameCell.className = "card-table-name";
-        if (cardData?.name) {
-          const link = document.createElement("a");
-          link.className = "card-link";
-          const primaryId = getPrimaryCardIdentifier(cardData);
-          if (deckId && primaryId) {
-            link.href = `card.html?deck=${encodeURIComponent(
-              deckId
-            )}&card=${encodeURIComponent(primaryId)}`;
-            link.addEventListener("click", () => {
-              try {
-                const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
-                if (snapshot) {
-                  window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
-                }
-              } catch (error) {
-                console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+        const link = document.createElement("a");
+        link.className = "commander-card-link";
+        if (deckId && primaryId) {
+          link.href = `card.html?deck=${encodeURIComponent(
+            deckId
+          )}&card=${encodeURIComponent(primaryId)}`;
+          link.addEventListener("click", () => {
+            try {
+              const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
+              if (snapshot) {
+                window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
               }
-            });
-          } else {
-            link.href = "#";
-          }
-          link.textContent = cardData.name;
-          nameCell.appendChild(link);
+            } catch (error) {
+              console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+            }
+          });
         } else {
-          nameCell.textContent = "Carte inconnue";
+          link.href = "#";
         }
 
-        const typeCell = document.createElement("td");
-        typeCell.className = "card-table-type";
-        typeCell.textContent = cardData?.type_line ?? "—";
+        const visual = document.createElement("div");
+        visual.className = "commander-card-visual";
+        const baseId =
+          cardData.id || cardData.card_id || cardData.uniqueCardId || cardData.scryfall_id;
+        if (baseId) {
+          const image = document.createElement("img");
+          image.src = `https://assets.moxfield.net/cards/card-${baseId}-normal.webp`;
+          image.alt = cardData?.name
+            ? `Illustration de ${cardData.name}`
+            : "Illustration du commandant";
+          visual.appendChild(image);
+        } else {
+          visual.classList.add("commander-card-visual--empty");
+          const placeholder = document.createElement("span");
+          placeholder.className = "commander-card-fallback";
+          placeholder.textContent = cardData?.name ?? "Commandant";
+          visual.appendChild(placeholder);
+        }
 
-        const manaCostCell = document.createElement("td");
-        manaCostCell.className = "card-table-mana";
-        manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
+        const body = document.createElement("div");
+        body.className = "commander-card-body";
 
-        const energyCell = document.createElement("td");
-        energyCell.className = "card-table-energy";
-        energyCell.textContent = formatManaBreakdownText(cardData?.mana_cost);
+        const nameEl = document.createElement("h3");
+        nameEl.className = "commander-card-name";
+        nameEl.textContent = cardData?.name ?? "Commandant inconnu";
 
-        [quantityCell, nameCell, typeCell, manaCostCell, energyCell].forEach((cell) =>
-          row.appendChild(cell)
-        );
+        const typeEl = document.createElement("p");
+        typeEl.className = "commander-card-type";
+        typeEl.textContent = cardData?.type_line ?? "—";
 
-        tbody.appendChild(row);
+        const stats = document.createElement("p");
+        stats.className = "commander-card-stats";
+        const quantity = cardEntry?.quantity ?? 1;
+        const manaCostText = formatManaCostText(cardData?.mana_cost) || "—";
+        const manaBreakdownText = formatManaBreakdownText(cardData?.mana_cost) || "—";
+        stats.textContent = `${manaCostText} • ${manaBreakdownText} • x${quantity}`;
+
+        body.appendChild(nameEl);
+        body.appendChild(typeEl);
+        body.appendChild(stats);
+
+        link.appendChild(visual);
+        link.appendChild(body);
+
+        commanderTile.appendChild(link);
+        commanderGrid.appendChild(commanderTile);
       });
 
-      table.appendChild(tbody);
-      section.appendChild(table);
+      section.appendChild(commanderGrid);
       deckBoardsEl.appendChild(section);
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "card-table";
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["Qté", "Carte", "Type", "Coût", "Énergies"].forEach((label) => {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    cards.forEach((cardEntry) => {
+      const cardData = cardEntry?.card ?? {};
+      const row = document.createElement("tr");
+      row.className = "card-table-row";
+
+      const quantityCell = document.createElement("td");
+      quantityCell.textContent = String(cardEntry?.quantity ?? 1);
+      quantityCell.className = "card-table-quantity";
+
+      const nameCell = document.createElement("td");
+      nameCell.className = "card-table-name";
+      if (cardData?.name) {
+        const link = document.createElement("a");
+        link.className = "card-link";
+        const primaryId = getPrimaryCardIdentifier(cardData);
+        if (deckId && primaryId) {
+          link.href = `card.html?deck=${encodeURIComponent(
+            deckId
+          )}&card=${encodeURIComponent(primaryId)}`;
+          link.addEventListener("click", () => {
+            try {
+              const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
+              if (snapshot) {
+                window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
+              }
+            } catch (error) {
+              console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+            }
+          });
+        } else {
+          link.href = "#";
+        }
+        link.textContent = cardData.name;
+        nameCell.appendChild(link);
+      } else {
+        nameCell.textContent = "Carte inconnue";
+      }
+
+      const typeCell = document.createElement("td");
+      typeCell.className = "card-table-type";
+      typeCell.textContent = cardData?.type_line ?? "—";
+
+      const manaCostCell = document.createElement("td");
+      manaCostCell.className = "card-table-mana";
+      manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
+
+      const energyCell = document.createElement("td");
+      energyCell.className = "card-table-energy";
+      energyCell.textContent = formatManaBreakdownText(cardData?.mana_cost);
+
+      [quantityCell, nameCell, typeCell, manaCostCell, energyCell].forEach((cell) =>
+        row.appendChild(cell)
+      );
+
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    const tableContainer = document.createElement("div");
+    tableContainer.className = "card-table-container";
+    tableContainer.appendChild(table);
+    section.appendChild(tableContainer);
+    deckBoardsEl.appendChild(section);
   });
 
   if (deckHeroImageEl) {
