@@ -54,6 +54,7 @@ The frontend automatically reads `API_BASE_URL` from `.env.local` (defaults to `
 - `make db-stop` / `make db-status` / `make db-clean` – manage the local MongoDB instance.
 - `make db-preview` – preview up to three documents from every Mongo collection.
 - `make db-test` – run configuration checks for the database layer.
+- `make vps-deploy` – on the VPS, rebuild frontend config, restart MongoDB + backend services, and deploy the static assets to Netlify.
 - `make test` – aggregate frontend, backend, and db tests.
 - `make doctor` – verify required tooling and sanity-check environment variables.
 - `make deps` – convenience shortcut for installing backend dependencies with the system interpreter.
@@ -85,6 +86,28 @@ See `backend/README.md` for more detail on testing and contributing changes to t
 
 - Frontend: Netlify via `make front-build` and `make front-deploy`.
 - Backend: deploy however you prefer (e.g., uvicorn / Gunicorn on a VM). The code expects MongoDB credentials in the environment; see `.env.example` for the full list of variables.
+
+## VPS Operations (vps.zqsdev.com)
+
+- **MongoDB service**  
+  - Start/enable: `systemctl enable --now mongod` (listens on `127.0.0.1:27017`).  
+  - Health check: `mongosh --port 27017 --eval 'db.runCommand({ ping: 1 })'`.  
+  - Restart: `systemctl restart mongod`. Logs available with `journalctl -u mongod`.
+- **FastAPI backend (`edh-podlog.service`)**  
+  - Managed via `/etc/systemd/system/edh-podlog.service` with `EnvironmentFile=/root/EDH-PodLog/.env`.  
+  - Start/enable: `systemctl enable --now edh-podlog`. Restart after updates: `systemctl restart edh-podlog`.  
+  - Logs/health: `journalctl -u edh-podlog`, `curl http://127.0.0.1:4310/health`. Externally, hit `https://vps.zqsdev.com/api/health` once the proxy is active.
+- **Reverse proxy (Nginx)**  
+  - Config stored in `/etc/nginx/sites-available/edh-podlog` (symlinked into `sites-enabled`).  
+  - Reload after edits: `nginx -t && systemctl reload nginx`. Use `certbot --nginx -d vps.zqsdev.com` for TLS.
+- **Frontend on Netlify**  
+  - Production deploy: `make front-build` then `netlify deploy --prod --dir frontend/public --site <SITE_ID>` (requires `NETLIFY_AUTH_TOKEN` or `netlify login`).  
+  - Ensure Netlify env vars include `API_BASE_URL=https://vps.zqsdev.com/api` and `API_CORS_ALLOW_ORIGINS` is mirrored in `.env` for the backend. Trigger rebuilds from the Netlify UI if needed.
+- **After updating code**  
+  - Pull latest repo changes, regenerate frontend config (`make front-config`), redeploy Netlify, then restart backend (`systemctl restart edh-podlog`).  
+  - Run `make test` locally before rolling out and `journalctl -u edh-podlog -f` to monitor for regressions.
+- **One-liner rollout**  
+  - From `/root/EDH-PodLog`, run `make vps-deploy` to regenerate the frontend config, restart `mongod`/`edh-podlog`, and push the static bundle to Netlify (requires Netlify CLI credentials and `NETLIFY_SITE` configured).
 
 ## Helpful Scripts
 
