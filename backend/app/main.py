@@ -1,5 +1,8 @@
 """Entry point for the Moxfield scraping API server."""
 
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,10 +17,25 @@ logger = get_logger("backend")
 
 def create_app() -> FastAPI:
     """Instantiate and configure the FastAPI application."""
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        """Manage startup/shutdown work without relying on deprecated hooks."""
+        database = get_mongo_database()
+        try:
+            await ensure_moxfield_cache_indexes(database)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to ensure Mongo indexes during startup.")
+        try:
+            yield
+        finally:
+            close_mongo_client()
+
     app = FastAPI(
         title="Moxfield Scraping API",
         version="0.1.0",
         description="Simple proxy API that fetches public Moxfield data.",
+        lifespan=lifespan,
     )
 
     settings = get_settings()
@@ -33,20 +51,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    @app.on_event("startup")
-    async def startup_event() -> None:
-        """Prepare database collections (indexes, etc.)."""
-        database = get_mongo_database()
-        try:
-            await ensure_moxfield_cache_indexes(database)
-        except Exception:  # pragma: no cover - defensive logging
-            logger.exception("Failed to ensure Mongo indexes during startup.")
-
-    @app.on_event("shutdown")
-    async def shutdown_event() -> None:
-        """Ensure connections are closed cleanly."""
-        close_mongo_client()
 
     app.include_router(meta_router)
     app.include_router(profiles_router)

@@ -522,3 +522,126 @@ def test_get_cached_deck_summaries_returns_404_when_missing(api_client: TestClie
     response = api_client.get("/cache/users/Unknown/deck-summaries")
     assert response.status_code == 404
     assert response.json()["detail"] == "No cached deck summaries for this user."
+
+
+def test_delete_user_deck_removes_documents_and_updates_cache(api_client: TestClient) -> None:
+    """Deleting a cached deck should remove the document and update cached totals."""
+    stub_payload = {
+        "user": {
+            "userName": "TestUser",
+            "displayName": "Test User",
+            "profileImageUrl": "https://example.com/avatar.png",
+            "badges": [],
+        },
+        "decks": [
+            {
+                "id": "deck-001",
+                "publicId": "deck-one",
+                "name": "Deck One",
+                "format": "commander",
+                "visibility": "public",
+                "description": "Deck one description.",
+                "publicUrl": "https://moxfield.com/decks/deck-one",
+                "createdAtUtc": "2024-01-01T00:00:00Z",
+                "lastUpdatedAtUtc": "2024-01-02T00:00:00Z",
+                "likeCount": 5,
+                "viewCount": 10,
+                "commentCount": 1,
+                "bookmarkCount": 0,
+                "createdByUser": {"userName": "Author"},
+                "authors": [{"userName": "Author"}],
+                "authorTags": {"Card A": ["Tag 1"]},
+                "hubs": [{"name": "Hub"}],
+                "colors": ["U"],
+                "colorIdentity": ["U"],
+                "boards": {
+                    "mainboard": {
+                        "count": 1,
+                        "cards": {
+                            "card-1": {
+                                "quantity": 1,
+                                "finish": "nonFoil",
+                                "isFoil": False,
+                                "isAlter": False,
+                                "isProxy": False,
+                                "card": {"name": "Card A"},
+                            }
+                        },
+                    }
+                },
+                "tokens": [],
+            },
+            {
+                "id": "deck-002",
+                "publicId": "deck-two",
+                "name": "Deck Two",
+                "format": "commander",
+                "visibility": "public",
+                "description": "Deck two description.",
+                "publicUrl": "https://moxfield.com/decks/deck-two",
+                "createdAtUtc": "2024-01-03T00:00:00Z",
+                "lastUpdatedAtUtc": "2024-01-04T00:00:00Z",
+                "likeCount": 0,
+                "viewCount": 0,
+                "commentCount": 0,
+                "bookmarkCount": 0,
+                "createdByUser": {"userName": "Author"},
+                "authors": [{"userName": "Author"}],
+                "authorTags": {"Card B": ["Tag 2"]},
+                "hubs": [{"name": "Hub"}],
+                "colors": ["B"],
+                "colorIdentity": ["B"],
+                "boards": {
+                    "mainboard": {
+                        "count": 1,
+                        "cards": {
+                            "card-2": {
+                                "quantity": 1,
+                                "finish": "nonFoil",
+                                "isFoil": False,
+                                "isAlter": False,
+                                "isProxy": False,
+                                "card": {"name": "Card B"},
+                            }
+                        },
+                    }
+                },
+                "tokens": [],
+            },
+        ],
+    }
+
+    stub_client = _StubMoxfieldClient(stub_payload)
+    app = api_client.app
+    app.dependency_overrides[get_moxfield_client] = lambda: stub_client
+
+    response = api_client.get("/users/TestUser/decks")
+    assert response.status_code == 200
+
+    deck_collection = app.state.stub_db["decks"].documents
+    assert len(deck_collection) == 2
+    user_doc = app.state.stub_db["moxfield_users"].documents[0]
+    assert user_doc["total_decks"] == 2
+
+    delete_response = api_client.delete("/users/TestUser/decks/deck-one")
+    assert delete_response.status_code == 204
+
+    remaining_decks = app.state.stub_db["decks"].documents
+    assert len(remaining_decks) == 1
+    assert remaining_decks[0]["public_id"] == "deck-two"
+
+    updated_user_doc = app.state.stub_db["moxfield_users"].documents[0]
+    assert updated_user_doc["total_decks"] == 1
+
+    cached_response = api_client.get("/cache/users/TestUser/decks")
+    assert cached_response.status_code == 200
+    cached_payload = cached_response.json()
+    assert cached_payload["total_decks"] == 1
+    assert cached_payload["decks"][0]["public_id"] == "deck-two"
+
+
+def test_delete_user_deck_returns_404_for_unknown_identifier(api_client: TestClient) -> None:
+    """Deleting a non-existent deck should return HTTP 404 and keep cache untouched."""
+    response = api_client.delete("/users/TestUser/decks/missing-deck")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Deck not found."

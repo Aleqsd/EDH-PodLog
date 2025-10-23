@@ -39,6 +39,14 @@ This repository now groups the static frontend, the FastAPI backend that proxies
 
 The frontend automatically reads `API_BASE_URL` from `.env.local` (defaults to `http://localhost:4310`) and calls the Python API instead of hitting Moxfield directly.
 
+## Testing
+
+- `make test` – run the aggregated frontend (Node) and backend (pytest) suites.
+- `make front-test` – execute the Node-based DOM and controller tests via `node --test`.
+- `make backend-test` – run the FastAPI integration and storage tests with pytest.
+
+Run the targeted suite while developing a change, then finish with `make test` before handing off or deploying.
+
 ## Make Targets
 
 - `make front-config` – generate `frontend/public/config.js` from `.env` / `.env.local`.
