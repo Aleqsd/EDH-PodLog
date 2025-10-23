@@ -72,27 +72,6 @@ const getSession = () => {
   }
 };
 
-const summariseBoardForStorage = (board) => {
-  if (!board || typeof board !== "object") {
-    return null;
-  }
-  const name = typeof board.name === "string" ? board.name : null;
-  let count = null;
-  if (typeof board.count === "number" && Number.isFinite(board.count)) {
-    count = board.count;
-  } else if (Array.isArray(board.cards)) {
-    count = board.cards.reduce(
-      (total, entry) =>
-        total + (typeof entry?.quantity === "number" ? entry.quantity : 0),
-      0
-    );
-  }
-  return {
-    name,
-    count,
-  };
-};
-
 const trimMoxfieldDeckForStorage = (deck) => {
   if (!deck || typeof deck !== "object") {
     return null;
@@ -104,24 +83,56 @@ const trimMoxfieldDeckForStorage = (deck) => {
     const rawDeck = { ...trimmed.raw };
 
     if (Array.isArray(rawDeck.boards)) {
-      rawDeck.boards = rawDeck.boards
-        .map(summariseBoardForStorage)
-        .filter(Boolean);
+      rawDeck.boards = rawDeck.boards.map((board) => {
+        if (!board || typeof board !== "object") {
+          return null;
+        }
+        const safeBoard = {
+          name: typeof board.name === "string" ? board.name : null,
+        };
+        if (typeof board.count === "number" && Number.isFinite(board.count)) {
+          safeBoard.count = board.count;
+        }
+        if (Array.isArray(board.cards)) {
+          safeBoard.cards = board.cards
+            .map((cardEntry) => {
+              if (!cardEntry || typeof cardEntry !== "object") {
+                return null;
+              }
+              const quantity =
+                typeof cardEntry.quantity === "number" && Number.isFinite(cardEntry.quantity)
+                  ? cardEntry.quantity
+                  : null;
+              const card = cardEntry.card && typeof cardEntry.card === "object"
+                ? {
+                    id:
+                      cardEntry.card.id ??
+                      cardEntry.card.card_id ??
+                      cardEntry.card.uniqueCardId ??
+                      cardEntry.card.unique_card_id ??
+                      null,
+                    name: cardEntry.card.name ?? null,
+                    mana_cost: cardEntry.card.mana_cost ?? cardEntry.card.manaCost ?? null,
+                    type_line: cardEntry.card.type_line ?? cardEntry.card.typeLine ?? null,
+                    oracle_text: cardEntry.card.oracle_text ?? cardEntry.card.oracleText ?? null,
+                    colors: Array.isArray(cardEntry.card.colors) ? [...cardEntry.card.colors] : [],
+                    image_uris:
+                      cardEntry.card.image_uris && typeof cardEntry.card.image_uris === "object"
+                        ? {
+                            small: cardEntry.card.image_uris.small ?? null,
+                            normal: cardEntry.card.image_uris.normal ?? null,
+                            large: cardEntry.card.image_uris.large ?? null,
+                          }
+                        : null,
+                  }
+                : null;
+              return { quantity, card };
+            })
+            .filter(Boolean);
+        }
+        return safeBoard;
+      }).filter(Boolean);
     }
-
-    delete rawDeck.cards;
-    delete rawDeck.cardsByBoard;
-    delete rawDeck.mainboard;
-    delete rawDeck.maybeboard;
-    delete rawDeck.sideboard;
-    delete rawDeck.commanders;
-    delete rawDeck.maybeboardCards;
-    delete rawDeck.companions;
-    delete rawDeck.signature_spells;
-    delete rawDeck.attractions;
-    delete rawDeck.stickers;
-    delete rawDeck.tokens;
-    delete rawDeck.inventory;
 
     trimmed.raw = rawDeck;
   }
@@ -1924,21 +1935,40 @@ const syncMoxfieldDecks = async (handle, signal) => {
 };
 
 const collectDeckBoards = (deck) =>
-  Array.isArray(deck?.raw?.boards) ? deck.raw.boards.filter(Boolean) : [];
+  Array.isArray(deck?.raw?.boards)
+    ? deck.raw.boards
+        .map((board) => ({
+          name: board.name || "",
+          count: board.count || 0,
+          cards: Array.isArray(board?.cards)
+            ? board.cards
+                .map((entry) => {
+                  if (!entry || typeof entry !== "object" || !entry.card) {
+                    return null;
+                  }
+                  const card = entry.card;
+                  return {
+                    card,
+                    quantity:
+                      typeof entry.quantity === "number" && Number.isFinite(entry.quantity)
+                        ? entry.quantity
+                        : 0,
+                  };
+                })
+                .filter(Boolean)
+            : [],
+        }))
+        .filter(Boolean)
+    : [];
 
 const collectDeckCards = (deck) => {
   const boards = collectDeckBoards(deck);
-  const entries = [];
-  boards.forEach((board) => {
-    const cards = Array.isArray(board?.cards) ? board.cards : [];
-    cards.forEach((cardEntry) => {
-      entries.push({
-        board,
-        entry: cardEntry,
-      });
-    });
-  });
-  return entries;
+  return boards.flatMap((board) =>
+    board.cards.map((entry) => ({
+      board,
+      entry,
+    }))
+  );
 };
 
 const findCardInDeckById = (deck, cardId) => {
