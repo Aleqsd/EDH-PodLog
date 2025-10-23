@@ -22,6 +22,8 @@ MONGO_BIND_IP ?= 127.0.0.1
 NETLIFY_SITE ?= deeffb22-eb20-4da2-8b41-2cd04e411d94
 NETLIFY_CMD := netlify
 NETLIFY_SITE_FLAG := $(if $(NETLIFY_SITE),--site $(NETLIFY_SITE),)
+VPS_FRONTEND_ROOT ?= /var/www/edh-podlog
+VPS_FRONTEND_OWNER ?= www-data:www-data
 
 .PHONY: front back db deps doctor \
 	front-config front-build front-serve front-preview front-deploy front-clean front-test \
@@ -91,6 +93,11 @@ backend-deps:
 	@$(MAKE) backend-install
 
 vps-deploy: front-build
+	@echo "Staging frontend assets to $(VPS_FRONTEND_ROOT)..."
+	@install -d -m 755 $(VPS_FRONTEND_ROOT)
+	@rsync -rlptgoD --delete $(FRONT_PUBLIC_DIR)/ $(VPS_FRONTEND_ROOT)/
+	@chmod -R go+rX $(VPS_FRONTEND_ROOT)
+	@chown -R $(VPS_FRONTEND_OWNER) $(VPS_FRONTEND_ROOT) >/dev/null 2>&1 || true
 	@echo "Restarting MongoDB service..."
 	@systemctl restart mongod
 	@echo "Restarting FastAPI service..."

@@ -109,9 +109,23 @@ def create_app() -> FastAPI:
                 client,
                 username,
             )
+            logger.info(
+                "Deck summary sync succeeded for user '%s' with %d deck summaries.",
+                username,
+                len(response.decks),
+            )
         except MoxfieldNotFoundError as exc:
+            logger.info(
+                "Deck summary sync skipped because user '%s' was not found on Moxfield.",
+                username,
+            )
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except MoxfieldError as exc:
+            logger.warning(
+                "Deck summary sync failed for user '%s' due to upstream error: %s",
+                username,
+                exc,
+            )
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         await _try_upsert(upsert_user_deck_summaries, database, response)
         return response
@@ -129,9 +143,23 @@ def create_app() -> FastAPI:
     ) -> UserDecksResponse:
         try:
             response = await run_in_threadpool(build_user_decks_response, client, username)
+            logger.info(
+                "Deck sync succeeded for user '%s' with %d deck(s).",
+                username,
+                len(response.decks),
+            )
         except MoxfieldNotFoundError as exc:
+            logger.info(
+                "Deck sync skipped because user '%s' was not found on Moxfield.",
+                username,
+            )
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except MoxfieldError as exc:
+            logger.warning(
+                "Deck sync failed for user '%s' due to upstream error: %s",
+                username,
+                exc,
+            )
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         await _try_upsert(upsert_user_decks, database, response)
         return response
@@ -197,4 +225,14 @@ async def _try_upsert(
     try:
         await func(database, payload)
     except Exception:  # pragma: no cover - defensive logging
-        logger.exception("Failed to persist payload to MongoDB.")
+        logger.exception(
+            "Deck persistence failed for user '%s' with %d item(s).",
+            payload.user.user_name,
+            len(payload.decks),
+        )
+    else:
+        logger.info(
+            "Deck persistence completed for user '%s' with %d item(s).",
+            payload.user.user_name,
+            len(payload.decks),
+        )
