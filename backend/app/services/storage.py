@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from ..config import get_settings
+from ..logging_utils import get_logger
 from ..schemas import (
     DeckDetail,
     DeckSummary,
@@ -17,7 +17,7 @@ from ..schemas import (
     UserSummary,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger("storage")
 
 
 def _canonical_username(username: str) -> str:

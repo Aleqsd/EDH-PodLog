@@ -20,14 +20,6 @@ Both commands load environment variables from `.env` and `.env.local`. Defaults 
 
 Use `make db` in the monorepo root to start `mongod` if you do not already have a local MongoDB instance.
 
-Prefer working inside this directory? The scoped `Makefile` mirrors the same commands:
-
-```bash
-cd backend
-make install
-make run
-```
-
 ## API surface
 
 - `GET /health` – simple health probe.
@@ -46,17 +38,16 @@ curl http://127.0.0.1:4310/users/BimboLegrand/decks | jq
 
 ## Testing
 
-Tests stub network calls and run quickly:
+Tests stub network calls and run quickly. From the repository root:
 
 ```bash
 make backend-test
 ```
 
-Or, from this subdirectory:
+Or invoke pytest directly once your virtual environment is active:
 
 ```bash
-cd backend
-make test
+python -m pytest backend/tests
 ```
 
 ## OpenAPI / docs

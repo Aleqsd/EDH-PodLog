@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Awaitable, Callable
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
@@ -18,6 +17,7 @@ from .schemas import (
     UserProfile,
     UserProfileUpdate,
 )
+from .logging_utils import get_logger
 from .services.moxfield import build_user_deck_summaries_response, build_user_decks_response
 from .services.profiles import fetch_user_profile, upsert_user_profile
 from .services.storage import (
@@ -29,7 +29,7 @@ from .services.storage import (
 )
 from .config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger("backend")
 
 
 def create_app() -> FastAPI:
