@@ -62,8 +62,7 @@ backend-install: $(BACKEND_DEPS_STAMP)
 	@echo "Backend dependencies installed via $(PYTHON)"
 
 $(BACKEND_DEPS_STAMP): $(BACKEND_REQUIREMENTS)
-	@$(BACKEND_PIP) install --upgrade pip
-	@$(BACKEND_PIP) install -r $(BACKEND_REQUIREMENTS)
+	@$(BACKEND_PIP) install --break-system-packages -r $(BACKEND_REQUIREMENTS)
 	@touch $(BACKEND_DEPS_STAMP)
 
 backend-run: backend-install
