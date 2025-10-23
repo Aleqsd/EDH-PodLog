@@ -14,6 +14,7 @@ class Settings:
     mongo_uri: str
     mongo_db: str
     mongo_users_collection: str
+    mongo_moxfield_users_collection: str
     mongo_decks_collection: str
     mongo_deck_summaries_collection: str
     cors_allow_origins: tuple[str, ...]
@@ -25,6 +26,9 @@ class Settings:
             mongo_uri=os.getenv("MONGO_URI", "mongodb://127.0.0.1:47017"),
             mongo_db=os.getenv("MONGO_DB_NAME", "edh_podlog"),
             mongo_users_collection=os.getenv("MONGO_USERS_COLLECTION", "users"),
+            mongo_moxfield_users_collection=os.getenv(
+                "MONGO_MOXFIELD_USERS_COLLECTION", "moxfield_users"
+            ),
             mongo_decks_collection=os.getenv("MONGO_DECKS_COLLECTION", "decks"),
             mongo_deck_summaries_collection=os.getenv(
                 "MONGO_DECK_SUMMARIES_COLLECTION", "deck_summaries"

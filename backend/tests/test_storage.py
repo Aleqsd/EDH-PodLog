@@ -27,6 +27,7 @@ from app.schemas import (
     UserSummary,
 )
 from app.services.storage import (
+    delete_user_deck,
     fetch_user_deck_summaries,
     fetch_user_decks,
     upsert_user_deck_summaries,
@@ -56,6 +57,16 @@ class _StubCollection:
     def __init__(self) -> None:
         self.documents: list[dict[str, Any]] = []
 
+    def _matches(self, document: dict[str, Any], filter_: dict[str, Any]) -> bool:
+        for key, value in filter_.items():
+            if key == "$or":
+                if not any(self._matches(document, clause) for clause in value):
+                    return False
+            else:
+                if document.get(key) != value:
+                    return False
+        return True
+
     async def update_one(
         self,
         filter_: dict[str, Any],
@@ -63,25 +74,30 @@ class _StubCollection:
         *,
         upsert: bool = False,
         **_: Any,
-    ) -> None:
+    ):
         match = None
         for document in self.documents:
-            if all(document.get(key) == value for key, value in filter_.items()):
+            if self._matches(document, filter_):
                 match = document
                 break
 
+        matched_count = 0
+
         if match is not None:
             match.update(deepcopy(update.get("$set", {})))
-            return
+            matched_count = 1
+            return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": None})()
 
         if upsert:
-            new_document = deepcopy(filter_)
-            new_document.update(deepcopy(update.get("$set", {})))
+            new_document = deepcopy(update.get("$set", {}))
             self.documents.append(new_document)
+            return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": object()})()
+
+        return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": None})()
 
     async def find_one(self, filter_: dict[str, Any]) -> dict[str, Any] | None:
         for document in self.documents:
-            if all(document.get(key) == value for key, value in filter_.items()):
+            if self._matches(document, filter_):
                 return deepcopy(document)
         return None
 
@@ -89,9 +105,19 @@ class _StubCollection:
         results = [
             deepcopy(document)
             for document in self.documents
-            if all(document.get(key) == value for key, value in filter_.items())
+            if self._matches(document, filter_)
         ]
         return _StubCursor(results)
+
+    async def delete_one(self, filter_: dict[str, Any]):
+        for index, document in enumerate(self.documents):
+            if self._matches(document, filter_):
+                self.documents.pop(index)
+                return type("DeleteResult", (), {"deleted_count": 1})()
+        return type("DeleteResult", (), {"deleted_count": 0})()
+
+    async def count_documents(self, filter_: dict[str, Any]) -> int:
+        return sum(1 for document in self.documents if self._matches(document, filter_))
 
 
 class _StubDatabase:
@@ -154,7 +180,7 @@ async def test_upsert_user_decks_persists_user_and_decks() -> None:
 
     await upsert_user_decks(database, payload)
 
-    stored_users = database["users"].documents
+    stored_users = database["moxfield_users"].documents
     stored_decks = database["decks"].documents
     assert len(stored_users) == 1
     assert len(stored_decks) == 1
@@ -164,9 +190,11 @@ async def test_upsert_user_decks_persists_user_and_decks() -> None:
     assert user_document["user_name"] == "TestUser"
     assert user_document["total_decks"] == 1
     assert isinstance(user_document["synced_at"], datetime)
+    assert user_document["user_key"] == "testuser"
 
     assert deck_document["public_id"] == "deck-public"
     assert deck_document["user_name"] == "TestUser"
+    assert deck_document["user_key"] == "testuser"
     assert isinstance(deck_document["synced_at"], datetime)
 
 
@@ -182,7 +210,7 @@ async def test_upsert_user_deck_summaries_persists_user_and_summaries() -> None:
 
     await upsert_user_deck_summaries(database, payload)
 
-    stored_users = database["users"].documents
+    stored_users = database["moxfield_users"].documents
     stored_summaries = database["deck_summaries"].documents
     assert len(stored_users) == 1
     assert len(stored_summaries) == 1
@@ -190,6 +218,7 @@ async def test_upsert_user_deck_summaries_persists_user_and_summaries() -> None:
     summary_document = stored_summaries[0]
     assert summary_document["public_id"] == "deck-public"
     assert summary_document["user_name"] == "TestUser"
+    assert summary_document["user_key"] == "testuser"
     assert isinstance(summary_document["synced_at"], datetime)
 
 
@@ -217,6 +246,32 @@ async def test_fetch_user_decks_returns_none_when_missing() -> None:
     database = _StubDatabase()
     cached = await fetch_user_decks(database, "Unknown")
     assert cached is None
+
+
+@pytest.mark.anyio("asyncio")
+async def test_delete_user_deck_matches_case_insensitive_username() -> None:
+    """Deleting a deck should match regardless of username casing."""
+    database = _StubDatabase()
+    payload = UserDecksResponse(
+        user=_build_user_payload(),
+        total_decks=1,
+        decks=[_build_deck_detail()],
+    )
+    await upsert_user_decks(database, payload)
+    summary_payload = UserDeckSummariesResponse(
+        user=_build_user_payload(),
+        total_decks=1,
+        decks=[_build_deck_summary()],
+    )
+    await upsert_user_deck_summaries(database, summary_payload)
+
+    deleted = await delete_user_deck(database, "testuser", "deck-public")
+    assert deleted is True
+
+    assert database["decks"].documents == []
+    assert database["deck_summaries"].documents == []
+    stored_user = database["moxfield_users"].documents[0]
+    assert stored_user["total_decks"] == 0
 
 
 @pytest.mark.anyio("asyncio")

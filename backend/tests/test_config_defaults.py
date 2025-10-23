@@ -23,3 +23,5 @@ def test_default_settings_use_custom_mongo_port(monkeypatch) -> None:
 
     assert settings.mongo_uri.endswith(":47017"), settings.mongo_uri
     assert settings.mongo_db == "edh_podlog"
+    assert settings.mongo_users_collection == "users"
+    assert settings.mongo_moxfield_users_collection == "moxfield_users"

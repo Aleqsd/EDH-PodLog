@@ -20,12 +20,16 @@ from ..schemas import (
 logger = logging.getLogger(__name__)
 
 
+def _canonical_username(username: str) -> str:
+    return username.lower()
+
+
 async def upsert_user_decks(
     database: AsyncIOMotorDatabase, payload: UserDecksResponse
 ) -> None:
     """Persist the latest deck snapshot for a user."""
     settings = get_settings()
-    users = database[settings.mongo_users_collection]
+    users = database[settings.mongo_moxfield_users_collection]
     decks = database[settings.mongo_decks_collection]
 
     synced_at = datetime.now(timezone.utc)
@@ -39,21 +43,38 @@ async def upsert_user_decks(
         payload.user.user_name,
     )
 
-    await users.update_one(
-        {"user_name": payload.user.user_name},
+    canonical = _canonical_username(payload.user.user_name)
+    user_doc["user_key"] = canonical
+
+    update_result = await users.update_one(
+        {"user_key": canonical},
         {"$set": user_doc},
-        upsert=True,
+        upsert=False,
     )
+    if update_result.matched_count == 0:
+        await users.update_one(
+            {"user_name": payload.user.user_name},
+            {"$set": user_doc},
+            upsert=True,
+        )
 
     for deck in payload.decks:
         deck_doc = deck.model_dump(mode="python")
         deck_doc["user_name"] = payload.user.user_name
+        deck_doc["user_key"] = canonical
         deck_doc["synced_at"] = synced_at
-        await decks.update_one(
-            {"public_id": deck.public_id, "user_name": payload.user.user_name},
+        deck_filter = {"public_id": deck.public_id, "user_key": canonical}
+        deck_result = await decks.update_one(
+            deck_filter,
             {"$set": deck_doc},
-            upsert=True,
+            upsert=False,
         )
+        if deck_result.matched_count == 0:
+            await decks.update_one(
+                {"public_id": deck.public_id, "user_name": payload.user.user_name},
+                {"$set": deck_doc},
+                upsert=True,
+            )
 
 
 async def upsert_user_deck_summaries(
@@ -61,7 +82,7 @@ async def upsert_user_deck_summaries(
 ) -> None:
     """Persist the lighter deck summary snapshot for a user."""
     settings = get_settings()
-    users = database[settings.mongo_users_collection]
+    users = database[settings.mongo_moxfield_users_collection]
     deck_summaries = database[settings.mongo_deck_summaries_collection]
 
     synced_at = datetime.now(timezone.utc)
@@ -75,21 +96,37 @@ async def upsert_user_deck_summaries(
         payload.user.user_name,
     )
 
-    await users.update_one(
-        {"user_name": payload.user.user_name},
+    canonical = _canonical_username(payload.user.user_name)
+    user_doc["user_key"] = canonical
+    update_result = await users.update_one(
+        {"user_key": canonical},
         {"$set": user_doc},
-        upsert=True,
+        upsert=False,
     )
+    if update_result.matched_count == 0:
+        await users.update_one(
+            {"user_name": payload.user.user_name},
+            {"$set": user_doc},
+            upsert=True,
+        )
 
     for deck in payload.decks:
         deck_doc = deck.model_dump(mode="python")
         deck_doc["user_name"] = payload.user.user_name
+        deck_doc["user_key"] = canonical
         deck_doc["synced_at"] = synced_at
-        await deck_summaries.update_one(
-            {"public_id": deck.public_id, "user_name": payload.user.user_name},
+        deck_filter = {"public_id": deck.public_id, "user_key": canonical}
+        deck_result = await deck_summaries.update_one(
+            deck_filter,
             {"$set": deck_doc},
-            upsert=True,
+            upsert=False,
         )
+        if deck_result.matched_count == 0:
+            await deck_summaries.update_one(
+                {"public_id": deck.public_id, "user_name": payload.user.user_name},
+                {"$set": deck_doc},
+                upsert=True,
+            )
 
 
 async def fetch_user_decks(
@@ -97,17 +134,22 @@ async def fetch_user_decks(
 ) -> UserDecksResponse | None:
     """Return the cached deck payload for a user if present."""
     settings = get_settings()
-    users = database[settings.mongo_users_collection]
+    users = database[settings.mongo_moxfield_users_collection]
     decks = database[settings.mongo_decks_collection]
 
     logger.info("Mongo read: fetching cached decks for user '%s'", username)
 
-    user_doc = await users.find_one({"user_name": username})
+    canonical = _canonical_username(username)
+    user_doc = await users.find_one(
+        {"$or": [{"user_key": canonical}, {"user_name": username}]}
+    )
     if not user_doc:
         logger.info("Mongo read: no cached decks found for user '%s'", username)
         return None
 
-    deck_docs = await decks.find({"user_name": username}).to_list(length=None)
+    deck_docs = await decks.find(
+        {"$or": [{"user_key": canonical}, {"user_name": username}]}
+    ).to_list(length=None)
     deck_payloads = [
         DeckDetail.model_validate(_strip_deck_storage_fields(deck_doc)) for deck_doc in deck_docs
     ]
@@ -127,17 +169,22 @@ async def fetch_user_deck_summaries(
 ) -> UserDeckSummariesResponse | None:
     """Return the cached deck summaries for a user if present."""
     settings = get_settings()
-    users = database[settings.mongo_users_collection]
+    users = database[settings.mongo_moxfield_users_collection]
     deck_summaries = database[settings.mongo_deck_summaries_collection]
 
     logger.info("Mongo read: fetching deck summaries for user '%s'", username)
 
-    user_doc = await users.find_one({"user_name": username})
+    canonical = _canonical_username(username)
+    user_doc = await users.find_one(
+        {"$or": [{"user_key": canonical}, {"user_name": username}]}
+    )
     if not user_doc:
         logger.info("Mongo read: no cached deck summaries found for user '%s'", username)
         return None
 
-    summary_docs = await deck_summaries.find({"user_name": username}).to_list(length=None)
+    summary_docs = await deck_summaries.find(
+        {"$or": [{"user_key": canonical}, {"user_name": username}]}
+    ).to_list(length=None)
     summaries = [
         DeckSummary.model_validate(_strip_deck_storage_fields(summary_doc)) for summary_doc in summary_docs
     ]
@@ -161,7 +208,7 @@ async def delete_user_deck(
     settings = get_settings()
     decks = database[settings.mongo_decks_collection]
     deck_summaries = database[settings.mongo_deck_summaries_collection]
-    users = database[settings.mongo_users_collection]
+    users = database[settings.mongo_moxfield_users_collection]
 
     logger.info(
         "Mongo write: deleting deck '%s' for user '%s'",
@@ -169,8 +216,16 @@ async def delete_user_deck(
         username,
     )
 
-    deck_result = await decks.delete_one({"user_name": username, "public_id": deck_id})
-    await deck_summaries.delete_one({"user_name": username, "public_id": deck_id})
+    canonical = _canonical_username(username)
+    deck_filter = {
+        "$or": [
+            {"user_key": canonical, "public_id": deck_id},
+            {"user_name": username, "public_id": deck_id},
+        ]
+    }
+
+    deck_result = await decks.delete_one(deck_filter)
+    await deck_summaries.delete_one(deck_filter)
 
     if deck_result.deleted_count == 0:
         logger.info(
@@ -180,9 +235,11 @@ async def delete_user_deck(
         )
         return False
 
-    remaining = await decks.count_documents({"user_name": username})
+    remaining = await decks.count_documents(
+        {"$or": [{"user_key": canonical}, {"user_name": username}]}
+    )
     await users.update_one(
-        {"user_name": username},
+        {"$or": [{"user_key": canonical}, {"user_name": username}]},
         {"$set": {"total_decks": remaining}},
     )
 
@@ -201,6 +258,7 @@ def _strip_deck_storage_fields(document: dict[str, Any]) -> dict[str, Any]:
     clean_doc = dict(document)
     clean_doc.pop("_id", None)
     clean_doc.pop("user_name", None)
+    clean_doc.pop("user_key", None)
     clean_doc.pop("synced_at", None)
     return clean_doc
 
@@ -211,4 +269,5 @@ def _strip_user_storage_fields(document: dict[str, Any]) -> dict[str, Any]:
     clean_doc.pop("_id", None)
     clean_doc.pop("synced_at", None)
     clean_doc.pop("total_decks", None)
+    clean_doc.pop("user_key", None)
     return clean_doc

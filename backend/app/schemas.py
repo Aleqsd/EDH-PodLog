@@ -139,3 +139,48 @@ class UserDeckSummariesResponse(BaseModel):
     user: UserSummary
     total_decks: int
     decks: List[DeckSummary] = Field(default_factory=list)
+
+
+class MoxfieldDeckSelection(BaseModel):
+    """Deck selection metadata we persist per Google-authenticated user."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    public_id: str
+    name: Optional[str] = None
+    format: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    last_synced_at: Optional[datetime] = None
+    source: Optional[str] = None
+    slug: Optional[str] = None
+    url: Optional[str] = None
+    card_count: Optional[int] = None
+
+
+class UserProfile(BaseModel):
+    """Representation of a Google-authenticated EDH PodLog user."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    google_sub: str
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+    given_name: Optional[str] = None
+    picture: Optional[str] = None
+    moxfield_handle: Optional[str] = None
+    moxfield_decks: List[MoxfieldDeckSelection] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserProfileUpdate(BaseModel):
+    """Payload accepted when creating or updating a user profile."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+    given_name: Optional[str] = None
+    picture: Optional[str] = None
+    moxfield_handle: Optional[str] = None
+    moxfield_decks: Optional[List[MoxfieldDeckSelection]] = None

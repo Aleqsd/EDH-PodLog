@@ -1,4 +1,6 @@
 const STORAGE_KEY = "edhPodlogSession";
+const LAST_DECK_STORAGE_KEY = "edhPodlogLastDeckSelection";
+const LAST_CARD_STORAGE_KEY = "edhPodlogLastCardSelection";
 const CONFIG = window.EDH_PODLOG_CONFIG ?? {};
 const GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_SCOPES = "openid email profile";
@@ -112,6 +114,272 @@ const updateSessionData = (mutator) => {
   persistSession(result);
   return result;
 };
+
+const toISOStringIfValid = (value) => {
+  if (!value) {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString();
+};
+
+const buildProfileEndpoint = (googleSub) => {
+  if (!googleSub) {
+    return null;
+  }
+  return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}`);
+};
+
+const fetchBackendProfile = async (googleSub) => {
+  const endpoint = buildProfileEndpoint(googleSub);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Profil introuvable (${response.status})`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn("Impossible de récupérer le profil depuis le backend :", error);
+    throw error;
+  }
+};
+
+const upsertBackendProfile = async (googleSub, payload) => {
+  const endpoint = buildProfileEndpoint(googleSub);
+  if (!endpoint || !payload || typeof payload !== "object") {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Enregistrement du profil refusé (${response.status})`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn("Impossible d'enregistrer le profil utilisateur :", error);
+    throw error;
+  }
+};
+
+const convertDeckToProfilePayload = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return null;
+  }
+
+  const publicId = deck.publicId || deck.public_id || deck.id || deck.slug;
+  if (!publicId) {
+    return null;
+  }
+
+  const slug = deck.slug || publicId;
+  const url =
+    deck.url ||
+    (slug ? `https://www.moxfield.com/decks/${slug}` : null);
+
+  const updatedAtIso = toISOStringIfValid(deck.updatedAt || deck.updated_at);
+  const syncedAtIso =
+    toISOStringIfValid(deck.syncedAt || deck.synced_at) || updatedAtIso;
+
+  return {
+    public_id: publicId,
+    name: deck.name || null,
+    format: deck.format || null,
+    slug: slug || null,
+    url,
+    card_count: typeof deck.cardCount === "number" ? deck.cardCount : null,
+    updated_at: updatedAtIso,
+    last_synced_at: syncedAtIso,
+    source: deck.source || null,
+  };
+};
+
+const convertProfileDeckToIntegration = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return null;
+  }
+
+  const publicId = deck.public_id || deck.publicId || deck.id || null;
+  const slug = deck.slug || publicId;
+  if (!publicId && !slug) {
+    return null;
+  }
+
+  const url = deck.url || (slug ? `https://www.moxfield.com/decks/${slug}` : null);
+  const updatedAt = deck.updated_at || deck.last_synced_at || null;
+
+  return {
+    id: slug || publicId,
+    slug,
+    name: deck.name || "Deck sans nom",
+    format: deck.format || "—",
+    updatedAt,
+    cardCount: typeof deck.card_count === "number" ? deck.card_count : null,
+    url,
+    publicId: publicId || slug,
+    source: deck.source || "saved",
+    syncedAt: deck.last_synced_at || null,
+  };
+};
+
+const applyProfileToSession = (session, profile) => {
+  if (!session || !profile || typeof profile !== "object") {
+    return session;
+  }
+
+  const next = {
+    ...session,
+  };
+
+  if (profile.display_name) {
+    next.userName = profile.display_name;
+    next.initials = computeInitials(profile.display_name);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(profile, "email") && profile.email) {
+    next.email = profile.email;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(profile, "picture")) {
+    next.picture = profile.picture || "";
+  }
+
+  const existingIntegration = getMoxfieldIntegration(next) || {};
+
+  const handleProvided = Object.prototype.hasOwnProperty.call(
+    profile,
+    "moxfield_handle"
+  );
+  const profileHandle =
+    handleProvided && profile.moxfield_handle
+      ? profile.moxfield_handle.trim()
+      : null;
+
+  const hasProfileDecks = Array.isArray(profile.moxfield_decks);
+  const profileDecks = hasProfileDecks
+    ? profile.moxfield_decks.map(convertProfileDeckToIntegration).filter(Boolean)
+    : [];
+
+  const integration = {
+    ...existingIntegration,
+  };
+
+  if (handleProvided) {
+    integration.handle = profileHandle || null;
+    integration.handleLower = profileHandle ? profileHandle.toLowerCase() : null;
+  } else if (integration.handle && typeof integration.handle === "string") {
+    integration.handleLower = integration.handle.toLowerCase();
+  }
+
+  if (hasProfileDecks) {
+    integration.decks = profileDecks;
+    integration.deckCount = profileDecks.length;
+    if (profileDecks.length > 0) {
+      integration.totalDecks = Math.max(
+        profileDecks.length,
+        typeof existingIntegration.totalDecks === "number"
+          ? existingIntegration.totalDecks
+          : profileDecks.length
+      );
+    } else {
+      integration.totalDecks = 0;
+    }
+  }
+
+  next.integrations = {
+    ...next.integrations,
+    moxfield: integration,
+  };
+
+  return next;
+};
+
+const persistIntegrationToProfile = async (
+  session,
+  { decks, handleChanged = false } = {}
+) => {
+  if (!session?.googleSub) {
+    return session;
+  }
+
+  const integration = getMoxfieldIntegration(session) || {};
+  const payload = {};
+  const hasHandleField =
+    typeof integration.handle === "string" || handleChanged;
+
+  if (hasHandleField) {
+    payload.moxfield_handle =
+      typeof integration.handle === "string" && integration.handle.trim().length > 0
+        ? integration.handle.trim()
+        : null;
+  }
+
+  const decksToPersist =
+    decks !== undefined
+      ? decks
+      : Array.isArray(integration.decks)
+      ? integration.decks
+      : [];
+
+  if (handleChanged || decks !== undefined) {
+    payload.moxfield_decks = decksToPersist
+      .map(convertDeckToProfilePayload)
+      .filter(Boolean);
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return session;
+  }
+
+  try {
+    const profile = await upsertBackendProfile(session.googleSub, payload);
+    if (!profile) {
+      return session;
+    }
+    const merged = applyProfileToSession(session, profile);
+    persistSession(merged);
+    return merged;
+  } catch (error) {
+    console.warn("Synchronisation du profil utilisateur impossible :", error);
+    return session;
+  }
+};
+
+const getQueryParams = () => {
+  try {
+    return new URLSearchParams(window.location.search);
+  } catch (error) {
+    return new URLSearchParams();
+  }
+};
+
+const getQueryParam = (key) => getQueryParams().get(key);
 
 const computeInitials = (value) => {
   if (!value) {
@@ -276,6 +544,147 @@ const showDeckStatus = (message, variant = "neutral") => {
 const getDeckIdentifier = (deck) =>
   deck?.publicId ?? deck?.public_id ?? deck?.slug ?? deck?.id ?? deck?.deckId ?? null;
 
+const findDeckInIntegration = (integration, deckId) => {
+  if (!integration || !deckId) {
+    return null;
+  }
+  return (
+    integration.decks?.find((storedDeck) => getDeckIdentifier(storedDeck) === deckId) ??
+    null
+  );
+};
+
+const deckHasCardDetails = (deck) =>
+  Array.isArray(deck?.raw?.boards) &&
+  deck.raw.boards.length > 0 &&
+  deck.raw.boards.some((board) => Array.isArray(board?.cards) && board.cards.length > 0);
+
+const replaceDeckInIntegration = (integration, updatedDeck) => {
+  if (!integration || !updatedDeck) {
+    return integration;
+  }
+  const targetId = getDeckIdentifier(updatedDeck);
+  if (!targetId) {
+    return integration;
+  }
+
+  const decks = Array.isArray(integration.decks) ? [...integration.decks] : [];
+  const index = decks.findIndex((existing) => getDeckIdentifier(existing) === targetId);
+  if (index === -1) {
+    decks.push(updatedDeck);
+  } else {
+    decks[index] = {
+      ...decks[index],
+      ...updatedDeck,
+    };
+  }
+
+  return {
+    ...integration,
+    decks,
+    deckCount: decks.length,
+  };
+};
+
+const BOARD_LABELS = {
+  commanders: "Commandants",
+  mainboard: "Bibliothèque principale",
+  sideboard: "Réserve",
+  maybeboard: "Peut-être",
+  companions: "Compagnons",
+  signature_spells: "Sorts de signature",
+  contraptions: "Contraptions",
+  stickers: "Autocollants",
+  attractions: "Attractions",
+  vanguard: "Vanguard",
+};
+
+const humanizeBoardName = (name) => {
+  if (!name) {
+    return "Section inconnue";
+  }
+  const lower = name.toLowerCase();
+  if (BOARD_LABELS[lower]) {
+    return BOARD_LABELS[lower];
+  }
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+};
+
+const extractManaSymbols = (manaCost) => {
+  if (typeof manaCost !== "string" || manaCost.trim().length === 0) {
+    return [];
+  }
+  const matches = manaCost.match(/\{([^}]+)\}/g);
+  if (!matches) {
+    return [];
+  }
+  return matches.map((token) => token.replace(/[{}]/g, "").trim()).filter(Boolean);
+};
+
+const describeManaSymbol = (symbol) => {
+  if (!symbol) {
+    return "";
+  }
+
+  const upper = symbol.toUpperCase();
+  const isNumeric = /^\d+$/.test(upper);
+  if (isNumeric) {
+    return `Générique ${upper}`;
+  }
+
+  const COLOR_LABELS = {
+    W: "Blanc",
+    U: "Bleu",
+    B: "Noir",
+    R: "Rouge",
+    G: "Vert",
+    C: "Incolore",
+    S: "Neige",
+  };
+
+  if (COLOR_LABELS[upper]) {
+    return COLOR_LABELS[upper];
+  }
+
+  if (upper === "X" || upper === "Y" || upper === "Z") {
+    return `Variable (${upper})`;
+  }
+
+  if (upper.includes("P")) {
+    const withoutPhyrexian = upper.replace(/P/gi, "").split("/").filter(Boolean);
+    if (withoutPhyrexian.length > 0) {
+      return `Phyrexian ${withoutPhyrexian.join("/")}`;
+    }
+    return "Coût phyrexian";
+  }
+
+  if (upper.includes("/")) {
+    return `Hybride ${upper}`;
+  }
+
+  if (upper === "T") {
+    return "Engager";
+  }
+
+  return upper;
+};
+
+const summariseManaCost = (manaCost) => {
+  const symbols = extractManaSymbols(manaCost);
+  if (symbols.length === 0) {
+    return [];
+  }
+  const counts = new Map();
+  symbols.forEach((symbol) => {
+    counts.set(symbol, (counts.get(symbol) ?? 0) + 1);
+  });
+  return Array.from(counts.entries()).map(([symbol, count]) => ({
+    symbol,
+    description: describeManaSymbol(symbol),
+    count,
+  }));
+};
+
 const createDeckCardElement = (deck) => {
   const card = document.createElement("article");
   card.className = "deck-card";
@@ -330,6 +739,26 @@ const createDeckCardElement = (deck) => {
 
   const actions = document.createElement("div");
   actions.className = "deck-card-actions";
+
+  if (deckId) {
+    const detailLink = document.createElement("a");
+    detailLink.className = "deck-card-action primary";
+    detailLink.href = `deck.html?deck=${encodeURIComponent(deckId)}`;
+    detailLink.textContent = "Voir le deck";
+    detailLink.addEventListener("click", () => {
+      const currentIntegration = getMoxfieldIntegration(getSession());
+      const handle = currentIntegration?.handle || currentIntegration?.handleLower || null;
+      try {
+        window.sessionStorage.setItem(
+          LAST_DECK_STORAGE_KEY,
+          JSON.stringify({ deckId, handle })
+        );
+      } catch (error) {
+        console.warn("Impossible d'enregistrer la sélection du deck :", error);
+      }
+    });
+    actions.appendChild(detailLink);
+  }
 
   if (deckId) {
     const deleteBtn = document.createElement("button");
@@ -457,10 +886,16 @@ async function handleDeckRemoval(deckId, deckName) {
       };
     });
 
-    const finalSession = updatedSession ?? getSession();
-    refreshDeckCollection(finalSession);
+    let finalSession = updatedSession ?? getSession();
+    finalSession =
+      (await persistIntegrationToProfile(finalSession, {
+        decks: getMoxfieldIntegration(finalSession)?.decks ?? [],
+      })) ?? finalSession;
+    currentSession = finalSession ?? currentSession;
+
+    refreshDeckCollection(currentSession);
     if (typeof renderMoxfieldPanel === "function") {
-      renderMoxfieldPanel(finalSession, { preserveStatus: true });
+      renderMoxfieldPanel(currentSession, { preserveStatus: true });
     }
     showDeckStatus("Deck supprimé de vos imports.", "success");
   } catch (error) {
@@ -719,9 +1154,13 @@ const performDeckSync = async (handle, selections, previewMeta) => {
       selections.map((entry) => [entry.id, entry.action])
     );
 
-    const importedDecks = decks.filter((deck) =>
-      selectionMap.has(getDeckIdentifier(deck))
-    );
+    const syncTimestamp = Date.now();
+    const importedDecks = decks
+      .filter((deck) => selectionMap.has(getDeckIdentifier(deck)))
+      .map((deck) => ({
+        ...deck,
+        syncedAt: syncTimestamp,
+      }));
 
     if (importedDecks.length === 0) {
       showMoxfieldStatus("Aucun deck n'a été sélectionné pour l'import.", "neutral");
@@ -764,7 +1203,14 @@ const performDeckSync = async (handle, selections, previewMeta) => {
       };
     });
 
-    currentSession = updatedSession ?? currentSession;
+    let nextSession = updatedSession ?? currentSession;
+    const decksToPersist =
+      getMoxfieldIntegration(nextSession)?.decks?.slice() ?? [];
+    nextSession = await persistIntegrationToProfile(nextSession, {
+      decks: decksToPersist,
+    });
+
+    currentSession = nextSession ?? currentSession;
     renderMoxfieldPanel(currentSession);
     refreshDeckCollection(currentSession);
     showMoxfieldStatus(message, "success");
@@ -955,8 +1401,29 @@ const handleGoogleTokenResponse = async (tokenResponse) => {
     const previousSession = getSession();
     const session = buildSessionFromGoogle(userInfo, tokenResponse, previousSession);
 
-    persistSession(session);
-    googleAccessToken = session.accessToken;
+    let mergedSession = session;
+    if (session.googleSub) {
+      const identityPayload = {
+        display_name: session.userName,
+        email: session.email || null,
+        picture: session.picture || null,
+      };
+      if (userInfo.given_name) {
+        identityPayload.given_name = userInfo.given_name;
+      }
+
+      try {
+        const profile = await upsertBackendProfile(session.googleSub, identityPayload);
+        if (profile) {
+          mergedSession = applyProfileToSession(session, profile);
+        }
+      } catch (profileError) {
+        console.warn("Impossible de synchroniser le profil Google :", profileError);
+      }
+    }
+
+    persistSession(mergedSession);
+    googleAccessToken = mergedSession.accessToken;
     window.location.href = "dashboard.html";
   } catch (error) {
     console.error("Impossible de terminer la connexion Google :", error);
@@ -1341,6 +1808,140 @@ const syncMoxfieldDecks = async (handle, signal) => {
   }
 };
 
+const collectDeckBoards = (deck) =>
+  Array.isArray(deck?.raw?.boards) ? deck.raw.boards.filter(Boolean) : [];
+
+const collectDeckCards = (deck) => {
+  const boards = collectDeckBoards(deck);
+  const entries = [];
+  boards.forEach((board) => {
+    const cards = Array.isArray(board?.cards) ? board.cards : [];
+    cards.forEach((cardEntry) => {
+      entries.push({
+        board,
+        entry: cardEntry,
+      });
+    });
+  });
+  return entries;
+};
+
+const findCardInDeckById = (deck, cardId) => {
+  if (!deck || !cardId) {
+    return null;
+  }
+  const normalizedCardId = String(cardId).toLowerCase();
+  const boards = collectDeckBoards(deck);
+  for (const board of boards) {
+    const cards = Array.isArray(board?.cards) ? board.cards : [];
+    for (const cardEntry of cards) {
+      const cardData = cardEntry?.card;
+      if (!cardData) {
+        continue;
+      }
+      const identifiers = [
+        cardData.id,
+        cardData.card_id,
+        cardData.uniqueCardId,
+        cardData.unique_card_id,
+        cardData.scryfall_id,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+      if (identifiers.includes(normalizedCardId)) {
+        return { board, entry: cardEntry };
+      }
+    }
+  }
+  return null;
+};
+
+const formatManaCostText = (manaCost) => {
+  const symbols = extractManaSymbols(manaCost);
+  if (symbols.length > 0) {
+    return symbols.join(" ");
+  }
+  return typeof manaCost === "string" && manaCost.trim().length > 0
+    ? manaCost.trim()
+    : "—";
+};
+
+const formatManaBreakdownText = (manaCost) => {
+  const summary = summariseManaCost(manaCost);
+  if (summary.length === 0) {
+    return "—";
+  }
+  return summary
+    .map(({ description, count }) => (count > 1 ? `${description} ×${count}` : description))
+    .join(" · ");
+};
+
+const ensureDeckDetails = async (deckId, { handle, preferLive = false } = {}) => {
+  if (!deckId) {
+    return { deck: null, session: getSession() };
+  }
+
+  let session = getSession();
+  const integration = getMoxfieldIntegration(session);
+  const effectiveHandle =
+    handle ||
+    integration?.handle ||
+    integration?.handleLower ||
+    integration?.lastUser?.user_name ||
+    null;
+
+  let deck = findDeckInIntegration(integration, deckId);
+  if (deck && deckHasCardDetails(deck)) {
+    return { deck, session };
+  }
+
+  if (!effectiveHandle) {
+    return { deck, session };
+  }
+
+  const fetchOrder = preferLive ? ["live", "cache-only"] : ["cache-only", "live"];
+
+  for (const mode of fetchOrder) {
+    try {
+      const payload = await fetchDecksFromBackend(effectiveHandle, {
+        mode,
+      });
+
+      if (!payload || !Array.isArray(payload.decks)) {
+        continue;
+      }
+
+      const matched = payload.decks.find(
+        (candidate) => getDeckIdentifier(candidate) === deckId
+      );
+
+      if (!matched) {
+        continue;
+      }
+
+      setMoxfieldIntegration((current) => replaceDeckInIntegration(current, matched));
+      session = getSession();
+      const refreshed = findDeckInIntegration(getMoxfieldIntegration(session), deckId);
+      if (refreshed && deckHasCardDetails(refreshed)) {
+        return { deck: refreshed, session };
+      }
+      deck = refreshed ?? matched;
+    } catch (error) {
+      if (mode === "cache-only") {
+        if (error.code && error.code !== "CACHE_MISS") {
+          console.warn("Lecture du cache impossible :", error);
+        }
+      } else if (error.code === "NOT_FOUND") {
+        throw error;
+      } else {
+        console.warn("Synchronisation en direct impossible :", error);
+      }
+    }
+  }
+
+  return { deck, session };
+};
+
 if (typeof window !== "undefined") {
   window.EDH_PODLOG_INTERNAL = {
     validateMoxfieldHandle,
@@ -1350,7 +1951,7 @@ if (typeof window !== "undefined") {
 
 window.addEventListener("google-loaded", initializeGoogleAuth);
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   landingSignInButton = document.getElementById("googleSignIn");
   const footnote = document.querySelector(".signin-footnote .footnote-text");
   landingFootnoteTextEl = footnote ?? null;
@@ -1378,6 +1979,564 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentSession = getSession();
   let cachedDecksController = null;
+  const pageType = document.body?.dataset?.page ?? "";
+
+  const deckTitleEl = document.getElementById("deckTitle");
+  const deckMetaEl = document.getElementById("deckMeta");
+  const deckDescriptionEl = document.getElementById("deckDescription");
+  const deckBoardsEl = document.getElementById("deckBoards");
+  const deckErrorEl = document.getElementById("deckError");
+  const deckLoadingEl = document.getElementById("deckLoading");
+  const deckHandleBadgeEl = document.getElementById("deckHandleBadge");
+  const deckHeroImageEl = document.getElementById("deckHeroImage");
+
+  const cardTitleEl = document.getElementById("cardTitle");
+  const cardSubtitleEl = document.getElementById("cardSubtitle");
+  const cardManaCostEl = document.getElementById("cardManaCost");
+  const cardManaBreakdownEl = document.getElementById("cardManaBreakdown");
+  const cardOracleEl = document.getElementById("cardOracle");
+  const cardImageEl = document.getElementById("cardImage");
+  const cardInfoListEl = document.getElementById("cardInfoList");
+  const cardErrorEl = document.getElementById("cardError");
+  const cardLoadingEl = document.getElementById("cardLoading");
+  const cardBoardEl = document.getElementById("cardBoard");
+  const cardQuantityEl = document.getElementById("cardQuantity");
+  const cardBackLinkEl = document.getElementById("cardBackLink");
+
+  const setDeckLoading = (isLoading) => {
+    if (deckLoadingEl) {
+      deckLoadingEl.classList.toggle("is-hidden", !isLoading);
+    }
+  };
+
+  const setCardLoading = (isLoading) => {
+    if (cardLoadingEl) {
+      cardLoadingEl.classList.toggle("is-hidden", !isLoading);
+    }
+  };
+
+  const showDeckError = (message) => {
+    if (!deckErrorEl) {
+      return;
+    }
+    deckErrorEl.textContent = message ?? "";
+    deckErrorEl.classList.toggle("is-hidden", !message);
+  };
+
+  const showCardError = (message) => {
+    if (!cardErrorEl) {
+      return;
+    }
+    cardErrorEl.textContent = message ?? "";
+    cardErrorEl.classList.toggle("is-hidden", !message);
+  };
+
+const renderDeckBoards = (deck, { handle } = {}) => {
+  if (!deckBoardsEl) {
+    return;
+  }
+  deckBoardsEl.innerHTML = "";
+
+  const boards = collectDeckBoards(deck);
+  if (boards.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "deck-board-empty";
+      empty.textContent =
+        "Impossible de trouver la liste des cartes pour ce deck. Relancez une synchronisation.";
+      deckBoardsEl.appendChild(empty);
+      return;
+    }
+
+  const deckId = getDeckIdentifier(deck);
+
+  const commanderImages = [];
+
+  boards.forEach((board) => {
+    const cards = Array.isArray(board?.cards) ? [...board.cards] : [];
+    if (cards.length === 0) {
+      return;
+    }
+
+    if (board?.name && board.name.toLowerCase() === "commanders") {
+      cards.forEach((cardEntry) => {
+        const commanderCard = cardEntry?.card;
+        if (!commanderCard) {
+          return;
+        }
+        const baseId =
+          commanderCard.id ||
+          commanderCard.card_id ||
+          commanderCard.uniqueCardId ||
+          commanderCard.scryfall_id;
+        if (baseId) {
+          commanderImages.push({
+            id: baseId,
+            name: commanderCard.name || "",
+          });
+        }
+      });
+    }
+
+    cards.sort((a, b) => {
+        const nameA = a?.card?.name ?? "";
+        const nameB = b?.card?.name ?? "";
+        return nameA.localeCompare(nameB, "fr", { sensitivity: "base" });
+      });
+
+      const section = document.createElement("section");
+      section.className = "deck-board";
+
+      const header = document.createElement("header");
+      header.className = "deck-board-header";
+      const title = document.createElement("h2");
+      title.className = "deck-board-title";
+      const boardLabel = humanizeBoardName(board?.name);
+      const cardCount = typeof board?.count === "number" ? board.count : cards.length;
+      title.textContent = `${boardLabel} (${cardCount})`;
+      header.appendChild(title);
+      section.appendChild(header);
+
+      const table = document.createElement("table");
+      table.className = "card-table";
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      ["Qté", "Carte", "Type", "Coût", "Énergies"].forEach((label) => {
+        const th = document.createElement("th");
+        th.scope = "col";
+        th.textContent = label;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      cards.forEach((cardEntry) => {
+        const cardData = cardEntry?.card ?? {};
+        const row = document.createElement("tr");
+        row.className = "card-table-row";
+
+        const quantityCell = document.createElement("td");
+        quantityCell.textContent = String(cardEntry?.quantity ?? 1);
+        quantityCell.className = "card-table-quantity";
+
+        const nameCell = document.createElement("td");
+        nameCell.className = "card-table-name";
+        if (cardData?.name) {
+          const link = document.createElement("a");
+          link.className = "card-link";
+          const primaryId =
+            cardData.id || cardData.card_id || cardData.uniqueCardId || cardData.scryfall_id;
+          if (deckId && primaryId) {
+            link.href = `card.html?deck=${encodeURIComponent(
+              deckId
+            )}&card=${encodeURIComponent(primaryId)}`;
+            link.addEventListener("click", () => {
+              try {
+                window.sessionStorage.setItem(
+                  LAST_CARD_STORAGE_KEY,
+                  JSON.stringify({ deckId, cardId: primaryId, handle: handle || null })
+                );
+              } catch (error) {
+                console.warn("Impossible d'enregistrer la sélection de la carte :", error);
+              }
+            });
+          } else {
+            link.href = "#";
+          }
+          link.textContent = cardData.name;
+          nameCell.appendChild(link);
+        } else {
+          nameCell.textContent = "Carte inconnue";
+        }
+
+        const typeCell = document.createElement("td");
+        typeCell.className = "card-table-type";
+        typeCell.textContent = cardData?.type_line ?? "—";
+
+        const manaCostCell = document.createElement("td");
+        manaCostCell.className = "card-table-mana";
+        manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
+
+        const energyCell = document.createElement("td");
+        energyCell.className = "card-table-energy";
+        energyCell.textContent = formatManaBreakdownText(cardData?.mana_cost);
+
+        [quantityCell, nameCell, typeCell, manaCostCell, energyCell].forEach((cell) =>
+          row.appendChild(cell)
+        );
+
+        tbody.appendChild(row);
+      });
+
+      table.appendChild(tbody);
+      section.appendChild(table);
+      deckBoardsEl.appendChild(section);
+  });
+
+  if (deckHeroImageEl) {
+    if (commanderImages.length > 0) {
+      const primaryCommander = commanderImages[0];
+      deckHeroImageEl.src = `https://assets.moxfield.net/cards/card-${primaryCommander.id}-normal.webp`;
+      deckHeroImageEl.alt = primaryCommander.name
+        ? `Illustration de ${primaryCommander.name}`
+        : "Illustration du commandant";
+      deckHeroImageEl.classList.remove("is-hidden");
+    } else {
+      deckHeroImageEl.classList.add("is-hidden");
+      deckHeroImageEl.removeAttribute("src");
+      deckHeroImageEl.removeAttribute("alt");
+    }
+  }
+};
+
+  const populateDeckDetail = (deck, { handle } = {}) => {
+    if (!deck) {
+      showDeckError("Ce deck n'a pas pu être trouvé.");
+      return;
+    }
+
+    showDeckError("");
+    if (deckTitleEl) {
+      deckTitleEl.textContent = deck?.name ?? "Deck sans nom";
+    }
+
+    if (deckDescriptionEl) {
+      const description =
+        deck?.raw?.description ??
+        deck?.description ??
+        (deck?.raw?.summary ?? deck?.summary ?? "").trim();
+      deckDescriptionEl.textContent =
+        description && description.length > 0
+          ? description
+          : "Ce deck ne contient pas de description pour le moment.";
+    }
+
+    if (deckHandleBadgeEl) {
+      const sourceHandle =
+        handle ||
+        deck?.raw?.created_by?.user_name ||
+        deck?.raw?.authors?.[0]?.user_name ||
+        null;
+      if (sourceHandle) {
+        deckHandleBadgeEl.textContent = `Prélevé depuis Moxfield (${sourceHandle})`;
+        deckHandleBadgeEl.classList.remove("is-hidden");
+      } else {
+        deckHandleBadgeEl.textContent = "";
+        deckHandleBadgeEl.classList.add("is-hidden");
+      }
+    }
+
+    if (deckMetaEl) {
+      const parts = [];
+      if (deck?.format) {
+        parts.push(deck.format.toUpperCase());
+      }
+      const totalCards = Array.isArray(deck?.raw?.boards)
+        ? deck.raw.boards.reduce((sum, board) => {
+            const boardCards = Array.isArray(board?.cards) ? board.cards : [];
+            return (
+              sum +
+              boardCards.reduce(
+                (acc, cardEntry) => acc + (typeof cardEntry?.quantity === "number" ? cardEntry.quantity : 1),
+                0
+              )
+            );
+          }, 0)
+        : null;
+      if (typeof totalCards === "number" && totalCards > 0) {
+        parts.push(`${totalCards} cartes`);
+      } else if (typeof deck?.cardCount === "number" && deck.cardCount > 0) {
+        parts.push(`${deck.cardCount} cartes`);
+      }
+      const updatedValue = deck?.updatedAt ?? deck?.raw?.last_updated_at ?? deck?.lastUpdatedAt;
+      if (updatedValue) {
+        parts.push(`Mis à jour le ${formatDateTime(updatedValue, { dateStyle: "medium" })}`);
+      }
+      if (deck?.raw?.synced_at || deck?.syncedAt) {
+        parts.push(
+          `Synchronisation ${formatDateTime(deck.raw?.synced_at ?? deck.syncedAt, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })}`
+        );
+      }
+      deckMetaEl.textContent = parts.join(" · ");
+    }
+
+    renderDeckBoards(deck, { handle });
+  };
+
+  const populateCardDetail = (deck, cardContext, { handle } = {}) => {
+    if (!cardContext) {
+      showCardError("Cette carte est introuvable dans le deck sélectionné.");
+      return;
+    }
+
+    showCardError("");
+
+    const { entry, board } = cardContext;
+    const cardData = entry?.card ?? {};
+
+    if (cardBackLinkEl) {
+      const deckId = getDeckIdentifier(deck);
+      if (deckId) {
+        const backUrl = handle
+          ? `deck.html?deck=${encodeURIComponent(deckId)}&handle=${encodeURIComponent(handle)}`
+          : `deck.html?deck=${encodeURIComponent(deckId)}`;
+        cardBackLinkEl.href = backUrl;
+      } else {
+        cardBackLinkEl.href = "decks.html";
+      }
+    }
+
+    if (cardTitleEl) {
+      cardTitleEl.textContent = cardData?.name ?? "Carte inconnue";
+    }
+
+    if (cardSubtitleEl) {
+      const subtitleParts = [];
+      if (deck?.name) {
+        subtitleParts.push(deck.name);
+      }
+      if (board?.name) {
+        subtitleParts.push(humanizeBoardName(board.name));
+      }
+      cardSubtitleEl.textContent =
+        subtitleParts.length > 0 ? subtitleParts.join(" · ") : "Deck importé";
+    }
+
+    if (cardBoardEl) {
+      cardBoardEl.textContent = board?.name ? humanizeBoardName(board.name) : "Section inconnue";
+    }
+
+    if (cardQuantityEl) {
+      cardQuantityEl.textContent = `Quantité importée : ${entry?.quantity ?? 1}`;
+    }
+
+    if (cardManaCostEl) {
+      cardManaCostEl.textContent = formatManaCostText(cardData?.mana_cost);
+    }
+
+    if (cardManaBreakdownEl) {
+      cardManaBreakdownEl.textContent = formatManaBreakdownText(cardData?.mana_cost);
+    }
+
+    if (cardOracleEl) {
+      const oracleText =
+        cardData?.oracle_text ??
+        (Array.isArray(cardData?.faces)
+          ? cardData.faces
+              .map((face) => `${face?.name ?? ""} — ${face?.oracle_text ?? ""}`.trim())
+              .join("\n\n")
+          : "");
+      const hasOracle = oracleText && oracleText.trim().length > 0;
+      cardOracleEl.textContent = hasOracle
+        ? oracleText
+        : "Cette carte ne possède pas de texte d'oracle.";
+      cardOracleEl.classList.toggle("is-placeholder", !hasOracle);
+    }
+
+    if (cardImageEl) {
+      const baseId =
+        cardData?.id || cardData?.card_id || cardData?.uniqueCardId || cardData?.scryfall_id;
+      if (baseId) {
+        cardImageEl.src = `https://assets.moxfield.net/cards/card-${baseId}-normal.webp`;
+        cardImageEl.alt = cardData?.name ?? "Illustration de la carte";
+        cardImageEl.classList.remove("is-hidden");
+      } else {
+        cardImageEl.classList.add("is-hidden");
+        cardImageEl.removeAttribute("src");
+        cardImageEl.removeAttribute("alt");
+      }
+    }
+
+    if (cardInfoListEl) {
+      cardInfoListEl.innerHTML = "";
+
+      const addInfoItem = (label, value) => {
+        if (!value) {
+          return;
+        }
+        const li = document.createElement("li");
+        li.innerHTML = `<strong>${label} :</strong> ${value}`;
+        cardInfoListEl.appendChild(li);
+      };
+
+      addInfoItem("Type", cardData?.type_line ?? null);
+
+      if (cardData?.power || cardData?.toughness) {
+        addInfoItem("Caractéristiques", `${cardData?.power ?? "?"}/${cardData?.toughness ?? "?"}`);
+      } else if (cardData?.loyalty) {
+        addInfoItem("Loyauté", cardData.loyalty);
+      }
+
+      const colors = Array.isArray(cardData?.color_identity)
+        ? cardData.color_identity.join(", ")
+        : null;
+      addInfoItem("Identité de couleur", colors);
+
+      if (cardData?.set_name || cardData?.set) {
+        const setLabel = cardData?.set_name
+          ? `${cardData.set_name}${cardData?.cn ? ` (${cardData.cn})` : ""}`
+          : cardData?.set;
+        addInfoItem("Édition", setLabel);
+      }
+
+      if (cardData?.prices) {
+        const prices = [];
+        const formatPrice = (value, suffix) => {
+          if (typeof value === "number") {
+            return `${value.toFixed(2)} ${suffix}`;
+          }
+          if (typeof value === "string" && value.trim().length > 0) {
+            return `${value} ${suffix}`;
+          }
+          return null;
+        };
+        const usd = formatPrice(cardData.prices.usd, "$");
+        const eur = formatPrice(cardData.prices.eur, "€");
+        if (usd) {
+          prices.push(usd);
+        }
+        if (eur) {
+          prices.push(eur);
+        }
+        if (prices.length > 0) {
+          addInfoItem("Prix estimé", prices.join(" · "));
+        }
+      }
+
+      if (cardData?.scryfall_id && cardData?.set && cardData?.cn) {
+        const scryfallUrl = `https://scryfall.com/card/${cardData.set}/${cardData.cn}`;
+        const li = document.createElement("li");
+        li.innerHTML = `<strong>Ressource :</strong> <a href="${scryfallUrl}" target="_blank" rel="noopener noreferrer">Voir sur Scryfall</a>`;
+        cardInfoListEl.appendChild(li);
+      }
+    }
+  };
+
+  const initDeckDetailPage = async () => {
+    if (pageType !== "deck-detail") {
+      return;
+    }
+
+    let deckId = getQueryParam("deck");
+    let handleHint = getQueryParam("handle");
+
+    if (!deckId) {
+      try {
+        const stored = JSON.parse(window.sessionStorage.getItem(LAST_DECK_STORAGE_KEY) || "null");
+        if (stored?.deckId) {
+          deckId = stored.deckId;
+          if (!handleHint && stored.handle) {
+            handleHint = stored.handle;
+          }
+        }
+      } catch (error) {
+        console.warn("Impossible de lire la sélection du deck :", error);
+      }
+    }
+
+    if (!deckId) {
+      showDeckError("Identifiant de deck manquant.");
+      setDeckLoading(false);
+      return;
+    }
+
+    setDeckLoading(true);
+    try {
+      const { deck, session } = await ensureDeckDetails(deckId, {
+        handle: handleHint,
+      });
+      if (session) {
+        currentSession = session;
+      }
+      if (!deck || !deckHasCardDetails(deck)) {
+        showDeckError(
+          "Impossible de récupérer les cartes de ce deck. Lancez une nouvelle synchronisation."
+        );
+        return;
+      }
+      populateDeckDetail(deck, { handle: handleHint });
+      try {
+        window.sessionStorage.removeItem(LAST_DECK_STORAGE_KEY);
+      } catch (error) {
+        // ignore
+      }
+    } catch (error) {
+      console.error("Unable to load deck detail", error);
+      showDeckError(
+        "Nous n'avons pas pu charger ce deck. Vérifiez qu'il est toujours public sur Moxfield."
+      );
+    } finally {
+      setDeckLoading(false);
+    }
+  };
+
+  const initCardDetailPage = async () => {
+    if (pageType !== "card-detail") {
+      return;
+    }
+
+    let deckId = getQueryParam("deck");
+    let cardId = getQueryParam("card");
+    let handleHint = getQueryParam("handle");
+
+    if (!deckId || !cardId) {
+      try {
+        const storedCard = JSON.parse(
+          window.sessionStorage.getItem(LAST_CARD_STORAGE_KEY) || "null"
+        );
+        if (storedCard) {
+          deckId = deckId || storedCard.deckId || null;
+          cardId = cardId || storedCard.cardId || null;
+          if (!handleHint && storedCard.handle) {
+            handleHint = storedCard.handle;
+          }
+        }
+      } catch (error) {
+        console.warn("Impossible de lire la sélection de la carte :", error);
+      }
+    }
+
+    if (!deckId || !cardId) {
+      showCardError("Paramètres incomplets pour afficher cette carte.");
+      setCardLoading(false);
+      return;
+    }
+
+    setCardLoading(true);
+    try {
+      const { deck, session } = await ensureDeckDetails(deckId, {
+        handle: handleHint,
+      });
+      if (session) {
+        currentSession = session;
+      }
+      if (!deck || !deckHasCardDetails(deck)) {
+        showCardError(
+          "Impossible de récupérer le deck associé à cette carte. Relancez une synchronisation."
+        );
+        return;
+      }
+      const cardContext = findCardInDeckById(deck, cardId);
+      if (!cardContext) {
+        showCardError("Cette carte n'appartient pas (ou plus) au deck sélectionné.");
+        return;
+      }
+      populateCardDetail(deck, cardContext, { handle: handleHint });
+      try {
+        window.sessionStorage.removeItem(LAST_CARD_STORAGE_KEY);
+      } catch (error) {
+        // ignore
+      }
+    } catch (error) {
+      console.error("Unable to load card detail", error);
+      showCardError("Nous n'avons pas pu charger les informations de cette carte.");
+    } finally {
+      setCardLoading(false);
+    }
+  };
 
 
   const loadCachedDecksForHandle = async (
@@ -1460,6 +2619,19 @@ document.addEventListener("DOMContentLoaded", () => {
   if (pageRequiresAuth && !currentSession) {
     redirectToLanding();
     return;
+  }
+
+  if (currentSession?.googleSub) {
+    try {
+      const profile = await fetchBackendProfile(currentSession.googleSub);
+      if (profile) {
+        const merged = applyProfileToSession(currentSession, profile);
+        persistSession(merged);
+        currentSession = merged;
+      }
+    } catch (error) {
+      console.warn("Impossible de récupérer le profil sauvegardé :", error);
+    }
   }
 
   if (currentSession) {
@@ -1609,7 +2781,7 @@ document.addEventListener("DOMContentLoaded", () => {
   refreshDeckCollection(currentSession);
 
   if (moxfieldForm && moxfieldHandleInput) {
-    moxfieldForm.addEventListener("submit", (event) => {
+    moxfieldForm.addEventListener("submit", async (event) => {
       event.preventDefault();
 
       if (!currentSession) {
@@ -1637,17 +2809,19 @@ document.addEventListener("DOMContentLoaded", () => {
         moxfieldSaveButton.disabled = true;
       }
 
+      const normalizedHandle = validation.normalized;
+      const previousIntegration = getMoxfieldIntegration(currentSession);
+      const previousHandle = previousIntegration?.handle ?? null;
+      const handleChanged =
+        (previousHandle ?? "").toLowerCase() !== normalizedHandle.toLowerCase();
+
       const updatedSession = setMoxfieldIntegration((integration) => {
         const next = { ...integration };
-        const previousHandle = integration?.handle ?? null;
-        next.handle = validation.normalized;
-        next.handleLower = validation.normalized.toLowerCase();
+        next.handle = normalizedHandle;
+        next.handleLower = normalizedHandle.toLowerCase();
         next.handleUpdatedAt = Date.now();
 
-        if (
-          previousHandle &&
-          previousHandle.toLowerCase() !== validation.normalized.toLowerCase()
-        ) {
+        if (handleChanged) {
           next.decks = [];
           next.deckCount = 0;
           next.totalDecks = null;
@@ -1662,6 +2836,11 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       currentSession = updatedSession ?? currentSession;
+      currentSession =
+        (await persistIntegrationToProfile(currentSession, {
+          handleChanged,
+          decks: handleChanged ? [] : undefined,
+        })) ?? currentSession;
       renderMoxfieldPanel(currentSession, { preserveStatus: true });
       showMoxfieldStatus("Pseudo Moxfield enregistré.", "success");
 
@@ -1673,7 +2852,7 @@ document.addEventListener("DOMContentLoaded", () => {
         moxfieldSyncButton.disabled = false;
       }
 
-      loadCachedDecksForHandle(validation.normalized, { showMessageOnMiss: true });
+      loadCachedDecksForHandle(normalizedHandle, { showMessageOnMiss: true });
     });
   }
 
@@ -1760,6 +2939,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  await initDeckDetailPage();
+  await initCardDetailPage();
 
   if (window.google?.accounts?.oauth2 && !isGoogleLibraryReady) {
     initializeGoogleAuth();

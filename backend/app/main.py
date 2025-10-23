@@ -12,8 +12,14 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from .dependencies import close_mongo_client, get_mongo_database, get_moxfield_client
 from .moxfield import MoxfieldClient, MoxfieldError, MoxfieldNotFoundError
-from .schemas import UserDeckSummariesResponse, UserDecksResponse
+from .schemas import (
+    UserDeckSummariesResponse,
+    UserDecksResponse,
+    UserProfile,
+    UserProfileUpdate,
+)
 from .services.moxfield import build_user_deck_summaries_response, build_user_decks_response
+from .services.profiles import fetch_user_profile, upsert_user_profile
 from .services.storage import (
     delete_user_deck,
     fetch_user_deck_summaries,
@@ -57,6 +63,34 @@ def create_app() -> FastAPI:
     async def health_check() -> dict[str, str]:
         """Useful for uptime checks."""
         return {"status": "ok"}
+
+    @app.get(
+        "/profiles/{google_sub}",
+        response_model=UserProfile,
+        tags=["profiles"],
+        summary="Fetch a Google-authenticated user profile.",
+    )
+    async def get_user_profile(
+        google_sub: str,
+        database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    ) -> UserProfile:
+        profile = await fetch_user_profile(database, google_sub)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Profile not found.")
+        return profile
+
+    @app.put(
+        "/profiles/{google_sub}",
+        response_model=UserProfile,
+        tags=["profiles"],
+        summary="Create or update a Google-authenticated user profile.",
+    )
+    async def upsert_user_profile_endpoint(
+        google_sub: str,
+        payload: UserProfileUpdate,
+        database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    ) -> UserProfile:
+        return await upsert_user_profile(database, google_sub, payload)
 
     @app.get(
         "/users/{username}/deck-summaries",

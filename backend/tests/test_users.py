@@ -1,8 +1,9 @@
-"""Tests for the user decks endpoint."""
+"""Tests for user-facing FastAPI endpoints."""
 
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -75,6 +76,16 @@ class _StubCollection:
     def __init__(self) -> None:
         self.documents: list[dict[str, Any]] = []
 
+    def _matches(self, document: dict[str, Any], filter_: dict[str, Any]) -> bool:
+        for key, value in filter_.items():
+            if key == "$or":
+                if not any(self._matches(document, clause) for clause in value):
+                    return False
+            else:
+                if document.get(key) != value:
+                    return False
+        return True
+
     async def update_one(
         self,
         filter_: dict[str, Any],
@@ -82,25 +93,30 @@ class _StubCollection:
         *,
         upsert: bool = False,
         **_: Any,
-    ) -> None:
+    ):
         match = None
         for document in self.documents:
-            if all(document.get(key) == value for key, value in filter_.items()):
+            if self._matches(document, filter_):
                 match = document
                 break
 
+        matched_count = 0
+
         if match is not None:
             match.update(deepcopy(update.get("$set", {})))
-            return
+            matched_count = 1
+            return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": None})()
 
         if upsert:
-            new_document = deepcopy(filter_)
-            new_document.update(deepcopy(update.get("$set", {})))
+            new_document = deepcopy(update.get("$set", {}))
             self.documents.append(new_document)
+            return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": object()})()
+
+        return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": None})()
 
     async def find_one(self, filter_: dict[str, Any]) -> dict[str, Any] | None:
         for document in self.documents:
-            if all(document.get(key) == value for key, value in filter_.items()):
+            if self._matches(document, filter_):
                 return deepcopy(document)
         return None
 
@@ -108,9 +124,19 @@ class _StubCollection:
         results = [
             deepcopy(document)
             for document in self.documents
-            if all(document.get(key) == value for key, value in filter_.items())
+            if self._matches(document, filter_)
         ]
         return _StubCursor(results)
+
+    async def delete_one(self, filter_: dict[str, Any]):
+        for index, document in enumerate(self.documents):
+            if self._matches(document, filter_):
+                self.documents.pop(index)
+                return type("DeleteResult", (), {"deleted_count": 1})()
+        return type("DeleteResult", (), {"deleted_count": 0})()
+
+    async def count_documents(self, filter_: dict[str, Any]) -> int:
+        return sum(1 for document in self.documents if self._matches(document, filter_))
 
 
 class _StubDatabase:
@@ -211,6 +237,58 @@ def test_get_user_decks_success(api_client: TestClient) -> None:
     assert body["decks"][0]["public_id"] == "deck-public"
     assert body["decks"][0]["boards"][0]["cards"][0]["card"]["name"] == "Card A"
     assert body["decks"][0]["tags"][0]["tags"] == ["Tag 1", "Tag 2"]
+
+
+def test_get_user_profile_not_found(api_client: TestClient) -> None:
+    """Fetching a profile that does not exist should yield 404."""
+    response = api_client.get("/profiles/unknown-sub")
+    assert response.status_code == 404
+
+
+def test_upsert_user_profile_creates_and_updates_document(api_client: TestClient) -> None:
+    """PUT /profiles/{google_sub} should upsert and return the stored profile."""
+    first_payload = {
+        "display_name": "Test User",
+        "email": "test@example.com",
+        "moxfield_handle": "Handle",
+        "moxfield_decks": [
+            {
+                "public_id": "deck-1",
+                "name": "Deck One",
+                "format": "commander",
+            }
+        ],
+    }
+
+    response = api_client.put("/profiles/google-sub-123", json=first_payload)
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["google_sub"] == "google-sub-123"
+    assert body["display_name"] == "Test User"
+    assert body["moxfield_handle"] == "Handle"
+    assert len(body["moxfield_decks"]) == 1
+
+    created_at = datetime.fromisoformat(body["created_at"].replace("Z", "+00:00"))
+    updated_at = datetime.fromisoformat(body["updated_at"].replace("Z", "+00:00"))
+    assert updated_at >= created_at
+
+    stored_doc = api_client.app.state.stub_db["users"].documents[0]
+    assert stored_doc["google_sub"] == "google-sub-123"
+    assert stored_doc["moxfield_handle"] == "Handle"
+
+    # perform an update that does not include decks to ensure they are preserved
+    second_payload = {
+        "display_name": "Updated Name",
+        "picture": "https://example.com/avatar.png",
+    }
+    second_response = api_client.put("/profiles/google-sub-123", json=second_payload)
+    assert second_response.status_code == 200
+
+    updated_body = second_response.json()
+    assert updated_body["display_name"] == "Updated Name"
+    assert updated_body["picture"] == "https://example.com/avatar.png"
+    assert len(updated_body["moxfield_decks"]) == 1  # preserved from first payload
 
 
 def test_get_user_decks_not_found(api_client: TestClient) -> None:
