@@ -20,7 +20,7 @@
 
   let currentDeckData = null;
   let currentDeckHandle = null;
-  let deckSortMode = SORT_MODES.TYPE;
+  let deckSortMode = SORT_MODES.MANA;
   let deckSortToolbarEl = null;
   let deckSortSelectEl = null;
   const SORT_CONTROL_ID = "deckSortMode";
@@ -208,8 +208,8 @@
     typeCell.textContent = cardData?.type_line ?? "—";
 
     const manaCostCell = document.createElement("td");
-    manaCostCell.className = "card-table-mana";
-    manaCostCell.textContent = formatManaCostText(cardData?.mana_cost);
+    manaCostCell.className = "card-table-mana mana-cost";
+    renderManaCost(manaCostCell, cardData?.mana_cost);
 
     [quantityCell, nameCell, typeCell, manaCostCell].forEach((cell) => row.appendChild(cell));
 
@@ -282,6 +282,7 @@
     deckErrorEl.classList.toggle("is-hidden", !message);
     if (message) {
       updateDeckSummary(null);
+      updateDeckInsights(null);
       renderCommanderHighlight([], null);
       if (deckSortToolbarEl) {
         deckSortToolbarEl.classList.add("is-hidden");
@@ -314,14 +315,12 @@
         "Impossible de trouver la liste des cartes pour ce deck. Relancez une synchronisation.";
       deckBoardsEl.appendChild(empty);
       updateDeckSummary(null);
+      updateDeckInsights(null);
       renderCommanderHighlight([], deck);
       return;
     }
 
     const deckId = getDeckIdentifier(deck);
-    const uniqueCardIdentifiers = new Set();
-    let totalCardQuantity = 0;
-    const boardSummaries = [];
     const commanderEntries = [];
 
     initializeDeckSortControls();
@@ -341,9 +340,18 @@
       const boardNameRaw = typeof board?.name === "string" ? board.name : "";
       const boardName = boardNameRaw.toLowerCase();
       const boardLabel = humanizeBoardName(board?.name);
+      const normalizedLabel = boardLabel.toLowerCase();
       const isCommanderBoard = boardName.includes("commander");
       const isMainboard =
-        boardName === "mainboard" || boardLabel.toLowerCase() === "bibliothèque principale";
+        boardName === "mainboard" ||
+        normalizedLabel === "bibliothèque principale" ||
+        normalizedLabel === "liste";
+      const isSideboard =
+        boardName === "sideboard" || normalizedLabel === "réserve";
+
+      if (!isCommanderBoard && !isMainboard && !isSideboard) {
+        return;
+      }
 
       let boardQuantity = 0;
       cards.forEach((cardEntry) => {
@@ -352,17 +360,6 @@
             ? cardEntry.quantity
             : 0;
         boardQuantity += quantity;
-
-        const cardData = cardEntry?.card ?? {};
-        const uniqueKey =
-          getPrimaryCardIdentifier(cardData) ||
-          cardData?.oracle_id ||
-          cardData?.oracleId ||
-          cardData?.name ||
-          null;
-        if (uniqueKey) {
-          uniqueCardIdentifiers.add(String(uniqueKey));
-        }
       });
 
       const normalizedBoardCount =
@@ -371,12 +368,6 @@
           : typeof board?.count === "number" && Number.isFinite(board.count) && board.count > 0
           ? board.count
           : cards.length;
-
-      boardSummaries.push({
-        label: boardLabel,
-        count: normalizedBoardCount,
-      });
-      totalCardQuantity += normalizedBoardCount;
 
       if (isCommanderBoard) {
         cards.forEach((cardEntry) => {
@@ -447,12 +438,15 @@
     const deckStats = computeDeckStatistics(deck);
 
     updateDeckSummary({
-      totalCards: totalCardQuantity,
-      uniqueCards: uniqueCardIdentifiers.size,
-      boards: boardSummaries,
       stats: deckStats,
       deckId,
       deckName: deck?.name ?? null,
+      deck,
+    });
+    updateDeckInsights({
+      stats: deckStats,
+      deckName: deck?.name ?? null,
+      deckId,
     });
 
     renderCommanderHighlight(commanderEntries, deck, { deckId, handle });
@@ -474,7 +468,7 @@
       ? getDeckIdentifier(currentDeckData) ?? currentDeckData?.id ?? null
       : null;
     if (!previousDeckId || previousDeckId !== nextDeckId) {
-      deckSortMode = SORT_MODES.TYPE;
+      deckSortMode = SORT_MODES.MANA;
     }
     if (deckSortSelectEl) {
       deckSortSelectEl.value = deckSortMode;
@@ -642,6 +636,7 @@
     deckHandleBadgeEl = document.getElementById("deckHandleBadge");
     deckSummaryEl = document.getElementById("deckSummary");
     deckCommanderEl = document.getElementById("deckCommanderHighlight");
+    deckInsightsEl = document.getElementById("deckInsights");
 
     await initDeckDetailPage(context);
   });

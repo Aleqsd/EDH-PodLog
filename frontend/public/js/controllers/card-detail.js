@@ -79,7 +79,8 @@
     }
 
     if (cardManaCostEl) {
-      cardManaCostEl.textContent = formatManaCostText(cardData?.mana_cost);
+      cardManaCostEl.classList.add("mana-cost");
+      renderManaCost(cardManaCostEl, cardData?.mana_cost);
     }
 
     if (cardManaBreakdownEl) {
@@ -119,11 +120,19 @@
       cardInfoListEl.innerHTML = "";
 
       const addInfoItem = (label, value) => {
-        if (!value) {
+        if (!value && value !== 0) {
           return;
         }
         const li = document.createElement("li");
-        li.innerHTML = `<strong>${label} :</strong> ${value}`;
+        const term = document.createElement("strong");
+        term.textContent = `${label} :`;
+        li.appendChild(term);
+        li.appendChild(document.createTextNode(" "));
+        if (value instanceof Node) {
+          li.appendChild(value);
+        } else {
+          li.appendChild(document.createTextNode(String(value)));
+        }
         cardInfoListEl.appendChild(li);
       };
 
@@ -135,10 +144,17 @@
         addInfoItem("Loyauté", cardData.loyalty);
       }
 
-      const colors = Array.isArray(cardData?.color_identity)
-        ? cardData.color_identity.join(", ")
-        : null;
-      addInfoItem("Identité de couleur", colors);
+      const colors = Array.isArray(cardData?.color_identity) ? cardData.color_identity : [];
+      if (colors.length > 0) {
+        const identityGroup = document.createElement("span");
+        identityGroup.className = "mana-cost";
+        colors.forEach((color) => {
+          identityGroup.appendChild(createManaSymbolElement(color));
+        });
+        addInfoItem("Identité de couleur", identityGroup);
+      } else {
+        addInfoItem("Identité de couleur", "Incolore");
+      }
 
       if (cardData?.set_name || cardData?.set) {
         const setLabel = cardData?.set_name

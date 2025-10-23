@@ -618,6 +618,82 @@ const COLOR_DISTRIBUTION_META = {
   G: { label: "Vert", token: "--color-mana-green" },
   C: { label: "Incolore", token: "--color-mana-colorless" },
 };
+const CARD_NAME_COLLATOR = new Intl.Collator("fr", { sensitivity: "base" });
+
+const MANA_SYMBOL_BASE_URL = "https://svgs.scryfall.io/card-symbols";
+const MANA_SYMBOL_PATHS = {
+  W: "W",
+  U: "U",
+  B: "B",
+  R: "R",
+  G: "G",
+  C: "C",
+  S: "S",
+  X: "X",
+  Y: "Y",
+  Z: "Z",
+  P: "P",
+  E: "E",
+  T: "tap",
+  Q: "untap",
+  INFINITY: "infinity",
+};
+
+const getManaSymbolUrl = (symbol) => {
+  if (!symbol) {
+    return null;
+  }
+  const normalized = String(symbol).toUpperCase().trim();
+  if (!normalized) {
+    return null;
+  }
+  if (MANA_SYMBOL_PATHS[normalized]) {
+    return `${MANA_SYMBOL_BASE_URL}/${MANA_SYMBOL_PATHS[normalized]}.svg`;
+  }
+  if (/^\d+$/.test(normalized)) {
+    return `${MANA_SYMBOL_BASE_URL}/${normalized}.svg`;
+  }
+  if (normalized === "∞") {
+    return `${MANA_SYMBOL_BASE_URL}/${MANA_SYMBOL_PATHS.INFINITY}.svg`;
+  }
+  const sanitized = normalized.replace(/\//g, "");
+  if (!sanitized) {
+    return null;
+  }
+  if (MANA_SYMBOL_PATHS[sanitized]) {
+    return `${MANA_SYMBOL_BASE_URL}/${MANA_SYMBOL_PATHS[sanitized]}.svg`;
+  }
+  if (/^[0-9A-Z]+$/.test(sanitized)) {
+    return `${MANA_SYMBOL_BASE_URL}/${sanitized}.svg`;
+  }
+  return null;
+};
+
+const createManaSymbolElement = (symbol) => {
+  const normalized = String(symbol ?? "").toUpperCase();
+  const url = getManaSymbolUrl(normalized);
+  if (url) {
+    const img = document.createElement("img");
+    img.className = "mana-symbol";
+    img.src = url;
+    img.alt = `{${normalized}}`;
+    img.loading = "lazy";
+    img.decoding = "async";
+    const description = describeManaSymbol(normalized);
+    if (description) {
+      img.title = description;
+    }
+    return img;
+  }
+  const fallback = document.createElement("span");
+  fallback.className = "mana-symbol mana-symbol-fallback";
+  fallback.textContent = `{${symbol}}`;
+  const description = describeManaSymbol(normalized);
+  if (description) {
+    fallback.title = description;
+  }
+  return fallback;
+};
 
 const isLandCard = (cardData) => {
   if (!cardData || typeof cardData !== "object") {
@@ -630,6 +706,20 @@ const isLandCard = (cardData) => {
     return false;
   }
   return typeLine.includes("land") || typeLine.includes("terrain");
+};
+
+const isPermanentCard = (cardData) => {
+  if (!cardData || typeof cardData !== "object") {
+    return false;
+  }
+  const typeLine = String(cardData.type_line ?? cardData.typeLine ?? "")
+    .toLowerCase()
+    .trim();
+  if (!typeLine) {
+    return false;
+  }
+  const nonPermanentTokens = ["instant", "éphémère", "ephemere", "sorcery", "rituel"];
+  return !nonPermanentTokens.some((token) => typeLine.includes(token));
 };
 
 const computeManaValueFromCost = (manaCost) => {
@@ -750,8 +840,66 @@ const computeDeckStatistics = (deck) => {
   };
   let colorWeightTotal = 0;
 
+  const manaPipCounts = {
+    W: 0,
+    U: 0,
+    B: 0,
+    R: 0,
+    G: 0,
+    C: 0,
+    GENERIC: 0,
+  };
+
   const gameChangerLookup = buildGameChangerLookup(deck);
   let gameChangerCount = 0;
+  const gameChangerNames = new Set();
+
+  let permanentCount = 0;
+  let nonPermanentCount = 0;
+
+  const tallyManaSymbols = (symbol, quantity) => {
+    if (!symbol || quantity <= 0) {
+      return;
+    }
+    const normalized = String(symbol).toUpperCase().trim();
+    if (!normalized) {
+      return;
+    }
+    if (/^\d+$/.test(normalized)) {
+      manaPipCounts.GENERIC += Number(normalized) * quantity;
+      return;
+    }
+    if (normalized === "∞" || normalized === "X" || normalized === "Y" || normalized === "Z") {
+      return;
+    }
+    if (normalized === "C") {
+      manaPipCounts.C += quantity;
+      return;
+    }
+    if (normalized.includes("/")) {
+      const parts = normalized.split("/").filter(Boolean);
+      if (parts.length === 0) {
+        return;
+      }
+      const colorParts = parts.filter((part) => Object.prototype.hasOwnProperty.call(manaPipCounts, part));
+      const numericParts = parts.filter((part) => /^\d+$/.test(part));
+      numericParts.forEach((part) => {
+        manaPipCounts.GENERIC += Number(part) * quantity;
+      });
+      const share =
+        colorParts.length > 0 ? quantity / colorParts.length : 0;
+      colorParts.forEach((part) => {
+        manaPipCounts[part] += share;
+      });
+      if (parts.includes("C") && !colorParts.includes("C")) {
+        manaPipCounts.C += quantity;
+      }
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(manaPipCounts, normalized)) {
+      manaPipCounts[normalized] += quantity;
+    }
+  };
 
   cards.forEach((cardEntry) => {
     if (!cardEntry || typeof cardEntry !== "object") {
@@ -775,9 +923,20 @@ const computeDeckStatistics = (deck) => {
       nonLandCount += quantity;
     }
 
+    if (isPermanentCard(cardData)) {
+      permanentCount += quantity;
+    } else {
+      nonPermanentCount += quantity;
+    }
+
     const cardName = typeof cardData?.name === "string" ? cardData.name.toLowerCase() : null;
     if (cardName && gameChangerLookup.has(cardName)) {
       gameChangerCount += quantity;
+      if (cardData?.name) {
+        gameChangerNames.add(cardData.name);
+      } else {
+        gameChangerNames.add(cardName);
+      }
     }
 
     const identity = Array.isArray(cardData?.color_identity) ? cardData.color_identity : [];
@@ -798,6 +957,13 @@ const computeDeckStatistics = (deck) => {
       });
       colorWeightTotal += quantity;
     }
+
+    const manaSymbols = extractManaSymbols(cardData?.mana_cost);
+    if (Array.isArray(manaSymbols) && manaSymbols.length > 0) {
+      manaSymbols.forEach((symbol) => {
+        tallyManaSymbols(symbol, quantity);
+      });
+    }
   });
 
   const manaCurve = bucketOrder.map((label) => ({
@@ -809,20 +975,51 @@ const computeDeckStatistics = (deck) => {
     nonLandCount > 0 ? Number((manaValueSum / nonLandCount).toFixed(2)) : null;
 
   const colorOrder = ["W", "U", "B", "R", "G", "C"];
+  const pipColorTotal = colorOrder.reduce((sum, color) => sum + (manaPipCounts[color] ?? 0), 0);
+
   const colorDistribution = colorOrder
     .map((color) => {
       const value = colorWeights[color] ?? 0;
       const meta = COLOR_DISTRIBUTION_META[color] ?? { label: color, token: "--color-white" };
       const ratio = colorWeightTotal > 0 ? value / colorWeightTotal : 0;
+      const pipCount = manaPipCounts[color] ?? 0;
+      const pipRatio = pipColorTotal > 0 ? pipCount / pipColorTotal : 0;
       return {
         color,
         label: meta.label,
         token: meta.token,
         value,
         ratio,
+        pipCount,
+        pipRatio,
       };
     })
-    .filter((entry) => entry.value > 0 || colorWeightTotal === 0);
+    .filter(
+      (entry) =>
+        entry.value > 0 ||
+        colorWeightTotal === 0 ||
+        entry.pipCount > 0 ||
+        pipColorTotal === 0
+    );
+
+  const manaPips = {
+    colors: {
+      W: manaPipCounts.W,
+      U: manaPipCounts.U,
+      B: manaPipCounts.B,
+      R: manaPipCounts.R,
+      G: manaPipCounts.G,
+      C: manaPipCounts.C,
+    },
+    generic: manaPipCounts.GENERIC,
+    total:
+      pipColorTotal +
+      manaPipCounts.GENERIC,
+  };
+
+  const gameChangerCards = Array.from(gameChangerNames).sort((a, b) =>
+    CARD_NAME_COLLATOR.compare(a, b)
+  );
 
   return {
     manaCurve,
@@ -831,8 +1028,58 @@ const computeDeckStatistics = (deck) => {
     colorDistribution,
     colorWeightTotal,
     gameChangerCount,
+    gameChangerCards,
     nonLandCount,
+    permanentCount,
+    nonPermanentCount,
+    manaPips,
   };
+};
+
+const extractDeckBracket = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return { bracket: null, justification: null };
+  }
+
+  const pickString = (...candidates) => {
+    for (const candidate of candidates) {
+      if (typeof candidate === "string") {
+        const trimmed = candidate.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
+    }
+    return null;
+  };
+
+  const bracket = pickString(
+    deck.bracket,
+    deck?.podlog?.bracket,
+    deck?.classification?.bracket,
+    deck?.raw?.bracket,
+    deck?.raw?.bracket_name,
+    deck?.raw?.classification?.bracket,
+    deck?.raw?.podlog?.bracket,
+    deck?.raw?.podlog?.bracket_name
+  );
+
+  const justification = pickString(
+    deck?.bracketJustification,
+    deck?.bracket_justification,
+    deck?.bracketReason,
+    deck?.bracket_reason,
+    deck?.podlog?.bracketJustification,
+    deck?.podlog?.bracket_justification,
+    deck?.podlog?.bracketReason,
+    deck?.podlog?.bracket_reason,
+    deck?.raw?.podlog?.bracketJustification,
+    deck?.raw?.podlog?.bracket_justification,
+    deck?.raw?.podlog?.bracketReason,
+    deck?.raw?.podlog?.bracket_reason
+  );
+
+  return { bracket, justification };
 };
 
 const formatAverageManaValue = (value) => {
@@ -934,7 +1181,7 @@ const buildColorDistributionCard = (stats) => {
 
   const subtitle = document.createElement("p");
   subtitle.className = "deck-stats-card-subtitle";
-  subtitle.textContent = "Part de chaque couleur dans le paquet principal.";
+  subtitle.textContent = "Identités du deck et symboles requis par les coûts de mana.";
   card.appendChild(subtitle);
 
   const chart = document.createElement("div");
@@ -963,7 +1210,7 @@ const buildColorDistributionCard = (stats) => {
   const legend = document.createElement("ul");
   legend.className = "deck-color-legend";
   legend.setAttribute("role", "list");
-  legend.setAttribute("aria-label", "Répartition des identités de couleur");
+  legend.setAttribute("aria-label", "Répartition des identités de couleur et symboles requis");
   stats.colorDistribution.forEach((entry) => {
     const item = document.createElement("li");
     item.className = "deck-color-legend-item";
@@ -973,23 +1220,56 @@ const buildColorDistributionCard = (stats) => {
     swatch.className = "deck-color-legend-swatch";
     swatch.style.setProperty("--deck-color-swatch", `var(${entry?.token ?? "--color-white"})`);
 
+    const icon = createManaSymbolElement(entry?.color ?? "");
+    icon.classList.add("deck-color-legend-icon");
+
     const label = document.createElement("span");
     label.className = "deck-color-legend-label";
-    const percentage =
+    const identityPercentage =
       stats.colorWeightTotal > 0
         ? Math.round((Math.max(0, entry?.ratio ?? 0) * 1000)) / 10
         : 0;
-    label.textContent = `${entry?.label ?? "?"} · ${percentage.toLocaleString("fr-FR", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 1,
-    })}%`;
+    const pipPercentage =
+      stats.manaPips && stats.manaPips.total > 0
+        ? Math.round((Math.max(0, entry?.pipRatio ?? 0) * 1000)) / 10
+        : null;
+    const pipCount =
+      typeof entry?.pipCount === "number"
+        ? entry.pipCount.toLocaleString("fr-FR", {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 1,
+          })
+        : null;
+    const parts = [
+      entry?.label ?? "?",
+      `${identityPercentage.toLocaleString("fr-FR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      })}% identité`,
+    ];
+    if (pipCount && Number(entry?.pipCount ?? 0) > 0) {
+      const details = pipPercentage !== null ? `${pipCount} symboles (${pipPercentage.toLocaleString("fr-FR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      })}%)` : `${pipCount} symboles`;
+      parts.push(details);
+    }
+    label.textContent = parts.join(" · ");
 
     item.appendChild(swatch);
+    item.appendChild(icon);
     item.appendChild(label);
     legend.appendChild(item);
   });
 
   card.appendChild(legend);
+
+  if (stats.manaPips && (stats.manaPips.generic ?? 0) > 0) {
+    const genericNote = document.createElement("p");
+    genericNote.className = "deck-color-footnote";
+    genericNote.textContent = `${Number(stats.manaPips.generic).toLocaleString("fr-FR")} symboles génériques requis.`;
+    card.appendChild(genericNote);
+  }
 
   return card;
 };
@@ -1004,28 +1284,40 @@ const buildImpactCard = (stats) => {
 
   const title = document.createElement("h3");
   title.className = "deck-stats-card-title";
-  title.textContent = "Résumé rapide";
+  title.textContent = "Composition du deck";
   card.appendChild(title);
 
   const grid = document.createElement("dl");
   grid.className = "deck-impact-grid";
 
+  const totalRelevant = Math.max(
+    0,
+    Number(stats.permanentCount ?? 0) + Number(stats.nonPermanentCount ?? 0)
+  );
+  const permanentValue = Math.max(0, Number(stats.permanentCount ?? 0));
+  const nonPermanentValue = Math.max(0, Number(stats.nonPermanentCount ?? 0));
+
   const impactItems = [
     {
-      label: "Coût moyen (hors terrains)",
-      value:
-        typeof stats.averageManaValue === "number"
-          ? formatAverageManaValue(stats.averageManaValue)
-          : "—",
+      label: "Permanents",
+      value: NUMBER_FORMAT.format(permanentValue),
+      footnote:
+        totalRelevant > 0
+          ? `${Math.round((permanentValue / totalRelevant) * 1000) / 10}% du total des cartes`
+          : null,
     },
     {
-      label: "Game changer",
+      label: "Sorts non permanents",
+      value: NUMBER_FORMAT.format(nonPermanentValue),
+      footnote:
+        totalRelevant > 0
+          ? `${Math.round((nonPermanentValue / totalRelevant) * 1000) / 10}% du total des cartes`
+          : null,
+    },
+    {
+      label: "Game changers",
       value: NUMBER_FORMAT.format(Math.max(0, stats.gameChangerCount ?? 0)),
-      footnote: 'Nombre de cartes taggées "Game changer" sur Moxfield.',
-    },
-    {
-      label: "Sorts non terrains",
-      value: NUMBER_FORMAT.format(Math.max(0, stats.nonLandCount ?? 0)),
+      footnote: 'Cartes taggées "Game changer" sur Moxfield.',
     },
   ];
 
@@ -1139,28 +1431,33 @@ const createRadarChartComponent = (categories, { maxValue = 5 } = {}) => {
   return { element: svg, update };
 };
 
-const buildEvaluationCard = ({ deckId, deckName }) => {
+const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   if (!deckId) {
     return null;
   }
+
+  const bracketInfo = extractDeckBracket(deck);
+  const gameChangerCount =
+    typeof stats?.gameChangerCount === "number" ? Math.max(0, stats.gameChangerCount) : null;
+  const gameChangerCards = Array.isArray(stats?.gameChangerCards) ? stats.gameChangerCards : [];
 
   const card = document.createElement("article");
   card.className = "deck-stats-card deck-stats-card-evaluation";
 
   const title = document.createElement("h3");
   title.className = "deck-stats-card-title";
-  title.textContent = "Évaluez le plan de jeu";
+  title.textContent = "Radar stratégique";
   card.appendChild(title);
 
   if (deckName) {
     const subtitle = document.createElement("p");
     subtitle.className = "deck-stats-card-subtitle";
-    subtitle.textContent = `Attribuez une note (1 à 5) au deck « ${deckName} ».`;
+    subtitle.textContent = `Ajustez manuellement les notes du deck « ${deckName} ».`;
     card.appendChild(subtitle);
   } else {
     const subtitle = document.createElement("p");
     subtitle.className = "deck-stats-card-subtitle";
-    subtitle.textContent = "Attribuez une note (1 à 5) à ce deck.";
+    subtitle.textContent = "Ajustez manuellement les notes de ce deck.";
     card.appendChild(subtitle);
   }
 
@@ -1186,13 +1483,45 @@ const buildEvaluationCard = ({ deckId, deckName }) => {
   const fields = document.createElement("div");
   fields.className = "deck-rating-grid";
   layout.appendChild(fields);
+  fields.hidden = true;
+  let isEditing = false;
 
   if (radar) {
     const radarContainer = document.createElement("div");
     radarContainer.className = "deck-radar-container";
     radarContainer.appendChild(radar.element);
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "deck-rating-edit";
+    editButton.textContent = "Modifier les notes";
+    editButton.setAttribute("aria-expanded", "false");
+
+    const toggleEditing = (force) => {
+      const nextState = typeof force === "boolean" ? force : !isEditing;
+      isEditing = nextState;
+      fields.hidden = !isEditing;
+      fields.classList.toggle("is-editing", isEditing);
+      editButton.textContent = isEditing ? "Terminer l'édition" : "Modifier les notes";
+      editButton.setAttribute("aria-expanded", String(isEditing));
+      if (isEditing) {
+        const firstSlider = fields.querySelector("input");
+        if (firstSlider) {
+          firstSlider.focus();
+        }
+      }
+    };
+
+    editButton.addEventListener("click", () => toggleEditing());
+
+    radarContainer.appendChild(editButton);
     layout.appendChild(radarContainer);
   }
+  if (!radar) {
+    fields.hidden = false;
+    isEditing = true;
+  }
+  fields.classList.toggle("is-editing", isEditing);
 
   DECK_RATING_CATEGORIES.forEach((category) => {
     const field = document.createElement("label");
@@ -1250,6 +1579,65 @@ const buildEvaluationCard = ({ deckId, deckName }) => {
 
   card.appendChild(layout);
 
+  const metaItems = [];
+  if (bracketInfo.bracket) {
+    metaItems.push({
+      label: "Bracket",
+      value: bracketInfo.bracket,
+    });
+  }
+  if (gameChangerCount !== null) {
+    metaItems.push({
+      label: "Game changers",
+      value: NUMBER_FORMAT.format(gameChangerCount),
+    });
+  }
+
+  if (metaItems.length > 0) {
+    const meta = document.createElement("dl");
+    meta.className = "deck-profile-meta";
+    metaItems.forEach((item) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "deck-profile-meta-item";
+      const dt = document.createElement("dt");
+      dt.className = "deck-profile-meta-label";
+      dt.textContent = item.label;
+      const dd = document.createElement("dd");
+      dd.className = "deck-profile-meta-value";
+      dd.textContent = item.value;
+      wrapper.appendChild(dt);
+      wrapper.appendChild(dd);
+      meta.appendChild(wrapper);
+    });
+    card.appendChild(meta);
+  }
+
+  if (bracketInfo.justification) {
+    const justification = document.createElement("p");
+    justification.className = "deck-profile-justification";
+    justification.textContent = bracketInfo.justification;
+    card.appendChild(justification);
+  }
+
+  if (gameChangerCards.length > 0) {
+    const badges = document.createElement("div");
+    badges.className = "deck-game-changer-badges";
+    const limit = 6;
+    gameChangerCards.slice(0, limit).forEach((name) => {
+      const badge = document.createElement("span");
+      badge.className = "deck-game-changer-badge";
+      badge.textContent = name;
+      badges.appendChild(badge);
+    });
+    if (gameChangerCards.length > limit) {
+      const remainder = document.createElement("span");
+      remainder.className = "deck-game-changer-badge deck-game-changer-badge-more";
+      remainder.textContent = `+${gameChangerCards.length - limit}`;
+      badges.appendChild(remainder);
+    }
+    card.appendChild(badges);
+  }
+
   const note = document.createElement("p");
   note.className = "deck-rating-footnote";
   note.textContent = "Les évaluations sont stockées localement dans votre navigateur.";
@@ -1263,96 +1651,52 @@ const updateDeckSummary = (summary) => {
     return;
   }
 
-  const hasBoards = summary && Array.isArray(summary.boards) && summary.boards.length > 0;
-  const shouldHide = !hasBoards;
-  deckSummaryEl.classList.toggle("is-hidden", shouldHide);
+  deckSummaryEl.classList.add("is-hidden");
   deckSummaryEl.innerHTML = "";
 
-  if (shouldHide) {
+  if (!summary || !summary.deckId) {
     return;
-  }
-
-  const statsGrid = document.createElement("dl");
-  statsGrid.className = "deck-summary-grid";
-
-  const statItems = [
-    {
-      label: "Cartes totales",
-      value: summary.totalCards,
-    },
-    {
-      label: "Cartes uniques",
-      value: summary.uniqueCards,
-    },
-    {
-      label: "Sections",
-      value: summary.boards.length,
-    },
-  ];
-
-  statItems.forEach((stat) => {
-    const group = document.createElement("div");
-    group.className = "deck-summary-item";
-
-    const term = document.createElement("dt");
-    term.className = "deck-summary-label";
-    term.textContent = stat.label;
-
-    const value = document.createElement("dd");
-    value.className = "deck-summary-value";
-    value.textContent =
-      typeof stat.value === "number" && Number.isFinite(stat.value)
-        ? NUMBER_FORMAT.format(stat.value)
-        : "—";
-
-    group.appendChild(term);
-    group.appendChild(value);
-    statsGrid.appendChild(group);
-  });
-
-  deckSummaryEl.appendChild(statsGrid);
-
-  const boardList = document.createElement("ul");
-  boardList.className = "deck-summary-board-list";
-
-  summary.boards.forEach((board) => {
-    const item = document.createElement("li");
-    item.className = "deck-summary-board-item";
-    const name = document.createElement("span");
-    name.className = "deck-summary-board-name";
-    name.textContent = board.label;
-    const count = document.createElement("span");
-    count.className = "deck-summary-board-count";
-    count.textContent =
-      typeof board.count === "number" && Number.isFinite(board.count)
-        ? NUMBER_FORMAT.format(board.count)
-        : "—";
-    item.appendChild(name);
-    item.appendChild(count);
-    boardList.appendChild(item);
-  });
-
-  deckSummaryEl.appendChild(boardList);
-
-  const insights = document.createElement("div");
-  insights.className = "deck-stats-grid";
-  const statCards = [
-    buildManaCurveCard(summary.stats),
-    buildColorDistributionCard(summary.stats),
-    buildImpactCard(summary.stats),
-  ].filter(Boolean);
-  statCards.forEach((card) => insights.appendChild(card));
-  if (insights.childElementCount > 0) {
-    deckSummaryEl.appendChild(insights);
   }
 
   const evaluationCard = buildEvaluationCard({
     deckId: summary.deckId ?? null,
     deckName: summary.deckName ?? null,
+    stats: summary.stats ?? null,
+    deck: summary.deck ?? null,
   });
   if (evaluationCard) {
     deckSummaryEl.appendChild(evaluationCard);
+    deckSummaryEl.classList.remove("is-hidden");
   }
+};
+
+const updateDeckInsights = (details) => {
+  if (!deckInsightsEl) {
+    return;
+  }
+
+  deckInsightsEl.classList.add("is-hidden");
+  deckInsightsEl.innerHTML = "";
+
+  const stats = details?.stats ?? null;
+  if (!stats) {
+    return;
+  }
+
+  const insightCards = [buildManaCurveCard(stats), buildColorDistributionCard(stats), buildImpactCard(stats)].filter(
+    Boolean
+  );
+
+  if (insightCards.length === 0) {
+    return;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "deck-stats-grid deck-insights-grid";
+  insightCards.forEach((card) => grid.appendChild(card));
+
+  deckInsightsEl.appendChild(grid);
+  deckInsightsEl.classList.remove("is-hidden");
 };
 
 const renderCommanderHighlight = (entries, deck, { deckId, handle } = {}) => {
@@ -1443,13 +1787,25 @@ const renderCommanderHighlight = (entries, deck, { deckId, handle } = {}) => {
 
     const stats = document.createElement("p");
     stats.className = "commander-preview-stats";
-    const manaText = formatManaCostText(cardData?.mana_cost) || "—";
-    const colors = Array.isArray(cardData?.color_identity) ? cardData.color_identity.join("") : "";
-    const statsParts = [manaText, `x${quantity}`];
-    if (colors) {
-      statsParts.push(colors);
+    const manaGroup = document.createElement("span");
+    manaGroup.className = "commander-preview-mana mana-cost";
+    renderManaCost(manaGroup, cardData?.mana_cost);
+    stats.appendChild(manaGroup);
+
+    const quantityTag = document.createElement("span");
+    quantityTag.className = "commander-preview-tag";
+    quantityTag.textContent = `x${quantity}`;
+    stats.appendChild(quantityTag);
+
+    const identity = Array.isArray(cardData?.color_identity) ? cardData.color_identity : [];
+    if (identity.length > 0) {
+      const identityGroup = document.createElement("span");
+      identityGroup.className = "commander-preview-identity mana-cost";
+      identity.forEach((color) => {
+        identityGroup.appendChild(createManaSymbolElement(color));
+      });
+      stats.appendChild(identityGroup);
     }
-    stats.textContent = statsParts.join(" • ");
 
     info.appendChild(name);
     info.appendChild(typeLine);
@@ -1737,6 +2093,36 @@ const formatManaBreakdownText = (manaCost) => {
   return summary
     .map(({ description, count }) => (count > 1 ? `${description} ×${count}` : description))
     .join(" · ");
+};
+
+const renderManaCost = (element, manaCost, { fallbackText = "—" } = {}) => {
+  if (!element) {
+    return;
+  }
+  const symbols = extractManaSymbols(manaCost);
+  element.innerHTML = "";
+  element.classList.add("mana-cost");
+
+  if (!Array.isArray(symbols) || symbols.length === 0) {
+    if (typeof fallbackText === "string") {
+      element.textContent = fallbackText;
+    }
+    element.removeAttribute("aria-label");
+    return;
+  }
+
+  const breakdown = formatManaBreakdownText(manaCost);
+  if (breakdown && breakdown !== "—") {
+    element.setAttribute("aria-label", breakdown);
+  } else {
+    element.removeAttribute("aria-label");
+  }
+
+  const fragment = document.createDocumentFragment();
+  symbols.forEach((symbol) => {
+    fragment.appendChild(createManaSymbolElement(symbol));
+  });
+  element.appendChild(fragment);
 };
 
 const ensureDeckDetails = async (deckId, { handle, preferLive = false } = {}) => {

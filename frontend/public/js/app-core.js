@@ -43,6 +43,7 @@ let moxfieldMetaEl = null;
 let defaultSyncLabel = "Synchroniser avec Moxfield";
 let deckSummaryEl = null;
 let deckCommanderEl = null;
+let deckInsightsEl = null;
 let currentSyncAbortController = null;
 let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;
@@ -794,7 +795,7 @@ const replaceDeckInIntegration = (integration, updatedDeck) => {
 
 const BOARD_LABELS = {
   commanders: "Commandants",
-  mainboard: "Bibliothèque principale",
+  mainboard: "Liste",
   sideboard: "Réserve",
   maybeboard: "Peut-être",
   companions: "Compagnons",

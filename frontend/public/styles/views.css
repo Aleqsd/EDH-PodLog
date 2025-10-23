@@ -549,7 +549,7 @@
   margin: -8px 0 0 -8px;
   border-radius: 50%;
   border: 2px solid color-mix(in srgb, var(--color-white) 25%, transparent);
-  border-top-color: var(--color-white)fff;
+  border-top-color: var(--color-white);
   animation: button-spin 0.8s linear infinite;
 }
 
@@ -807,7 +807,7 @@
   height: 1rem;
   border-radius: 50%;
   border: 2px solid color-mix(in srgb, var(--color-white) 35%, transparent);
-  border-top-color: var(--color-white)fff;
+  border-top-color: var(--color-white);
   animation: button-spin 0.75s linear infinite;
 }
 
@@ -1141,6 +1141,15 @@
   align-content: start;
 }
 
+.deck-insights {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.deck-insights .deck-stats-grid {
+  margin-top: 0;
+}
+
 .deck-summary-grid {
   margin: 0;
   display: grid;
@@ -1318,7 +1327,7 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .deck-color-legend-swatch {
@@ -1330,9 +1339,20 @@
   box-shadow: 0 0 12px color-mix(in srgb, var(--deck-color-swatch, var(--color-mana-colorless)) 25%, transparent);
 }
 
+.deck-color-legend-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
 .deck-color-legend-label {
   font-size: 0.85rem;
   color: var(--color-text-subtle);
+}
+
+.deck-color-footnote {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-subtle-soft);
 }
 
 .deck-impact-grid {
@@ -1372,6 +1392,81 @@
   gap: 1.25rem;
 }
 
+.deck-rating-edit {
+  margin-top: 0.75rem;
+  align-self: flex-start;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-border-soft) 48%, transparent);
+  background: color-mix(in srgb, var(--color-base-141c30) 80%, transparent);
+  color: var(--color-text-subtle);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.deck-rating-edit:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-border-brand) 55%, transparent);
+  color: var(--color-text-primary);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--color-base-070b18) 40%, transparent);
+}
+
+.deck-profile-meta {
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.deck-profile-meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.deck-profile-meta-label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-subtle);
+}
+
+.deck-profile-meta-value {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.deck-profile-justification {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle);
+  line-height: 1.45;
+}
+
+.deck-game-changer-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.deck-game-changer-badge {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-base-1d2742) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border-soft) 28%, transparent);
+  font-size: 0.75rem;
+  color: var(--color-text-subtle);
+}
+
+.deck-game-changer-badge-more {
+  background: color-mix(in srgb, var(--color-base-1a2340) 78%, transparent);
+  color: var(--color-text-contrast-soft);
+}
 .deck-rating-grid {
   display: grid;
   gap: 0.75rem;
@@ -1404,8 +1499,10 @@
 
 .deck-radar-container {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 0.75rem;
 }
 
 .deck-radar-svg {
@@ -1712,6 +1809,34 @@
 .card-table-mana {
   font-size: 0.85rem;
   color: var(--color-text-subtle);
+  white-space: nowrap;
+}
+
+.mana-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.mana-symbol {
+  width: 1.15rem;
+  height: 1.15rem;
+  display: inline-block;
+  filter: drop-shadow(0 0 6px rgba(6, 12, 24, 0.35));
+}
+
+img.mana-symbol {
+  object-fit: contain;
+}
+
+.mana-symbol-fallback {
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--color-base-1c2742) 70%, transparent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 
@@ -1767,7 +1892,7 @@
 }
 
 .commander-preview-link:hover .commander-preview-name {
-  color: var(--color-white)fff;
+  color: var(--color-white);
 }
 
 .commander-preview-visual {
@@ -1826,6 +1951,23 @@
   font-size: 0.8rem;
   letter-spacing: 0.015em;
   font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.commander-preview-tag {
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-base-1f2b44) 75%, transparent);
+  color: var(--color-text-contrast);
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+.commander-preview-identity {
+  gap: 0.25rem;
 }
 
 @media (max-width: 1200px) {
