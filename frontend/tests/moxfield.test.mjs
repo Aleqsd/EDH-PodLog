@@ -110,3 +110,42 @@ test("normalizeMoxfieldDeck extracts metadata from backend payloads", () => {
   assert.equal(normalized.cardCount, 5);
   assert.equal(normalized.updatedAt, "2023-10-01T12:00:00Z");
 });
+
+test("createCardSnapshot preserves core card data for fast detail rendering", () => {
+  const { createCardSnapshot } = loadInternals();
+  const deck = { publicId: "deck-123", name: "Esper Control", format: "Commander" };
+  const board = { name: "mainboard" };
+  const entry = {
+    quantity: 3,
+    card: {
+      id: "card-001",
+      name: "Mulldrifter",
+      mana_cost: "{4}{U}",
+      type_line: "Creature — Elemental",
+      oracle_text: "Flying\nWhen Mulldrifter enters the battlefield, draw two cards.",
+      power: "2",
+      toughness: "2",
+      color_identity: ["U"],
+      set_name: "Lorwyn",
+      set: "lrw",
+      cn: "72",
+      prices: { usd: "0.35", eur: "0.28", foil: "1.20" },
+      faces: [{ name: "Mulldrifter", oracle_text: "Flying" }],
+      extra_field: "should be stripped",
+    },
+  };
+
+  const snapshot = createCardSnapshot(deck, board, entry, { handle: "cardPlayer" });
+
+  assert.equal(snapshot.deckId, "deck-123");
+  assert.equal(snapshot.cardId, "card-001");
+  assert.equal(snapshot.handle, "cardPlayer");
+  assert.equal(snapshot.deck.name, "Esper Control");
+  assert.equal(snapshot.board.name, "mainboard");
+  assert.equal(snapshot.entry.quantity, 3);
+  assert.equal(snapshot.entry.card.name, "Mulldrifter");
+  assert.equal(snapshot.entry.card.prices.usd, "0.35");
+  assert.equal(snapshot.entry.card.prices.eur, "0.28");
+  assert.ok(!("foil" in snapshot.entry.card.prices));
+  assert.ok(!("extra_field" in snapshot.entry.card));
+});

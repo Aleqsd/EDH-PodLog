@@ -2104,6 +2104,120 @@ const collectDeckCards = (deck) => {
   );
 };
 
+const getPrimaryCardIdentifier = (cardData) => {
+  if (!cardData || typeof cardData !== "object") {
+    return null;
+  }
+
+  const candidates = [
+    cardData.id,
+    cardData.card_id,
+    cardData.uniqueCardId,
+    cardData.unique_card_id,
+    cardData.scryfall_id,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" || typeof candidate === "number") {
+      const value = String(candidate).trim();
+      if (value.length > 0) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+};
+
+const sanitizeCardData = (cardData) => {
+  if (!cardData || typeof cardData !== "object") {
+    return {};
+  }
+
+  const safeFaces = Array.isArray(cardData.faces)
+    ? cardData.faces.map((face) => ({
+        name: face?.name ?? null,
+        oracle_text: face?.oracle_text ?? null,
+      }))
+    : undefined;
+
+  const safeCard = {
+    id: cardData.id ?? null,
+    card_id: cardData.card_id ?? null,
+    uniqueCardId: cardData.uniqueCardId ?? null,
+    unique_card_id: cardData.unique_card_id ?? null,
+    scryfall_id: cardData.scryfall_id ?? null,
+    name: cardData.name ?? null,
+    mana_cost: cardData.mana_cost ?? null,
+    type_line: cardData.type_line ?? null,
+    oracle_text: cardData.oracle_text ?? null,
+    power: cardData.power ?? null,
+    toughness: cardData.toughness ?? null,
+    loyalty: cardData.loyalty ?? null,
+    color_identity: Array.isArray(cardData.color_identity)
+      ? [...cardData.color_identity]
+      : null,
+    set_name: cardData.set_name ?? null,
+    set: cardData.set ?? null,
+    cn: cardData.cn ?? null,
+  };
+
+  if (safeFaces) {
+    safeCard.faces = safeFaces;
+  }
+
+  if (cardData.prices && typeof cardData.prices === "object") {
+    safeCard.prices = {
+      usd: cardData.prices.usd ?? null,
+      eur: cardData.prices.eur ?? null,
+    };
+  }
+
+  return safeCard;
+};
+
+const createCardSnapshot = (deck, board, cardEntry, { handle } = {}) => {
+  if (!deck || !cardEntry || typeof cardEntry !== "object") {
+    return null;
+  }
+
+  const deckId = getDeckIdentifier(deck);
+  const cardData = cardEntry.card ?? null;
+  const cardId = getPrimaryCardIdentifier(cardData);
+
+  if (!deckId || !cardId) {
+    return null;
+  }
+
+  const normalizedHandle =
+    typeof handle === "string" && handle.trim().length > 0 ? handle.trim() : null;
+
+  return {
+    version: 1,
+    storedAt: Date.now(),
+    deckId,
+    cardId,
+    handle: normalizedHandle,
+    deck: {
+      publicId: deckId,
+      name: deck?.name ?? null,
+      format: deck?.format ?? null,
+    },
+    board: board
+      ? {
+          name: board?.name ?? null,
+        }
+      : null,
+    entry: {
+      quantity:
+        typeof cardEntry.quantity === "number" && Number.isFinite(cardEntry.quantity)
+          ? cardEntry.quantity
+          : 1,
+      card: sanitizeCardData(cardData),
+    },
+  };
+};
+
 const findCardInDeckById = (deck, cardId) => {
   if (!deck || !cardId) {
     return null;
@@ -2235,6 +2349,9 @@ if (typeof window !== "undefined") {
   window.EDH_PODLOG_INTERNAL = {
     validateMoxfieldHandle,
     normalizeMoxfieldDeck,
+    createCardSnapshot,
+    sanitizeCardData,
+    getPrimaryCardIdentifier,
   };
 }
 
@@ -2413,18 +2530,17 @@ const renderDeckBoards = (deck, { handle } = {}) => {
         if (cardData?.name) {
           const link = document.createElement("a");
           link.className = "card-link";
-          const primaryId =
-            cardData.id || cardData.card_id || cardData.uniqueCardId || cardData.scryfall_id;
+          const primaryId = getPrimaryCardIdentifier(cardData);
           if (deckId && primaryId) {
             link.href = `card.html?deck=${encodeURIComponent(
               deckId
             )}&card=${encodeURIComponent(primaryId)}`;
             link.addEventListener("click", () => {
               try {
-                window.sessionStorage.setItem(
-                  LAST_CARD_STORAGE_KEY,
-                  JSON.stringify({ deckId, cardId: primaryId, handle: handle || null })
-                );
+                const snapshot = createCardSnapshot(deck, board, cardEntry, { handle });
+                if (snapshot) {
+                  window.sessionStorage.setItem(LAST_CARD_STORAGE_KEY, JSON.stringify(snapshot));
+                }
               } catch (error) {
                 console.warn("Impossible d'enregistrer la sélection de la carte :", error);
               }
@@ -2770,22 +2886,24 @@ const renderDeckBoards = (deck, { handle } = {}) => {
     let deckId = getQueryParam("deck");
     let cardId = getQueryParam("card");
     let handleHint = getQueryParam("handle");
+    let storedCard = null;
+
+    try {
+      storedCard = JSON.parse(window.sessionStorage.getItem(LAST_CARD_STORAGE_KEY) || "null");
+    } catch (error) {
+      console.warn("Impossible de lire la sélection de la carte :", error);
+      storedCard = null;
+    }
 
     if (!deckId || !cardId) {
-      try {
-        const storedCard = JSON.parse(
-          window.sessionStorage.getItem(LAST_CARD_STORAGE_KEY) || "null"
-        );
-        if (storedCard) {
-          deckId = deckId || storedCard.deckId || null;
-          cardId = cardId || storedCard.cardId || null;
-          if (!handleHint && storedCard.handle) {
-            handleHint = storedCard.handle;
-          }
-        }
-      } catch (error) {
-        console.warn("Impossible de lire la sélection de la carte :", error);
+      if (storedCard) {
+        deckId = deckId || storedCard.deckId || null;
+        cardId = cardId || storedCard.cardId || null;
       }
+    }
+
+    if (!handleHint && storedCard?.handle) {
+      handleHint = storedCard.handle;
     }
 
     if (!deckId || !cardId) {
@@ -2794,7 +2912,55 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       return;
     }
 
-    setCardLoading(true);
+    let prefilledFromSnapshot = false;
+    const normalizedRequestedCardId = String(cardId).toLowerCase();
+    const normalizedStoredCardId =
+      storedCard?.cardId !== undefined && storedCard?.cardId !== null
+        ? String(storedCard.cardId).toLowerCase()
+        : null;
+
+    if (
+      storedCard &&
+      storedCard.entry &&
+      normalizedStoredCardId &&
+      normalizedStoredCardId === normalizedRequestedCardId &&
+      (!storedCard.deckId || storedCard.deckId === deckId)
+    ) {
+      const deckSnapshot = {
+        publicId: storedCard.deck?.publicId ?? storedCard.deckId ?? deckId,
+        name: storedCard.deck?.name ?? null,
+        format: storedCard.deck?.format ?? null,
+      };
+
+      const boardSnapshot = storedCard.board
+        ? {
+            name: storedCard.board?.name ?? null,
+          }
+        : null;
+
+      const quantity =
+        typeof storedCard.entry.quantity === "number" && Number.isFinite(storedCard.entry.quantity)
+          ? storedCard.entry.quantity
+          : 1;
+
+      const entrySnapshot = {
+        quantity,
+        card: sanitizeCardData(storedCard.entry.card),
+      };
+
+      populateCardDetail(
+        deckSnapshot,
+        { board: boardSnapshot, entry: entrySnapshot },
+        { handle: handleHint }
+      );
+      setCardLoading(false);
+      prefilledFromSnapshot = true;
+    }
+
+    if (!prefilledFromSnapshot) {
+      setCardLoading(true);
+    }
+
     try {
       const { deck, session } = await ensureDeckDetails(deckId, {
         handle: handleHint,
@@ -2821,7 +2987,9 @@ const renderDeckBoards = (deck, { handle } = {}) => {
       }
     } catch (error) {
       console.error("Unable to load card detail", error);
-      showCardError("Nous n'avons pas pu charger les informations de cette carte.");
+      if (!prefilledFromSnapshot) {
+        showCardError("Nous n'avons pas pu charger les informations de cette carte.");
+      }
     } finally {
       setCardLoading(false);
     }
