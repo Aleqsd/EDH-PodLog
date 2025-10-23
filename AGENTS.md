@@ -17,6 +17,7 @@
 - Prefer non-standard ports (frontend 3170, API 4310, MongoDB 47017) to coexist with other VPS services.
 - Run `make doctor` before handoff to verify prerequisites and environment variables (requires `GOOGLE_CLIENT_ID`, `MONGO_URI`, etc.).
 - Keep credentials out of Git; rely on `.env.local` merged by `frontend/scripts/generate-config.mjs` and backend env loading.
+- When touching CSS, introduce values via the tokens catalogue and layer-safe utilities instead of hard-coding hex/rgba literals.
 - Extend or update tests alongside features. `make test` aggregates Node + pytest suites and guards against regressions.
 - After `make test`, exercise a manual `/users/{username}/decks` fetch (e.g. via `httpie` or `curl` against a multi-deck account like `BimboLegrand`) and inspect backend logs to confirm batched fetch timings and retry/backoff behaviour remain healthy.
 
@@ -29,7 +30,10 @@
 - Product vision notes live in `docs/edh-podlog-trashdraft.md`.
 - Frontend runtime config is generated via `frontend/scripts/generate-config.mjs`.
 - Frontend runtime splits into `frontend/public/js/app-core.js` & `app-features.js` for shared utilities, `app-init.js` for the router, and per-page controllers under `frontend/public/js/controllers/`.
-- Shared styles sit under `frontend/public/styles/` and are aggregated via `frontend/public/styles.css`.
+- Shared styles layer through `frontend/public/styles.css` (`tokens → utilities → base → components → views`):
+  - Design tokens live in `frontend/public/styles/tokens.css` (colors, spacing, radii, shadows, gradients, base swatches).
+  - Utility helpers sit in `frontend/public/styles/utilities.css`.
+  - Global resets in `frontend/public/styles/base.css`; component primitives in `frontend/public/styles/components.css`; page/view rules in `frontend/public/styles/views.css` with responsive overrides co-located in `frontend/public/styles/responsive.css`.
 - Identity assets now ship as `frontend/public/favicon.ico` and `frontend/public/apple-touch-icon.png`; additional logos stay under `frontend/public/assets/`.
 - Backend API surface and persistence logic sit under `backend/app/` (Moxfield proxy, Mongo upserts, cache endpoints).
 - Local Mongo data persists in `db/data/` (ignored except for `.gitkeep`).

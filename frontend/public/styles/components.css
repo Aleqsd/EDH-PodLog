@@ -1,6 +1,7 @@
+@layer components {
 .card-layout {
   display: grid;
-  gap: 2rem;
+  gap: var(--space-xl);
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -9,9 +10,9 @@
 }
 
 .card-visual {
-  border-radius: 18px;
-  background: rgba(15, 20, 34, 0.78);
-  border: 1px solid rgba(66, 86, 140, 0.35);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-border-deep);
   padding: 1.2rem;
   display: flex;
   align-items: center;
@@ -21,8 +22,8 @@
 .card-visual img {
   width: 100%;
   max-width: 280px;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(5, 10, 24, 0.45);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .card-info-panel {
@@ -32,7 +33,7 @@
 
 .card-info-panel .back-link {
   font-size: 0.85rem;
-  color: #98b6ff;
+  color: var(--color-brand-muted);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -46,22 +47,22 @@
 .card-info-headline {
   margin: 0;
   font-size: 1.75rem;
-  color: #f5f7fb;
+  color: var(--color-text-primary);
   font-weight: 700;
 }
 
 .card-info-subtitle {
   margin: 0;
   font-size: 0.95rem;
-  color: rgba(203, 214, 255, 0.68);
+  color: var(--color-text-subtle);
 }
 
 .card-meta-inline {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-sm);
   font-size: 0.88rem;
-  color: rgba(203, 214, 255, 0.82);
+  color: var(--color-text-subtle-strong);
 }
 
 .card-meta-list {
@@ -69,35 +70,35 @@
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 0.55rem;
+  gap: var(--space-xs);
   font-size: 0.95rem;
-  color: rgba(210, 220, 255, 0.86);
+  color: var(--color-text-contrast);
 }
 
 .card-meta-list strong {
-  color: rgba(235, 240, 255, 0.95);
+  color: var(--color-text-contrast-strong);
 }
 
 .card-oracle {
   margin: 0;
   padding: 1.1rem 1.25rem;
   border-radius: 16px;
-  background: rgba(18, 25, 44, 0.75);
-  border: 1px solid rgba(75, 96, 150, 0.35);
-  color: rgba(211, 222, 255, 0.86);
+  background: var(--color-surface-panel-alt);
+  border: 1px solid var(--color-border-aurora);
+  color: var(--color-text-contrast);
   font-size: 0.95rem;
   line-height: 1.6;
   white-space: pre-line;
 }
 
 .card-oracle.is-placeholder {
-  color: rgba(203, 214, 255, 0.6);
+  color: var(--color-text-subtle-soft);
   font-style: italic;
 }
 
 .card-quantity {
   font-size: 0.9rem;
-  color: rgba(203, 214, 255, 0.72);
+  color: var(--color-text-subtle);
 }
 
 @media (max-width: 960px) {
@@ -148,10 +149,10 @@
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(6, 9, 18, 0.78);
+  background: var(--color-surface-backdrop);
   backdrop-filter: blur(6px);
   z-index: 2000;
-  padding: 1.5rem;
+  padding: var(--space-lg);
 }
 
 .modal-backdrop.is-visible {
@@ -160,10 +161,10 @@
 
 .modal {
   width: min(640px, 100%);
-  background: rgba(13, 18, 32, 0.98);
-  border-radius: 22px;
-  border: 1px solid rgba(91, 110, 168, 0.4);
-  box-shadow: 0 28px 64px rgba(4, 6, 18, 0.55);
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-stronger);
+  box-shadow: var(--shadow-xl);
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
@@ -175,19 +176,19 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 1.5rem 1.75rem 1.25rem;
-  border-bottom: 1px solid rgba(91, 110, 168, 0.35);
+  border-bottom: 1px solid var(--color-border-strong);
 }
 
 .modal-title {
   margin: 0;
   font-size: 1.2rem;
-  color: #f5f7fb;
+  color: var(--color-text-primary);
 }
 
 .modal-close {
   border: none;
   background: none;
-  color: rgba(203, 214, 255, 0.7);
+  color: var(--color-text-subtle);
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
@@ -195,7 +196,7 @@
 }
 
 .modal-close:hover {
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .modal-body {
@@ -207,7 +208,7 @@
 
 .modal-description {
   margin: 0;
-  color: rgba(203, 214, 255, 0.72);
+  color: var(--color-text-subtle);
   line-height: 1.6;
 }
 
@@ -220,9 +221,9 @@
 .modal-quick-toggle {
   padding: 0.5rem 1rem;
   border-radius: 999px;
-  border: 1px solid rgba(107, 167, 255, 0.35);
-  background: rgba(30, 45, 72, 0.85);
-  color: rgba(203, 214, 255, 0.85);
+  border: 1px solid var(--color-border-brand);
+  background: var(--color-surface-glass);
+  color: var(--color-text-subtle-strong);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -231,12 +232,12 @@
 
 .modal-quick-toggle:hover {
   transform: translateY(-1px);
-  border-color: rgba(107, 167, 255, 0.6);
-  box-shadow: 0 10px 18px rgba(12, 18, 32, 0.4);
+  border-color: var(--color-border-brand-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 .modal-quick-toggle:focus-visible {
-  outline: 2px solid rgba(107, 167, 255, 0.9);
+  outline: 2px solid var(--color-border-brand-focus);
   outline-offset: 2px;
 }
 
@@ -250,8 +251,8 @@
 
 .modal-deck-item {
   border-radius: 16px;
-  border: 1px solid rgba(91, 110, 168, 0.35);
-  background: rgba(9, 13, 24, 0.94);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-overlay);
   padding: 1rem 1.25rem;
   display: grid;
   gap: 0.75rem;
@@ -267,12 +268,12 @@
 .modal-deck-title {
   margin: 0;
   font-size: 1rem;
-  color: #f5f7fb;
+  color: var(--color-text-primary);
 }
 
 .modal-deck-meta {
   font-size: 0.85rem;
-  color: rgba(203, 214, 255, 0.6);
+  color: var(--color-text-subtle-soft);
 }
 
 .modal-deck-options {
@@ -287,11 +288,11 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgba(203, 214, 255, 0.78);
+  color: var(--color-text-subtle);
 }
 
 .modal-choice-label input {
-  accent-color: #6ba7ff;
+  accent-color: var(--color-brand-bright);
 }
 
 .modal-footer {
@@ -299,7 +300,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 1rem;
-  border-top: 1px solid rgba(91, 110, 168, 0.35);
+  border-top: 1px solid var(--color-border-strong);
 }
 
 .modal-button {
@@ -314,29 +315,29 @@
 }
 
 .modal-button.primary {
-  background: linear-gradient(90deg, #6ba7ff 0%, #8f84ff 100%);
-  color: #0a0f1f;
-  box-shadow: 0 12px 24px rgba(107, 167, 255, 0.35);
+  background: var(--gradient-brand-button);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-brand);
 }
 
 .modal-button.primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 32px rgba(107, 167, 255, 0.4);
+  box-shadow: var(--shadow-brand-strong);
 }
 
 .modal-button.secondary {
-  background: rgba(22, 30, 51, 0.95);
-  color: rgba(203, 214, 255, 0.85);
-  border: 1px solid rgba(91, 110, 168, 0.35);
+  background: var(--color-surface-modal);
+  color: var(--color-text-subtle-strong);
+  border: 1px solid var(--color-border-strong);
 }
 
 .modal-button.secondary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(6, 10, 22, 0.45);
+  box-shadow: var(--shadow-deep);
 }
 
 .modal-empty-state {
-  color: rgba(203, 214, 255, 0.7);
+  color: var(--color-text-subtle);
   font-size: 0.95rem;
 }
-
+}

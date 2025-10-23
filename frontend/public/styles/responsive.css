@@ -1,40 +1,42 @@
-@media (max-width: 640px) {
-  .site-header {
-    flex-direction: column;
-    gap: 1.5rem;
-  }
+@layer views {
+  @media (max-width: 640px) {
+    .site-header {
+      flex-direction: column;
+      gap: var(--space-lg);
+    }
 
-  .brand-icon {
-    width: 36px;
-    height: 36px;
-    font-size: 1.05rem;
-  }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      font-size: 1.05rem;
+    }
 
-  .hero-card {
-    padding: 1.35rem;
-  }
+    .hero-card {
+      padding: 1.35rem;
+    }
 
-  .app-header {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
-  }
+    .app-header {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      text-align: center;
+    }
 
-  .app-nav {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
+    .app-nav {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
 
-  .profile-area {
-    justify-self: center;
-  }
+    .profile-area {
+      justify-self: center;
+    }
 
-  .profile-card {
-    border-radius: 22px;
-  }
+    .profile-card {
+      border-radius: var(--radius-xl);
+    }
 
-  .profile-overview {
-    flex-direction: column;
-    align-items: flex-start;
+    .profile-overview {
+      flex-direction: column;
+      align-items: flex-start;
+    }
   }
 }

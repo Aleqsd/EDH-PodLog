@@ -18,3 +18,11 @@ The frontend lives in `frontend/public/` and is served as a static site. It read
 - `API_BASE_URL` (defaults to `http://localhost:4310`)
 
 Run `make front-config` whenever these values change.
+
+## Styles
+
+- Global design tokens live in `frontend/public/styles/tokens.css` and expose color, spacing, radius, shadow, and gradient primitives. Always reference tokens (or derive from them with `color-mix`) instead of hard-coding values.
+- Layout helpers and shared utility classes are defined in `frontend/public/styles/utilities.css`.
+- The cascade is layered via `frontend/public/styles.css` in the order: `tokens → utilities → base → components → views`. Media queries share the `views` layer to keep overrides predictable.
+- Per-view rules reside in `frontend/public/styles/views.css` and should compose tokens by name (for example, `var(--color-brand-soft)` or `color-mix` using `--color-base-*` swatches).
+- Component primitives live in `frontend/public/styles/components.css`. Bring new components into this file or a co-located module, but ensure they only consume tokens/utilities.

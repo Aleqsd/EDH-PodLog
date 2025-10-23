@@ -1,0 +1,47 @@
+@layer utilities {
+  .is-hidden {
+    display: none !important;
+  }
+
+  .u-stack {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .u-stack-lg {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .u-surface-card {
+    background: var(--color-surface-panel);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+  }
+
+  .u-scroll-y {
+    overflow-y: auto;
+  }
+
+  .u-text-muted {
+    color: var(--color-text-muted);
+  }
+
+  .u-text-secondary {
+    color: var(--color-text-secondary);
+  }
+
+  .u-pill {
+    border-radius: var(--radius-pill);
+  }
+
+  .u-focus-ring {
+    outline: 2px solid color-mix(
+      in srgb,
+      var(--color-brand-primary) 65%,
+      white
+    );
+    outline-offset: 2px;
+  }
+}
