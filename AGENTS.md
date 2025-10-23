@@ -29,7 +29,7 @@
 - Frontend runtime config is generated via `frontend/scripts/generate-config.mjs`.
 - Frontend scripts now live in `frontend/public/js/app-core.js`, `app-features.js`, and `app-init.js` (load after `config.js`).
 - Shared styles sit under `frontend/public/styles/` and are aggregated via `frontend/public/styles.css`.
-- Identity assets (favicon & future social previews) live in `frontend/public/assets/` (`favicon.svg` ships today).
+- Identity assets now ship as `frontend/public/favicon.ico` and `frontend/public/apple-touch-icon.png`; additional logos stay under `frontend/public/assets/`.
 - Backend API surface and persistence logic sit under `backend/app/` (Moxfield proxy, Mongo upserts, cache endpoints).
 - Local Mongo data persists in `db/data/` (ignored except for `.gitkeep`).
 
