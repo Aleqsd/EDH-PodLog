@@ -24,6 +24,10 @@ NETLIFY_CMD := netlify
 NETLIFY_SITE_FLAG := $(if $(NETLIFY_SITE),--site $(NETLIFY_SITE),)
 VPS_FRONTEND_ROOT ?= /var/www/edh-podlog
 VPS_FRONTEND_OWNER ?= www-data:www-data
+VPS_LOG_ROOT ?= /root/EDH-PodLog
+VPS_BACK_LOG ?= $(VPS_LOG_ROOT)/back.log
+VPS_DB_LOG ?= $(VPS_LOG_ROOT)/db.log
+VPS_FRONT_LOG ?= $(VPS_LOG_ROOT)/front.log
 
 .PHONY: front back db deps doctor \
 	front-config front-build front-serve front-preview front-deploy front-clean front-test \
@@ -108,15 +112,21 @@ vps-deploy: front-build
 
 log-db:
 	@echo "Streaming MongoDB logs (CTRL+C to stop)..."
-	@journalctl -u mongod -n 100 -f
+	@mkdir -p $(VPS_LOG_ROOT)
+	@touch $(VPS_DB_LOG)
+	@tail -n 200 -F $(VPS_DB_LOG)
 
 log-back:
 	@echo "Streaming FastAPI backend logs (CTRL+C to stop)..."
-	@journalctl -u edh-podlog -n 100 -f
+	@mkdir -p $(VPS_LOG_ROOT)
+	@touch $(VPS_BACK_LOG)
+	@tail -n 200 -F $(VPS_BACK_LOG)
 
 log-front:
 	@echo "Streaming Nginx access/error logs (CTRL+C to stop)..."
-	@tail -n 200 -f /var/log/nginx/access.log /var/log/nginx/error.log
+	@mkdir -p $(VPS_LOG_ROOT)
+	@touch $(VPS_FRONT_LOG)
+	@tail -n 200 -F $(VPS_FRONT_LOG)
 
 db-start:
 	@command -v mongod >/dev/null || (echo "mongod not found. Install MongoDB Community Edition to use this target." && exit 1)

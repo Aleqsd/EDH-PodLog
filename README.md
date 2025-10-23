@@ -107,6 +107,7 @@ See `backend/README.md` for more detail on testing and contributing changes to t
   - `make log-db` pour `journalctl -u mongod`.  
   - `make log-back` pour `journalctl -u edh-podlog`.  
   - `make log-front` pour `tail -f /var/log/nginx/access.log /var/log/nginx/error.log`.  
+  - Each command tails `/root/EDH-PodLog/{db,back,front}.log`. Run `sudo scripts/configure-vps-logs.sh` once to install systemd overrides that append directly to those files (set `LOG_ROOT=/path` to customize). The script will also prompt you to point Nginx access/error logs at this directory for `front.log`.  
   - Deck sync requests emit structured summaries (counts, success/failure, persistence status) in `journalctl -u edh-podlog`.
 - **Frontend on Netlify**  
   - Production deploy: `make front-build` then `netlify deploy --prod --dir frontend/public --site <SITE_ID>` (requires `NETLIFY_AUTH_TOKEN` or `netlify login`).  
@@ -121,5 +122,6 @@ See `backend/README.md` for more detail on testing and contributing changes to t
 
 - `frontend/scripts/generate-config.mjs` builds the runtime config injected into the static bundle.
 - `backend/scripts/generate_openapi.py` refreshes `backend/openapi.json` for documentation consumers.
+- `scripts/configure-vps-logs.sh` installs systemd overrides so backend and Mongo logs append to `/root/EDH-PodLog/*.log` (run with sudo).
 
 Happy logging!
