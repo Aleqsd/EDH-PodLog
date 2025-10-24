@@ -66,7 +66,7 @@ class MockElement {
     this.hidden = false;
     this.disabled = false;
     this.eventListeners = new Map();
-    this.innerHTML = "";
+    this._innerHTML = "";
     this._textContent = textContent ?? "";
     this._classList = new Set();
     this.classList = new MockClassList(this);
@@ -151,6 +151,7 @@ class MockElement {
       this.ownerDocument.registerElement(child);
     }
     this.children.push(child);
+    this._innerHTML = "";
     return child;
   }
 
@@ -227,6 +228,23 @@ class MockElement {
     }
     const parts = selector.trim().split(/\s+/u);
     return this._querySelectorInternal(parts, 0);
+  }
+
+  get innerHTML() {
+    return this._innerHTML;
+  }
+
+  set innerHTML(value) {
+    const next = value == null ? "" : String(value);
+    this._innerHTML = next;
+    if (next === "") {
+      this.children.forEach((child) => {
+        if (child instanceof MockElement) {
+          child.parentNode = null;
+        }
+      });
+      this.children = [];
+    }
   }
 }
 
@@ -320,6 +338,60 @@ class MockDocument {
 }
 
 const createElement = (tagName, options) => new MockElement(tagName, options);
+
+const createPlayerTemplate = () => {
+  const template = createElement("template", { id: "playerRowTemplate" });
+  template.content = {
+    cloneNode() {
+      const row = createElement("li", { className: "player-row" });
+
+      const head = createElement("div", { className: "player-row-head" });
+      const labels = createElement("div", { className: "player-row-labels" });
+      const index = createElement("span", { className: "player-index" });
+      labels.appendChild(index);
+
+      const ownerToggle = createElement("label", { className: "player-owner-toggle" });
+      const ownerRadio = createElement("input", { className: "player-owner-radio" });
+      ownerRadio.setAttribute("type", "radio");
+      ownerToggle.append(ownerRadio, createElement("span"));
+      labels.appendChild(ownerToggle);
+
+      const controls = createElement("div", { className: "player-row-controls" });
+      ["move-up", "move-down", "remove"].forEach((action) => {
+        const btn = createElement("button", { className: "icon-button" });
+        btn.setAttribute("data-action", action);
+        controls.appendChild(btn);
+      });
+
+      head.append(labels, controls);
+
+      const fields = createElement("div", { className: "player-fields" });
+      const nameField = createElement("label", { className: "player-field" });
+      nameField.append(createElement("span"), createElement("input", { className: "player-name-input" }));
+      fields.appendChild(nameField);
+
+      const deckField = createElement("div", { className: "player-deck-field" });
+      const manualLabel = createElement("label", { className: "player-field player-deck-manual" });
+      manualLabel.append(createElement("span"), createElement("input", { className: "player-deck-input" }));
+      const selectLabel = createElement("label", { className: "player-field player-deck-select" });
+      selectLabel.append(createElement("span"), createElement("select", { className: "player-deck-select-input" }));
+      deckField.append(manualLabel, selectLabel);
+      fields.appendChild(deckField);
+
+      row.append(head, fields);
+
+      return {
+        querySelector(selector) {
+          if (selector === ".player-row") {
+            return row;
+          }
+          return row.querySelector(selector);
+        },
+      };
+    },
+  };
+  return template;
+};
 
 const createLocalStorage = () => {
   const store = new Map();
@@ -498,4 +570,140 @@ test("decks controller requests cached decks when integration has no local data"
   assert.equal(deckCollectionEmpty.classList.contains("is-visible"), true);
   assert.equal(deckBulkDelete.disabled, true);
   assert.equal(deckBulkDelete.classList.contains("is-hidden"), true);
+});
+
+test("dashboard controller initialises pod composition with four default players", async () => {
+  const toggleBtn = createElement("button", { id: "gameSetupToggle" });
+  const container = createElement("div", { id: "gameSetupContainer" });
+  container.setAttribute("hidden", "hidden");
+  container.hasAttribute = (name) => container.attributes.has(name);
+  const setupForm = createElement("form", { id: "gameSetupForm" });
+  setupForm.reset = () => {};
+  const playersList = createElement("ol", { id: "gamePlayersList" });
+  const playerTemplate = createPlayerTemplate();
+  const addPlayerButton = createElement("button", { id: "addPlayerButton" });
+  const knownPlayers = createElement("datalist", { id: "knownPlayers" });
+  const summary = createElement("div", { id: "gameSummary" });
+  const summaryList = createElement("ul", { id: "gameSummaryList" });
+  const editPlayersButton = createElement("button", { id: "editPlayersButton" });
+  const startGameButton = createElement("button", { id: "startGameButton" });
+  const openResultButton = createElement("button", { id: "openResultButton" });
+  const resultForm = createElement("form", { id: "gameResultForm" });
+  resultForm.reset = () => {};
+  const resultGrid = createElement("div", { id: "gameResultGrid" });
+  const cancelResultButton = createElement("button", { id: "cancelResultButton" });
+  const status = createElement("p", { id: "gameStatus" });
+  const historyEmpty = createElement("div", { id: "gameHistoryEmpty" });
+  const historyList = createElement("ol", { id: "gameHistoryList" });
+
+  const elementsById = {
+    gameSetupToggle: toggleBtn,
+    gameSetupContainer: container,
+    gameSetupForm: setupForm,
+    gamePlayersList: playersList,
+    playerRowTemplate: playerTemplate,
+    addPlayerButton,
+    knownPlayers,
+    gameSummary: summary,
+    gameSummaryList: summaryList,
+    editPlayersButton,
+    startGameButton,
+    openResultButton,
+    gameResultForm: resultForm,
+    gameResultGrid: resultGrid,
+    cancelResultButton,
+    gameStatus: status,
+    gameHistoryEmpty: historyEmpty,
+    gameHistoryList: historyList,
+  };
+
+  await setupControllerRuntime({
+    page: "dashboard",
+    elementsById,
+    controllerScripts: ["../public/js/controllers/dashboard.js"],
+  });
+
+  assert.equal(playersList.children.length, 4);
+  const nameValues = playersList.children.map((row) =>
+    row.querySelector(".player-name-input")?.value ?? "",
+  );
+  assert.deepEqual(nameValues, ["Joueur 1", "Joueur 2", "Joueur 3", "Joueur 4"]);
+  assert.equal(playersList.children[0].classList.contains("is-owner"), true);
+  const ownerChecks = playersList.children.map(
+    (row) => row.querySelector(".player-owner-radio")?.checked ?? false,
+  );
+  assert.equal(ownerChecks[0], true);
+  assert.equal(ownerChecks.slice(1).every((flag) => flag === false), true);
+});
+
+test("dashboard controller records additional players into the known list after confirmation", async () => {
+  const toggleBtn = createElement("button", { id: "gameSetupToggle" });
+  const container = createElement("div", { id: "gameSetupContainer" });
+  container.setAttribute("hidden", "hidden");
+  container.hasAttribute = (name) => container.attributes.has(name);
+  const setupForm = createElement("form", { id: "gameSetupForm" });
+  setupForm.reset = () => {};
+  const playersList = createElement("ol", { id: "gamePlayersList" });
+  const playerTemplate = createPlayerTemplate();
+  const addPlayerButton = createElement("button", { id: "addPlayerButton" });
+  const knownPlayers = createElement("datalist", { id: "knownPlayers" });
+  const summary = createElement("div", { id: "gameSummary" });
+  summary.hidden = true;
+  const summaryList = createElement("ul", { id: "gameSummaryList" });
+  const editPlayersButton = createElement("button", { id: "editPlayersButton" });
+  const startGameButton = createElement("button", { id: "startGameButton" });
+  const openResultButton = createElement("button", { id: "openResultButton" });
+  const resultForm = createElement("form", { id: "gameResultForm" });
+  resultForm.reset = () => {};
+  const resultGrid = createElement("div", { id: "gameResultGrid" });
+  const cancelResultButton = createElement("button", { id: "cancelResultButton" });
+  const status = createElement("p", { id: "gameStatus" });
+  const historyEmpty = createElement("div", { id: "gameHistoryEmpty" });
+  const historyList = createElement("ol", { id: "gameHistoryList" });
+
+  const elementsById = {
+    gameSetupToggle: toggleBtn,
+    gameSetupContainer: container,
+    gameSetupForm: setupForm,
+    gamePlayersList: playersList,
+    playerRowTemplate: playerTemplate,
+    addPlayerButton,
+    knownPlayers,
+    gameSummary: summary,
+    gameSummaryList: summaryList,
+    editPlayersButton,
+    startGameButton,
+    openResultButton,
+    gameResultForm: resultForm,
+    gameResultGrid: resultGrid,
+    cancelResultButton,
+    gameStatus: status,
+    gameHistoryEmpty: historyEmpty,
+    gameHistoryList: historyList,
+  };
+
+  await setupControllerRuntime({
+    page: "dashboard",
+    elementsById,
+    controllerScripts: ["../public/js/controllers/dashboard.js"],
+  });
+
+  toggleBtn.dispatchEvent({ type: "click" });
+  addPlayerButton.dispatchEvent({ type: "click" });
+
+  assert.equal(playersList.children.length, 5);
+  const extraRow = playersList.children[playersList.children.length - 1];
+  const nameInput = extraRow.querySelector(".player-name-input");
+  nameInput.value = "Alice Example";
+  nameInput.dispatchEvent({ type: "input", target: nameInput });
+
+  setupForm.dispatchEvent({
+    type: "submit",
+    preventDefault() {},
+  });
+
+  assert.equal(summary.hidden, false);
+  assert.equal(knownPlayers.children.length, 1);
+  assert.equal(knownPlayers.children[0].value, "Alice Example");
+  assert.equal(status.textContent.includes("La composition"), true);
 });

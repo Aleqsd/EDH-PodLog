@@ -58,6 +58,49 @@
     .deck-rating-value-input {
       max-width: 4rem;
     }
+
+    .dashboard-main {
+      padding: var(--space-2xl) var(--space-md);
+    }
+
+    .dashboard-content {
+      gap: var(--space-lg);
+    }
+
+    .game-card,
+    .history-card {
+      padding: var(--space-lg);
+    }
+
+    .game-card-header,
+    .history-card-head {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .game-setup-form,
+    .game-result-form,
+    .game-summary {
+      padding: var(--space-md);
+    }
+
+    .player-row {
+      padding: var(--space-sm);
+    }
+
+    .game-setup-actions,
+    .game-actions,
+    .game-result-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .game-setup-actions > *,
+    .game-actions > *,
+    .game-result-actions > * {
+      width: 100%;
+      text-align: center;
+    }
   }
 
   @media (min-width: 960px) {

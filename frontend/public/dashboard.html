@@ -64,30 +64,123 @@
     </header>
 
     <main class="dashboard-main">
-      <section class="empty-state">
-        <div class="empty-icon" aria-hidden="true">⏱</div>
-        <h1>Bienvenue dans votre tableau de bord</h1>
-        <p>
-          Vous êtes connecté. Commencez par ajouter vos decks ou lancer votre
-          prochaine partie. Les statistiques apparaîtront ici à mesure que vous
-          enregistrerez vos données.
-        </p>
-        <div class="empty-actions">
-          <a class="primary-action action-with-icon" href="synchronisation.html">
-            <img
-              class="action-icon"
-              src="assets/moxfield_logo.png"
-              alt="Logo Moxfield"
-              width="24"
-              height="24"
-              loading="lazy"
-            />
-            <span>Synchroniser avec Moxfield</span>
-          </a>
-          <a class="secondary-action" href="#">Ajouter un deck</a>
-          <a class="secondary-action" href="#">Lancer une partie</a>
-        </div>
-      </section>
+      <div class="dashboard-content">
+        <section class="game-card" aria-labelledby="gameCardTitle">
+          <div class="game-card-header">
+            <div class="game-card-heading">
+              <h1 id="gameCardTitle">Planifier une partie</h1>
+              <p class="game-card-subtitle">
+                Organisez votre pod, choisissez les decks et archivez vos résultats en quelques
+                clics.
+              </p>
+            </div>
+            <button class="primary-action" type="button" id="gameSetupToggle">
+              Lancer une partie
+            </button>
+          </div>
+          <div class="game-card-body" id="gameSetupContainer" hidden>
+            <form class="game-setup-form" id="gameSetupForm" novalidate>
+              <div class="game-setup-header">
+                <h2>Composition du pod</h2>
+                <p>Les noms des quatre joueurs sont requis. Ajoutez des participants supplémentaires si besoin.</p>
+              </div>
+              <ol class="player-list" id="gamePlayersList"></ol>
+              <div class="game-setup-actions">
+                <button class="inline-button" type="button" id="addPlayerButton">
+                  Ajouter un joueur
+                </button>
+                <button class="primary-action" type="submit">Confirmer la composition</button>
+              </div>
+            </form>
+            <div class="game-summary" id="gameSummary" hidden>
+              <div class="game-summary-header">
+                <h2>Pod confirmé</h2>
+                <p>
+                  Vous pouvez démarrer la partie ou enregistrer directement un résultat.
+                </p>
+              </div>
+              <ul class="game-summary-list" id="gameSummaryList"></ul>
+              <div class="game-actions">
+                <button class="inline-button" type="button" id="editPlayersButton">
+                  Modifier les joueurs
+                </button>
+                <button class="secondary-action" type="button" id="startGameButton" disabled>
+                  Démarrer la partie (bientôt disponible)
+                </button>
+                <button class="primary-action" type="button" id="openResultButton">
+                  Enregistrer un résultat
+                </button>
+              </div>
+            </div>
+            <form class="game-result-form" id="gameResultForm" hidden>
+              <div class="game-result-header">
+                <h2>Classement de la partie</h2>
+                <p>
+                  Attribuez un rang à chaque joueur. Des ex æquo sont acceptés.
+                </p>
+              </div>
+              <div class="game-result-grid" id="gameResultGrid"></div>
+              <div class="game-result-actions">
+                <button class="secondary-action" type="button" id="cancelResultButton">
+                  Annuler
+                </button>
+                <button class="primary-action" type="submit">Enregistrer le résultat</button>
+              </div>
+            </form>
+            <p class="game-status" id="gameStatus" role="status" aria-live="polite"></p>
+          </div>
+          <template id="playerRowTemplate">
+            <li class="player-row" data-player-id="">
+              <div class="player-row-head">
+                <div class="player-row-labels">
+                  <span class="player-index"></span>
+                  <label class="player-owner-toggle">
+                    <input class="player-owner-radio" type="radio" name="gameOwner" />
+                    <span>Propriétaire du compte</span>
+                  </label>
+                </div>
+                <div class="player-row-controls">
+                  <button class="icon-button" data-action="move-up" type="button" aria-label="Monter ce joueur">↑</button>
+                  <button class="icon-button" data-action="move-down" type="button" aria-label="Descendre ce joueur">↓</button>
+                  <button class="icon-button" data-action="remove" type="button" aria-label="Retirer ce joueur">✕</button>
+                </div>
+              </div>
+              <div class="player-fields">
+                <label class="player-field">
+                  <span>Nom du joueur</span>
+                  <input class="player-name-input" type="text" required />
+                </label>
+                <div class="player-deck-field">
+                  <label class="player-field player-deck-manual" hidden>
+                    <span>Deck joué</span>
+                    <input class="player-deck-input" type="text" />
+                  </label>
+                  <label class="player-field player-deck-select" hidden>
+                    <span>Deck du propriétaire</span>
+                    <select class="player-deck-select-input"></select>
+                  </label>
+                </div>
+              </div>
+            </li>
+          </template>
+        </section>
+
+        <section class="history-card" id="gameHistorySection" aria-labelledby="gameHistoryTitle">
+          <div class="history-card-head">
+            <div>
+              <h2 id="gameHistoryTitle">Historique de parties</h2>
+              <p class="history-subtitle">
+                Consultez vos parties enregistrées et leurs classements.
+              </p>
+            </div>
+          </div>
+          <div class="history-empty" id="gameHistoryEmpty">
+            Aucune partie enregistrée pour le moment.
+          </div>
+          <ol class="game-history-list" id="gameHistoryList"></ol>
+        </section>
+      </div>
+      <datalist id="knownPlayers"></datalist>
     </main>
     <script
       src="https://accounts.google.com/gsi/client"
