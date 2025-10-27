@@ -602,13 +602,839 @@ const collectDeckCards = (deck) => {
   );
 };
 
+const DECK_PERSONAL_RATING_DEFAULT = 3;
+const DECK_PERSONAL_TAG_LIMIT = 7;
+
 const DECK_RATING_CATEGORIES = [
-  { key: "consistency", label: "Consitance" },
-  { key: "acceleration", label: "Accélération" },
-  { key: "interaction", label: "Interraction" },
-  { key: "resilience", label: "Résilience" },
-  { key: "finition", label: "Finition" },
+  {
+    key: "stability",
+    label: "Stabilité",
+    description:
+      "Ton deck fait-il ce qu'il est censé faire à chaque partie ? Évalue : la pioche régulière, la qualité et la cohérence de la base de mana, la redondance des cartes clés et la synergie interne. Un deck stable trouve ses pièces et développe son plan sans dépendre de la chance.",
+  },
+  {
+    key: "acceleration",
+    label: "Accélération",
+    description:
+      "Peux-tu rapidement prendre de l'avance ou mettre de la pression ? Évalue : les sources de ramp, les bursts de pioche, les cartes qui te donnent un tempo fort ou t'aident à passer la vitesse supérieure. Un deck bien accéléré ne subit pas le rythme des autres.",
+  },
+  {
+    key: "interaction",
+    label: "Interaction",
+    description:
+      "Sais-tu gérer ce que font les autres ? Évalue : les removals, contres, wraths, outils de stax, ou simplement ta capacité à peser dans les rapports de force. Un deck interactif ne laisse pas la table s'emballer sans réagir.",
+  },
+  {
+    key: "resilience",
+    label: "Résilience",
+    description:
+      "Que se passe-t-il quand tout s'effondre ? Évalue : la protection de ton board, la recursion, la capacité à repartir après une wrath ou un contretemps, le sustain à long terme. Un deck résilient encaisse les coups et revient plus fort.",
+  },
+  {
+    key: "finish",
+    label: "Finition",
+    description:
+      "Sais-tu vraiment gagner ? Évalue : la présence de conditions de victoire claires, les menaces létales, les combos, les tuteurs et la manière de conclure une partie. Un deck qui finit bien transforme ses avantages en victoire.",
+  },
+  {
+    key: "construction",
+    label: "Construction",
+    description:
+      "Ton deck sait-il où il va ? Évalue : la clarté du plan de jeu, la logique entre les cartes et la capacité du deck à rester fidèle à son identité. Un deck cohérent a une ligne directrice claire et reconnaissable.",
+  },
 ];
+
+const DECK_BRACKET_LEVELS = [
+  {
+    id: "1",
+    label: "1 · Exhibition",
+    description:
+      "Les joueurs attendent des decks qui privilégient un objectif, un thème ou une idée avant la puissance brute. Les règles de construction peuvent rester souples selon la table et tolérer des entorses sur les commandants ou la légalité. Les conditions de victoire sont très thématiques ou volontairement modestes et la partie sert surtout à montrer vos créations. Comptez au moins neuf tours de jeu avant de gagner ou perdre, le temps de mettre votre deck en scène.",
+  },
+  {
+    id: "2",
+    label: "2 · Core",
+    description:
+      "Les joueurs attendent des decks simples et peu optimisés, avec des cartes choisies pour la créativité ou le divertissement. Les conditions de victoire se construisent progressivement, sont visibles sur le board et restent faciles à interrompre. Le rythme est détendu et social : on joue proactivement en laissant chaque deck dérouler son plan. Les parties dépassent généralement les huit tours.",
+  },
+  {
+    id: "3",
+    label: "3 · Upgraded",
+    description:
+      "Les joueurs attendent des decks renforcés par des synergies solides et une haute qualité de cartes, capables de perturber les adversaires. Les game changers sont souvent des moteurs de valeur ou des sorts capables de clore la partie. Les conditions de victoire peuvent se déployer lors d'un tour explosif grâce aux ressources accumulées. Le gameplay alterne actions proactives et réponses : comptez au moins six tours avant la conclusion.",
+  },
+  {
+    id: "4",
+    label: "4 · Optimized",
+    description:
+      "Les joueurs attendent des decks très affûtés sans tomber dans la méta cEDH. Ils sont létaux, constants et rapides, conçus pour conclure la partie aussi vite que possible. Les game changers ressemblent à du mana rapide, des moteurs qui snowball, de la disruption gratuite ou des tuteurs. Les conditions de victoire restent variées mais toujours efficaces et instantanées. Les parties sont explosives et peuvent se terminer autour du quatrième tour.",
+  },
+  {
+    id: "5",
+    label: "5 · cEDH",
+    description:
+      "Les joueurs attendent des decks pensés avec précision pour la méta cEDH, capables de gagner très vite ou de générer des ressources écrasantes en s'appuyant sur l'expertise du format. Les conditions de victoire sont optimisées pour l'efficacité et la constance. Le jeu est technique, avec des marges d'erreur infimes et une priorité absolue donnée à la victoire. Une partie peut se terminer à n'importe quel tour.",
+  },
+];
+
+const DECK_PLAYSTYLE_OPTIONS = ["Aggro", "Midrange", "Control", "Combo", "Fun"];
+
+const DECK_TAG_OPTIONS = [
+  "+1/+1 Counter",
+  "-1/-1 Counter",
+  "Aristocrate",
+  "Bigspell",
+  "Blink",
+  "Chaos",
+  "Donjon",
+  "Enchanterement",
+  "Equipment",
+  "Flavor",
+  "Goodstuff",
+  "Group Hug",
+  "Hard Control",
+  "Landfall",
+  "Legendary",
+  "Reanimator",
+  "Staxx",
+  "Storm",
+  "Superfriend",
+  "Swarm",
+  "Token",
+  "Tribal",
+  "Vote",
+];
+
+const findDeckBracketDefinition = (id) => {
+  if (!id) {
+    return null;
+  }
+  const normalized = String(id).trim();
+  if (!normalized) {
+    return null;
+  }
+  return DECK_BRACKET_LEVELS.find((level) => level.id === normalized) ?? null;
+};
+
+const clampPersonalRatingValue = (value) => {
+  if (typeof clampDeckRatingValue === "function") {
+    return clampDeckRatingValue(value) ?? DECK_PERSONAL_RATING_DEFAULT;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DECK_PERSONAL_RATING_DEFAULT;
+  }
+  const rounded = Math.round(numeric);
+  if (rounded < 1) {
+    return 1;
+  }
+  if (rounded > 5) {
+    return 5;
+  }
+  return rounded;
+};
+
+const createEmptyDeckPersonalization = () => ({
+  ratings: {},
+  bracket: null,
+  playstyle: null,
+  tags: [],
+  personalTag: "",
+  notes: "",
+  updatedAt: null,
+});
+
+const cloneDeckPersonalization = (source) => {
+  const base = createEmptyDeckPersonalization();
+  if (!source || typeof source !== "object") {
+    return base;
+  }
+  if (source.ratings && typeof source.ratings === "object") {
+    base.ratings = { ...source.ratings };
+  }
+  if (typeof source.bracket === "string" && source.bracket.trim()) {
+    base.bracket = source.bracket.trim();
+  }
+  if (typeof source.playstyle === "string" && source.playstyle.trim()) {
+    base.playstyle = source.playstyle.trim();
+  }
+  if (Array.isArray(source.tags)) {
+    base.tags = source.tags.filter((tag) => typeof tag === "string" && tag.trim()).map((tag) => tag.trim());
+  }
+  if (typeof source.personalTag === "string") {
+    base.personalTag = source.personalTag.trim();
+  }
+  if (typeof source.notes === "string") {
+    base.notes = source.notes.trim();
+  }
+  if (typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt)) {
+    base.updatedAt = source.updatedAt;
+  }
+  return base;
+};
+
+const resolveDeckRatingValue = (personalization, key) => {
+  if (!personalization || !personalization.ratings) {
+    return clampPersonalRatingValue(DECK_PERSONAL_RATING_DEFAULT);
+  }
+  const raw = personalization.ratings[key];
+  if (typeof raw === "undefined") {
+    return clampPersonalRatingValue(DECK_PERSONAL_RATING_DEFAULT);
+  }
+  return clampPersonalRatingValue(raw);
+};
+
+let deckPersonalizationBackdrop = null;
+let deckPersonalizationModal = null;
+let deckPersonalizationForm = null;
+let deckPersonalizationSaveBtn = null;
+let deckPersonalizationCancelBtn = null;
+let deckPersonalizationCloseBtn = null;
+let deckPersonalizationStatusEl = null;
+let deckPersonalizationRatingControls = new Map();
+let deckPersonalizationRadar = null;
+let deckPersonalizationTagInputs = [];
+let deckPersonalizationBracketInputs = [];
+let deckPersonalizationPlaystyleSelect = null;
+let deckPersonalizationPersonalTagInput = null;
+let deckPersonalizationNotesInput = null;
+let deckPersonalizationTagLimitHint = null;
+let deckPersonalizationContext = null;
+let deckPersonalizationKeydownHandler = null;
+
+const setDeckPersonalizationStatus = (message, tone = "neutral") => {
+  if (!deckPersonalizationStatusEl) {
+    return;
+  }
+  const baseClass = "deck-personal-status";
+  deckPersonalizationStatusEl.className = baseClass;
+  if (message && tone) {
+    deckPersonalizationStatusEl.classList.add(`is-${tone}`);
+  }
+  deckPersonalizationStatusEl.textContent = message ?? "";
+  deckPersonalizationStatusEl.hidden = !message;
+};
+
+const updateDeckPersonalizationRadar = () => {
+  if (!deckPersonalizationRadar) {
+    return;
+  }
+  const values = DECK_RATING_CATEGORIES.map((category) => {
+    const control = deckPersonalizationRatingControls.get(category.key);
+    if (!control) {
+      return DECK_PERSONAL_RATING_DEFAULT;
+    }
+    return clampPersonalRatingValue(control.value);
+  });
+  deckPersonalizationRadar.update(values);
+};
+
+const refreshDeckPersonalizationTagState = () => {
+  const limit = DECK_PERSONAL_TAG_LIMIT;
+  const selected = deckPersonalizationTagInputs.filter((input) => input.checked);
+  const remaining = Math.max(0, limit - selected.length);
+  deckPersonalizationTagInputs.forEach((input) => {
+    if (!input.checked) {
+      input.disabled = selected.length >= limit;
+    } else {
+      input.disabled = false;
+    }
+  });
+  if (deckPersonalizationTagLimitHint) {
+    if (selected.length >= limit) {
+      deckPersonalizationTagLimitHint.textContent = `Limite atteinte : ${limit} tags sélectionnés.`;
+      deckPersonalizationTagLimitHint.classList.add("is-warning");
+    } else {
+      const noun = remaining > 1 ? "tags" : "tag";
+      deckPersonalizationTagLimitHint.textContent = `Encore ${remaining} ${noun} disponible${remaining > 1 ? "s" : ""}.`;
+      deckPersonalizationTagLimitHint.classList.remove("is-warning");
+    }
+  }
+};
+
+const ensureDeckPersonalizationModal = () => {
+  if (deckPersonalizationBackdrop) {
+    return;
+  }
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.id = "deckPersonalizationModal";
+  backdrop.setAttribute("aria-hidden", "true");
+
+  const modal = document.createElement("div");
+  modal.className = "modal deck-personal-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "deckPersonalizationTitle");
+
+  const header = document.createElement("header");
+  header.className = "modal-header";
+
+  const title = document.createElement("h2");
+  title.className = "modal-title";
+  title.id = "deckPersonalizationTitle";
+  title.textContent = "Modifier les informations personnelles du deck";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "modal-close";
+  closeBtn.setAttribute("aria-label", "Fermer");
+  closeBtn.innerHTML = "&times;";
+
+  header.append(title, closeBtn);
+
+  const body = document.createElement("div");
+  body.className = "modal-body";
+
+  const form = document.createElement("form");
+  form.className = "deck-personal-form";
+  form.id = "deckPersonalizationForm";
+  form.noValidate = true;
+  body.appendChild(form);
+
+  const status = document.createElement("p");
+  status.className = "deck-personal-status";
+  status.setAttribute("role", "status");
+  status.hidden = true;
+  form.appendChild(status);
+
+  const footer = document.createElement("footer");
+  footer.className = "modal-footer";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "modal-button secondary";
+  cancelBtn.textContent = "Annuler";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "modal-button primary";
+  saveBtn.textContent = "Enregistrer";
+
+  footer.append(cancelBtn, saveBtn);
+
+  modal.append(header, body, footer);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  deckPersonalizationBackdrop = backdrop;
+  deckPersonalizationModal = modal;
+  deckPersonalizationForm = form;
+  deckPersonalizationSaveBtn = saveBtn;
+  deckPersonalizationCancelBtn = cancelBtn;
+  deckPersonalizationCloseBtn = closeBtn;
+  deckPersonalizationStatusEl = status;
+
+  deckPersonalizationForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    handleDeckPersonalizationSubmit();
+  });
+  deckPersonalizationSaveBtn.addEventListener("click", () => {
+    if (deckPersonalizationForm) {
+      if (typeof deckPersonalizationForm.requestSubmit === "function") {
+        deckPersonalizationForm.requestSubmit();
+      } else {
+        deckPersonalizationForm.dispatchEvent(new Event("submit", { cancelable: true }));
+      }
+    }
+  });
+  deckPersonalizationCancelBtn.addEventListener("click", () => {
+    closeDeckPersonalizationModal("cancel");
+  });
+  deckPersonalizationCloseBtn.addEventListener("click", () => {
+    closeDeckPersonalizationModal("cancel");
+  });
+};
+
+const clearDeckPersonalizationModalState = () => {
+  deckPersonalizationRatingControls = new Map();
+  deckPersonalizationRadar = null;
+  deckPersonalizationTagInputs = [];
+  deckPersonalizationBracketInputs = [];
+  deckPersonalizationPlaystyleSelect = null;
+  deckPersonalizationPersonalTagInput = null;
+  deckPersonalizationNotesInput = null;
+  deckPersonalizationTagLimitHint = null;
+};
+
+const buildDeckPersonalizationRatingsSection = (personalization) => {
+  const section = document.createElement("section");
+  section.className = "deck-personal-section deck-personal-section-ratings";
+
+  const heading = document.createElement("h3");
+  heading.className = "deck-personal-section-title";
+  heading.textContent = "Radar stratégique";
+  section.appendChild(heading);
+
+  const layout = document.createElement("div");
+  layout.className = "deck-rating-layout deck-rating-layout-modal";
+  section.appendChild(layout);
+
+  const fields = document.createElement("div");
+  fields.className = "deck-rating-grid deck-rating-grid-modal";
+  layout.appendChild(fields);
+
+  const radarContainer = document.createElement("div");
+  radarContainer.className = "deck-radar-container deck-radar-container-modal";
+  layout.appendChild(radarContainer);
+
+  deckPersonalizationRatingControls = new Map();
+
+  DECK_RATING_CATEGORIES.forEach((category) => {
+    const field = document.createElement("label");
+    field.className = "deck-rating-field deck-rating-field-modal";
+
+    const label = document.createElement("span");
+    label.className = "deck-rating-label";
+    label.textContent = category.label;
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "1";
+    slider.max = "5";
+    slider.step = "1";
+    slider.className = "deck-rating-slider";
+    slider.setAttribute("aria-label", `${category.label} (note de 1 à 5)`);
+
+    const valueInput = document.createElement("input");
+    valueInput.type = "number";
+    valueInput.min = "1";
+    valueInput.max = "5";
+    valueInput.step = "1";
+    valueInput.inputMode = "numeric";
+    valueInput.className = "deck-rating-value-input";
+    valueInput.setAttribute("aria-label", `${category.label} (saisie numérique de 1 à 5)`);
+
+    const valueWrapper = document.createElement("span");
+    valueWrapper.className = "deck-rating-value";
+    valueWrapper.appendChild(valueInput);
+
+    const description = document.createElement("p");
+    description.className = "deck-rating-help";
+    description.textContent = category.description ?? "";
+
+    field.append(label, slider, valueWrapper, description);
+    fields.appendChild(field);
+
+    const control = {
+      slider,
+      input: valueInput,
+      value: DECK_PERSONAL_RATING_DEFAULT,
+      setValue(next) {
+        const sanitized = clampPersonalRatingValue(next);
+        control.value = sanitized;
+        slider.value = String(sanitized);
+        valueInput.value = String(sanitized);
+        updateDeckPersonalizationRadar();
+      },
+    };
+
+    slider.addEventListener("input", () => {
+      control.setValue(slider.value);
+    });
+    slider.addEventListener("change", () => {
+      control.setValue(slider.value);
+    });
+
+    valueInput.addEventListener("input", () => {
+      if (valueInput.value === "") {
+        return;
+      }
+      control.setValue(valueInput.value);
+    });
+    valueInput.addEventListener("change", () => {
+      control.setValue(valueInput.value);
+    });
+    valueInput.addEventListener("blur", () => {
+      if (valueInput.value === "") {
+        control.setValue(control.value);
+      }
+    });
+    valueInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        control.setValue(valueInput.value);
+        valueInput.blur();
+      }
+    });
+
+    deckPersonalizationRatingControls.set(category.key, control);
+  });
+
+  const radar = createRadarChartComponent(DECK_RATING_CATEGORIES);
+  if (radar) {
+    radarContainer.appendChild(radar.element);
+    deckPersonalizationRadar = radar;
+  }
+
+  DECK_RATING_CATEGORIES.forEach((category) => {
+    const control = deckPersonalizationRatingControls.get(category.key);
+    if (!control) {
+      return;
+    }
+    const initialValue = resolveDeckRatingValue(personalization, category.key);
+    control.setValue(initialValue);
+  });
+
+  return section;
+};
+
+const buildDeckPersonalizationProfileSection = (personalization) => {
+  const section = document.createElement("section");
+  section.className = "deck-personal-section deck-personal-section-profile";
+
+  const heading = document.createElement("h3");
+  heading.className = "deck-personal-section-title";
+  heading.textContent = "Profil de jeu";
+  section.appendChild(heading);
+
+  deckPersonalizationBracketInputs = [];
+
+  const syncBracketActiveState = () => {
+    deckPersonalizationBracketInputs.forEach((radio) => {
+      const container = radio.closest(".deck-bracket-option");
+      if (container) {
+        container.classList.toggle("is-active", radio.checked);
+      }
+    });
+  };
+
+  const bracketFieldset = document.createElement("fieldset");
+  bracketFieldset.className = "deck-bracket-fieldset";
+
+  const bracketLegend = document.createElement("legend");
+  bracketLegend.className = "deck-bracket-legend";
+  bracketLegend.textContent = "Bracket (1 à 5)";
+  bracketFieldset.appendChild(bracketLegend);
+
+  DECK_BRACKET_LEVELS.forEach((level) => {
+    const option = document.createElement("label");
+    option.className = "deck-bracket-option";
+
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "deckBracket";
+    input.value = level.id;
+    if (personalization.bracket && String(personalization.bracket) === level.id) {
+      input.checked = true;
+    }
+
+    const copy = document.createElement("div");
+    copy.className = "deck-bracket-copy";
+
+    const title = document.createElement("strong");
+    title.className = "deck-bracket-label";
+    title.textContent = level.label;
+
+    const description = document.createElement("p");
+    description.className = "deck-bracket-description";
+    description.textContent = level.description;
+
+    copy.append(title, description);
+    option.append(input, copy);
+    bracketFieldset.appendChild(option);
+    deckPersonalizationBracketInputs.push(input);
+    input.addEventListener("change", syncBracketActiveState);
+  });
+
+  section.appendChild(bracketFieldset);
+  syncBracketActiveState();
+
+  const playstyleField = document.createElement("label");
+  playstyleField.className = "deck-playstyle-field";
+
+  const playstyleLabel = document.createElement("span");
+  playstyleLabel.className = "deck-playstyle-label";
+  playstyleLabel.textContent = "Type de jeu (optionnel)";
+
+  const playstyleSelect = document.createElement("select");
+  playstyleSelect.className = "deck-playstyle-select";
+
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "— Aucun —";
+  playstyleSelect.appendChild(emptyOption);
+
+  DECK_PLAYSTYLE_OPTIONS.forEach((optionLabel) => {
+    const option = document.createElement("option");
+    option.value = optionLabel;
+    option.textContent = optionLabel;
+    playstyleSelect.appendChild(option);
+  });
+
+  if (personalization.playstyle) {
+    playstyleSelect.value = personalization.playstyle;
+  }
+
+  playstyleField.append(playstyleLabel, playstyleSelect);
+  section.appendChild(playstyleField);
+  deckPersonalizationPlaystyleSelect = playstyleSelect;
+
+  const tagWrapper = document.createElement("div");
+  tagWrapper.className = "deck-tags-wrapper";
+
+  const tagTitle = document.createElement("span");
+  tagTitle.className = "deck-tags-label";
+  tagTitle.textContent = "Tags (7 max)";
+  tagWrapper.appendChild(tagTitle);
+
+  const tagList = document.createElement("div");
+  tagList.className = "deck-tag-grid";
+  tagWrapper.appendChild(tagList);
+
+  const uniqueTags = new Set(DECK_TAG_OPTIONS);
+  if (Array.isArray(personalization.tags)) {
+    personalization.tags.forEach((tag) => {
+      if (typeof tag === "string") {
+        uniqueTags.add(tag);
+      }
+    });
+  }
+  const sortedTags = Array.from(uniqueTags).sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+
+  deckPersonalizationTagInputs = [];
+  sortedTags.forEach((tag) => {
+    const option = document.createElement("label");
+    option.className = "deck-tag-option";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = tag;
+    input.name = "deckTags";
+    if (Array.isArray(personalization.tags) && personalization.tags.includes(tag)) {
+      input.checked = true;
+    }
+
+    input.addEventListener("change", () => {
+      refreshDeckPersonalizationTagState();
+    });
+
+    const text = document.createElement("span");
+    text.className = "deck-tag-name";
+    text.textContent = tag;
+
+    option.append(input, text);
+    tagList.appendChild(option);
+    deckPersonalizationTagInputs.push(input);
+  });
+
+  deckPersonalizationTagLimitHint = document.createElement("p");
+  deckPersonalizationTagLimitHint.className = "deck-tag-limit-hint";
+  deckPersonalizationTagLimitHint.textContent = `Encore ${DECK_PERSONAL_TAG_LIMIT} tags disponibles.`;
+  tagWrapper.appendChild(deckPersonalizationTagLimitHint);
+
+  section.appendChild(tagWrapper);
+
+  const personalTagField = document.createElement("label");
+  personalTagField.className = "deck-personal-tag-field";
+
+  const personalTagLabel = document.createElement("span");
+  personalTagLabel.className = "deck-personal-tag-label";
+  personalTagLabel.textContent = "Tag personnel (visible uniquement ici)";
+
+  const personalTagInput = document.createElement("input");
+  personalTagInput.type = "text";
+  personalTagInput.maxLength = 40;
+  personalTagInput.className = "deck-personal-tag-input";
+  personalTagInput.placeholder = "Ex. 'Test IRL', 'Prêt', 'Tournoi'";
+  personalTagInput.value = personalization.personalTag ?? "";
+
+  personalTagField.append(personalTagLabel, personalTagInput);
+  section.appendChild(personalTagField);
+  deckPersonalizationPersonalTagInput = personalTagInput;
+
+  deckPersonalizationNotesInput = document.createElement("textarea");
+  deckPersonalizationNotesInput.className = "deck-personal-notes";
+  deckPersonalizationNotesInput.rows = 3;
+  deckPersonalizationNotesInput.maxLength = 1000;
+  deckPersonalizationNotesInput.placeholder = "Notes personnelles (optionnel)";
+  if (typeof personalization.notes === "string" && personalization.notes.trim().length > 0) {
+    deckPersonalizationNotesInput.value = personalization.notes.trim();
+  }
+  section.appendChild(deckPersonalizationNotesInput);
+
+  return section;
+};
+
+const populateDeckPersonalizationForm = (personalization) => {
+  if (!deckPersonalizationForm) {
+    return;
+  }
+  deckPersonalizationForm.innerHTML = "";
+
+  const intro = document.createElement("p");
+  intro.className = "deck-personal-intro";
+  intro.textContent =
+    "Ajustez votre lecture personnelle de ce deck. Ces informations sont stockées uniquement dans votre navigateur.";
+  deckPersonalizationForm.appendChild(intro);
+
+  const ratingsSection = buildDeckPersonalizationRatingsSection(personalization);
+  deckPersonalizationForm.appendChild(ratingsSection);
+
+  const profileSection = buildDeckPersonalizationProfileSection(personalization);
+  deckPersonalizationForm.appendChild(profileSection);
+
+  deckPersonalizationForm.appendChild(deckPersonalizationStatusEl);
+
+  setDeckPersonalizationStatus("", "neutral");
+  refreshDeckPersonalizationTagState();
+};
+
+const collectDeckPersonalizationData = () => {
+  const ratings = {};
+  DECK_RATING_CATEGORIES.forEach((category) => {
+    const control = deckPersonalizationRatingControls.get(category.key);
+    ratings[category.key] = control ? clampPersonalRatingValue(control.value) : DECK_PERSONAL_RATING_DEFAULT;
+  });
+
+  let bracket = null;
+  const selectedBracket = deckPersonalizationBracketInputs.find((input) => input.checked);
+  if (selectedBracket) {
+    bracket = selectedBracket.value;
+  }
+
+  let playstyle = null;
+  if (deckPersonalizationPlaystyleSelect) {
+    const raw = deckPersonalizationPlaystyleSelect.value;
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      playstyle = raw.trim();
+    }
+  }
+
+  const tags = deckPersonalizationTagInputs
+    .filter((input) => input.checked)
+    .map((input) => input.value)
+    .slice(0, DECK_PERSONAL_TAG_LIMIT);
+
+  let personalTag = "";
+  if (deckPersonalizationPersonalTagInput) {
+    personalTag = deckPersonalizationPersonalTagInput.value.trim();
+  }
+
+  let notes = "";
+  if (deckPersonalizationNotesInput) {
+    notes = deckPersonalizationNotesInput.value.trim();
+  }
+
+  return {
+    ratings,
+    bracket,
+    playstyle,
+    tags,
+    personalTag,
+    notes,
+  };
+};
+
+const handleDeckPersonalizationSubmit = () => {
+  if (!deckPersonalizationContext || !deckPersonalizationSaveBtn) {
+    return;
+  }
+  const deckId = deckPersonalizationContext.deckId;
+  if (!deckId) {
+    return;
+  }
+
+  setDeckPersonalizationStatus("Enregistrement en cours…", "neutral");
+  deckPersonalizationSaveBtn.disabled = true;
+  deckPersonalizationSaveBtn.classList.add("is-loading");
+
+  try {
+    const payload = collectDeckPersonalizationData();
+    const persisted = setDeckPersonalization(deckId, payload) ?? payload;
+    if (typeof deckPersonalizationContext.onSubmit === "function") {
+      deckPersonalizationContext.onSubmit(persisted);
+    }
+    setDeckPersonalizationStatus("Modifications enregistrées.", "success");
+    closeDeckPersonalizationModal("submit");
+  } catch (error) {
+    console.error("Unable to persist deck personalization", error);
+    if (error && error.code === "STORAGE_QUOTA") {
+      setDeckPersonalizationStatus(
+        "Stockage local saturé : impossible d'enregistrer ces informations.",
+        "error"
+      );
+    } else {
+      setDeckPersonalizationStatus(
+        "Impossible d'enregistrer les informations personnelles pour le moment.",
+        "error"
+      );
+    }
+    deckPersonalizationSaveBtn.disabled = false;
+    deckPersonalizationSaveBtn.classList.remove("is-loading");
+  }
+};
+
+const closeDeckPersonalizationModal = (reason = "close") => {
+  if (!deckPersonalizationBackdrop) {
+    return;
+  }
+  deckPersonalizationBackdrop.classList.remove("is-visible");
+  deckPersonalizationBackdrop.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+  setDeckPersonalizationStatus("", "neutral");
+  clearDeckPersonalizationModalState();
+  if (deckPersonalizationKeydownHandler) {
+    document.removeEventListener("keydown", deckPersonalizationKeydownHandler);
+    deckPersonalizationKeydownHandler = null;
+  }
+  const context = deckPersonalizationContext;
+  deckPersonalizationContext = null;
+  deckPersonalizationSaveBtn?.classList.remove("is-loading");
+  if (deckPersonalizationSaveBtn) {
+    deckPersonalizationSaveBtn.disabled = false;
+  }
+  if (reason === "cancel" && context && typeof context.onCancel === "function") {
+    context.onCancel();
+  }
+};
+
+const openDeckPersonalizationModal = ({ deckId, deckName, basePersonalization, onSubmit, onCancel }) => {
+  if (!deckId) {
+    return;
+  }
+  ensureDeckPersonalizationModal();
+  if (!deckPersonalizationBackdrop) {
+    return;
+  }
+
+  const personalization = cloneDeckPersonalization(basePersonalization);
+  deckPersonalizationContext = {
+    deckId,
+    deckName: deckName ?? "",
+    onSubmit,
+    onCancel,
+  };
+
+  populateDeckPersonalizationForm(personalization);
+
+  if (deckPersonalizationBackdrop) {
+    deckPersonalizationBackdrop.classList.add("is-visible");
+    deckPersonalizationBackdrop.setAttribute("aria-hidden", "false");
+  }
+  document.body.classList.add("modal-open");
+
+  if (deckPersonalizationKeydownHandler) {
+    document.removeEventListener("keydown", deckPersonalizationKeydownHandler);
+  }
+  deckPersonalizationKeydownHandler = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDeckPersonalizationModal("cancel");
+    }
+  };
+  document.addEventListener("keydown", deckPersonalizationKeydownHandler);
+
+  if (deckPersonalizationModal) {
+    const focusTarget =
+      deckPersonalizationModal.querySelector(".deck-personal-section input, .deck-personal-section select") ??
+      deckPersonalizationCloseBtn;
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus({ preventScroll: false });
+    }
+  }
+};
 
 const COLOR_DISTRIBUTION_META = {
   W: { label: "Blanc", token: "--color-mana-white" },
@@ -1652,190 +2478,102 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   const card = document.createElement("article");
   card.className = "deck-stats-card deck-stats-card-evaluation";
 
+  const header = document.createElement("header");
+  header.className = "deck-personal-card-header";
+
   const title = document.createElement("h3");
   title.className = "deck-stats-card-title";
-  title.textContent = "Radar stratégique";
-  card.appendChild(title);
+  title.textContent = "Profil stratégique";
 
-  if (deckName) {
-    const subtitle = document.createElement("p");
-    subtitle.className = "deck-stats-card-subtitle";
-    subtitle.textContent = `Ajustez manuellement les notes du deck « ${deckName} ».`;
-    card.appendChild(subtitle);
-  } else {
-    const subtitle = document.createElement("p");
-    subtitle.className = "deck-stats-card-subtitle";
-    subtitle.textContent = "Ajustez manuellement les notes de ce deck.";
-    card.appendChild(subtitle);
-  }
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "deck-personal-edit";
+  editBtn.textContent = "Modifier";
 
-  const stored = getDeckEvaluation(deckId) ?? {};
-  const ratings = {};
-  const defaultValue = 3;
-  const initialValues = DECK_RATING_CATEGORIES.map((category) => {
-    const raw = stored?.[category.key];
-    const numeric = Number(raw);
-    const base = Number.isFinite(numeric) ? Math.min(Math.max(Math.round(numeric), 1), 5) : defaultValue;
-    ratings[category.key] = base;
-    return base;
+  header.append(title, editBtn);
+  card.appendChild(header);
+
+  const subtitle = document.createElement("p");
+  subtitle.className = "deck-stats-card-subtitle";
+  subtitle.textContent = deckName
+    ? `Affinez votre lecture du deck « ${deckName} ».`
+    : "Affinez votre lecture de ce deck.";
+  card.appendChild(subtitle);
+
+  const summaryLayout = document.createElement("div");
+  summaryLayout.className = "deck-rating-summary-layout";
+  card.appendChild(summaryLayout);
+
+  const ratingList = document.createElement("dl");
+  ratingList.className = "deck-rating-summary";
+  summaryLayout.appendChild(ratingList);
+
+  const ratingValueEls = new Map();
+  DECK_RATING_CATEGORIES.forEach((category) => {
+    const item = document.createElement("div");
+    item.className = "deck-rating-summary-item";
+    if (category.description) {
+      item.title = category.description;
+    }
+
+    const label = document.createElement("dt");
+    label.className = "deck-rating-summary-label";
+    label.textContent = category.label;
+
+    const value = document.createElement("dd");
+    value.className = "deck-rating-summary-value";
+    value.textContent = "-";
+
+    item.append(label, value);
+    ratingList.appendChild(item);
+    ratingValueEls.set(category.key, value);
   });
+
+  const radarContainer = document.createElement("div");
+  radarContainer.className = "deck-radar-container deck-radar-container-inline";
+  summaryLayout.appendChild(radarContainer);
 
   const radar = createRadarChartComponent(DECK_RATING_CATEGORIES);
   if (radar) {
-    radar.update(initialValues);
-  }
-
-  const layout = document.createElement("div");
-  layout.className = "deck-rating-layout";
-
-  const fields = document.createElement("div");
-  fields.className = "deck-rating-grid";
-  layout.appendChild(fields);
-
-  if (radar) {
-    const radarContainer = document.createElement("div");
-    radarContainer.className = "deck-radar-container";
     radarContainer.appendChild(radar.element);
-    layout.appendChild(radarContainer);
   }
 
-  DECK_RATING_CATEGORIES.forEach((category) => {
-    const field = document.createElement("label");
-    field.className = "deck-rating-field";
+  const infoSection = document.createElement("div");
+  infoSection.className = "deck-personal-info";
+  card.appendChild(infoSection);
 
-    const label = document.createElement("span");
-    label.className = "deck-rating-label";
-    label.textContent = category.label;
+  const metaList = document.createElement("dl");
+  metaList.className = "deck-personal-meta";
+  infoSection.appendChild(metaList);
 
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "1";
-    slider.max = "5";
-    slider.step = "1";
-    slider.value = String(ratings[category.key]);
-    slider.className = "deck-rating-slider";
-    slider.dataset.ratingKey = category.key;
-    slider.setAttribute("aria-label", `${category.label} (note de 1 à 5)`);
+  const personalBracketDescriptionEl = document.createElement("p");
+  personalBracketDescriptionEl.className = "deck-personal-bracket-note";
+  personalBracketDescriptionEl.hidden = true;
+  infoSection.appendChild(personalBracketDescriptionEl);
 
-    const valueInput = document.createElement("input");
-    valueInput.type = "number";
-    valueInput.min = "1";
-    valueInput.max = "5";
-    valueInput.step = "1";
-    valueInput.inputMode = "numeric";
-    valueInput.value = String(ratings[category.key]);
-    valueInput.className = "deck-rating-value-input";
-    valueInput.setAttribute("aria-label", `${category.label} (saisie numérique de 1 à 5)`);
+  const remoteBracketJustificationEl = document.createElement("p");
+  remoteBracketJustificationEl.className =
+    "deck-personal-bracket-note deck-personal-bracket-note-remote";
+  remoteBracketJustificationEl.hidden = true;
+  infoSection.appendChild(remoteBracketJustificationEl);
 
-    const valueWrapper = document.createElement("span");
-    valueWrapper.className = "deck-rating-value";
-    valueWrapper.appendChild(valueInput);
+  const tagsSection = document.createElement("div");
+  tagsSection.className = "deck-personal-tags-section";
+  infoSection.appendChild(tagsSection);
 
-    field.appendChild(label);
-    field.appendChild(slider);
-    field.appendChild(valueWrapper);
-    fields.appendChild(field);
+  const tagsTitle = document.createElement("span");
+  tagsTitle.className = "deck-personal-tags-title";
+  tagsTitle.textContent = "Tags personnels";
+  tagsSection.appendChild(tagsTitle);
 
-    const normalizeRating = (rawValue) => {
-      const numeric = Number(rawValue);
-      if (Number.isFinite(numeric)) {
-        return Math.min(Math.max(Math.round(numeric), 1), 5);
-      }
-      const existing = ratings[category.key];
-      return Number.isFinite(existing) ? existing : defaultValue;
-    };
+  const tagsList = document.createElement("div");
+  tagsList.className = "deck-personal-tags";
+  tagsSection.appendChild(tagsList);
 
-    const applyAndRender = (rawValue) => {
-      const clamped = normalizeRating(rawValue);
-      ratings[category.key] = clamped;
-      slider.value = String(clamped);
-      valueInput.value = String(clamped);
-      if (radar) {
-        const nextValues = DECK_RATING_CATEGORIES.map((cat) => ratings[cat.key]);
-        radar.update(nextValues);
-      }
-    };
-
-    const persistRatings = () => {
-      try {
-        const persisted = setDeckEvaluation(deckId, ratings) ?? ratings;
-        Object.assign(ratings, persisted);
-      } catch (error) {
-        console.warn("Impossible d'enregistrer l'évaluation du deck :", error);
-      }
-      applyAndRender(ratings[category.key]);
-    };
-
-    slider.addEventListener("input", () => {
-      applyAndRender(slider.value);
-    });
-
-    slider.addEventListener("change", () => {
-      applyAndRender(slider.value);
-      persistRatings();
-    });
-
-    valueInput.addEventListener("input", () => {
-      if (valueInput.value === "") {
-        return;
-      }
-      applyAndRender(valueInput.value);
-    });
-
-    valueInput.addEventListener("change", () => {
-      applyAndRender(valueInput.value);
-      persistRatings();
-    });
-
-    valueInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        valueInput.blur();
-      }
-    });
-  });
-
-  card.appendChild(layout);
-
-  const metaItems = [];
-  if (bracketInfo.bracket) {
-    metaItems.push({
-      label: "Bracket",
-      value: bracketInfo.bracket,
-    });
-  }
-  if (gameChangerCount !== null && gameChangerCount > 0) {
-    metaItems.push({
-      label: "Game changers",
-      value: NUMBER_FORMAT.format(gameChangerCount),
-    });
-  }
-
-  if (metaItems.length > 0) {
-    const meta = document.createElement("dl");
-    meta.className = "deck-profile-meta";
-    metaItems.forEach((item) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "deck-profile-meta-item";
-      const dt = document.createElement("dt");
-      dt.className = "deck-profile-meta-label";
-      dt.textContent = item.label;
-      const dd = document.createElement("dd");
-      dd.className = "deck-profile-meta-value";
-      dd.textContent = item.value;
-      wrapper.appendChild(dt);
-      wrapper.appendChild(dd);
-      meta.appendChild(wrapper);
-    });
-    card.appendChild(meta);
-  }
-
-  if (bracketInfo.justification) {
-    const justification = document.createElement("p");
-    justification.className = "deck-profile-justification";
-    justification.textContent = bracketInfo.justification;
-    card.appendChild(justification);
-  }
+  const notesDisplay = document.createElement("p");
+  notesDisplay.className = "deck-personal-notes-display";
+  notesDisplay.hidden = true;
+  infoSection.appendChild(notesDisplay);
 
   if (gameChangerCards.length > 0) {
     const badges = document.createElement("div");
@@ -1860,6 +2598,154 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   note.className = "deck-rating-footnote";
   note.textContent = "Les évaluations sont stockées localement dans votre navigateur.";
   card.appendChild(note);
+
+  let currentPersonalization = cloneDeckPersonalization(
+    getDeckPersonalization(deckId) ?? createEmptyDeckPersonalization()
+  );
+
+  const renderRatings = () => {
+    const values = DECK_RATING_CATEGORIES.map((category) => {
+      const value = resolveDeckRatingValue(currentPersonalization, category.key);
+      const valueEl = ratingValueEls.get(category.key);
+      if (valueEl) {
+        valueEl.textContent = String(value);
+      }
+      return value;
+    });
+    if (radar) {
+      radar.update(values);
+    }
+  };
+
+  const renderMeta = () => {
+    metaList.innerHTML = "";
+    personalBracketDescriptionEl.hidden = true;
+    personalBracketDescriptionEl.textContent = "";
+    remoteBracketJustificationEl.hidden = true;
+    remoteBracketJustificationEl.textContent = "";
+
+    const metaItems = [];
+
+    if (currentPersonalization.bracket) {
+      const definition = findDeckBracketDefinition(currentPersonalization.bracket);
+      const label = definition ? definition.label : `Bracket ${currentPersonalization.bracket}`;
+      metaItems.push({
+        label: "Bracket (perso)",
+        value: label,
+      });
+      if (definition?.description) {
+        personalBracketDescriptionEl.textContent = definition.description;
+        personalBracketDescriptionEl.hidden = false;
+      }
+    }
+
+    if (currentPersonalization.playstyle) {
+      metaItems.push({
+        label: "Type de jeu",
+        value: currentPersonalization.playstyle,
+      });
+    }
+
+    if (bracketInfo.bracket) {
+      metaItems.push({
+        label: "Bracket (Moxfield)",
+        value: bracketInfo.bracket,
+      });
+    }
+
+    if (gameChangerCount !== null && gameChangerCount > 0) {
+      metaItems.push({
+        label: "Game changers",
+        value: NUMBER_FORMAT.format(gameChangerCount),
+      });
+    }
+
+    metaItems.forEach((item) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "deck-personal-meta-item";
+      const dt = document.createElement("dt");
+      dt.className = "deck-personal-meta-label";
+      dt.textContent = item.label;
+      const dd = document.createElement("dd");
+      dd.className = "deck-personal-meta-value";
+      dd.textContent = item.value;
+      wrapper.append(dt, dd);
+      metaList.appendChild(wrapper);
+    });
+
+    if (bracketInfo.justification) {
+      remoteBracketJustificationEl.textContent = bracketInfo.justification;
+      remoteBracketJustificationEl.hidden = false;
+    }
+  };
+
+  const renderTags = () => {
+    tagsList.innerHTML = "";
+    const assignedTags = Array.isArray(currentPersonalization.tags)
+      ? currentPersonalization.tags
+      : [];
+    const personalTag =
+      typeof currentPersonalization.personalTag === "string"
+        ? currentPersonalization.personalTag.trim()
+        : "";
+
+    if (assignedTags.length === 0 && !personalTag) {
+      const empty = document.createElement("span");
+      empty.className = "deck-personal-tag deck-personal-tag-empty";
+      empty.textContent = "Aucun tag sélectionné.";
+      tagsList.appendChild(empty);
+      return;
+    }
+
+    assignedTags.forEach((tag) => {
+      const badge = document.createElement("span");
+      badge.className = "deck-personal-tag";
+      badge.textContent = tag;
+      tagsList.appendChild(badge);
+    });
+
+    if (personalTag) {
+      const badge = document.createElement("span");
+      badge.className = "deck-personal-tag deck-personal-tag-custom";
+      badge.textContent = personalTag;
+      tagsList.appendChild(badge);
+    }
+  };
+
+  const renderNotes = () => {
+    const notes =
+      typeof currentPersonalization.notes === "string"
+        ? currentPersonalization.notes.trim()
+        : "";
+    if (notes) {
+      notesDisplay.textContent = `Notes personnelles : ${notes}`;
+      notesDisplay.hidden = false;
+    } else {
+      notesDisplay.textContent = "";
+      notesDisplay.hidden = true;
+    }
+  };
+
+  const applyPersonalization = (next) => {
+    currentPersonalization = cloneDeckPersonalization(next);
+    renderRatings();
+    renderMeta();
+    renderTags();
+    renderNotes();
+  };
+
+  applyPersonalization(currentPersonalization);
+
+  editBtn.addEventListener("click", () => {
+    openDeckPersonalizationModal({
+      deckId,
+      deckName,
+      basePersonalization: currentPersonalization,
+      onSubmit: (persisted) => {
+        applyPersonalization(persisted);
+      },
+    });
+  });
 
   return card;
 };

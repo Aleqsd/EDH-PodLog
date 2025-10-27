@@ -2072,6 +2072,169 @@
   gap: 1.25rem;
 }
 
+.deck-personal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.deck-personal-edit {
+  padding: 0.35rem 0.9rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--color-border-soft) 45%, transparent);
+  background: color-mix(in srgb, var(--color-base-080c18) 68%, transparent);
+  color: var(--color-text-subtle);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.deck-personal-edit:hover,
+.deck-personal-edit:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-border-brand) 55%, transparent);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
+}
+
+.deck-rating-summary-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.deck-rating-summary {
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.deck-rating-summary-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-base-080c18) 72%, transparent);
+}
+
+.deck-rating-summary-label {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-subtle);
+}
+
+.deck-rating-summary-value {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.deck-radar-container-inline {
+  justify-self: center;
+}
+
+.deck-personal-info {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.deck-personal-meta {
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.deck-personal-meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.deck-personal-meta-label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-subtle);
+}
+
+.deck-personal-meta-value {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.deck-personal-bracket-note {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-text-subtle);
+}
+
+.deck-personal-bracket-note-remote {
+  color: var(--color-text-subtle-soft);
+}
+
+.deck-personal-tags-section {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.deck-personal-tags-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-subtle);
+}
+
+.deck-personal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.deck-personal-tag {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-base-080c18) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border-soft) 35%, transparent);
+  font-size: 0.75rem;
+  color: var(--color-text-subtle-strong);
+}
+
+.deck-personal-tag-custom {
+  background: color-mix(in srgb, var(--color-brand-primary) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-border-brand) 45%, transparent);
+  color: var(--color-text-contrast-soft);
+}
+
+.deck-personal-tag-empty {
+  background: none;
+  border: 1px dashed color-mix(in srgb, var(--color-border-soft) 35%, transparent);
+  color: var(--color-text-subtle-soft);
+}
+
+.deck-personal-notes-display {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-text-subtle);
+  background: color-mix(in srgb, var(--color-base-080c18) 60%, transparent);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.75rem;
+}
+
 .deck-profile-meta {
   margin: 0;
   display: grid;

@@ -239,53 +239,247 @@ const loadDeckEvaluations = () => {
   }
 };
 
-const getDeckEvaluation = (deckId) => {
+const persistDeckEvaluations = (evaluations) => {
+  try {
+    localStorage.setItem(DECK_EVALUATIONS_STORAGE_KEY, JSON.stringify(evaluations));
+  } catch (error) {
+    if (isQuotaExceededError(error)) {
+      console.warn(
+        "Stockage local saturé : impossible d'enregistrer les informations personnalisées du deck.",
+        error
+      );
+      const quotaError = new Error(
+        "Local storage quota exceeded while saving deck personalization."
+      );
+      quotaError.code = "STORAGE_QUOTA";
+      throw quotaError;
+    }
+    throw error;
+  }
+};
+
+const LEGACY_DECK_RATING_KEY_MAP = {
+  consistency: "stability",
+  consistance: "stability",
+  consitance: "stability",
+  acceleration: "acceleration",
+  interaction: "interaction",
+  interraction: "interaction",
+  resilience: "resilience",
+  finition: "finish",
+  finish: "finish",
+};
+
+const clampDeckRatingValue = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  const rounded = Math.round(numeric);
+  if (rounded < 1) {
+    return 1;
+  }
+  if (rounded > 5) {
+    return 5;
+  }
+  return rounded;
+};
+
+const sanitizeDeckRatings = (input) => {
+  if (!input || typeof input !== "object") {
+    return {};
+  }
+  const sanitized = {};
+  Object.entries(input).forEach(([key, value]) => {
+    const sanitizedValue = clampDeckRatingValue(value);
+    if (sanitizedValue !== null) {
+      const normalizedKey = LEGACY_DECK_RATING_KEY_MAP[key] ?? String(key);
+      sanitized[normalizedKey] = sanitizedValue;
+    }
+  });
+  return sanitized;
+};
+
+const sanitizeOptionalString = (value) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const sanitizeBracketId = (value) => {
+  if (value === null || typeof value === "undefined") {
+    return null;
+  }
+  if (typeof value === "object") {
+    return sanitizeBracketId(value?.id ?? value?.value ?? value?.bracket);
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 5) {
+    return String(Math.round(numeric));
+  }
+  const stringValue = typeof value === "string" ? value.trim() : "";
+  if (stringValue === "") {
+    return null;
+  }
+  if (/^[1-5]$/.test(stringValue)) {
+    return stringValue;
+  }
+  return stringValue;
+};
+
+const sanitizeTagList = (tags, limit = 7) => {
+  if (!Array.isArray(tags) || limit <= 0) {
+    return [];
+  }
+  const sanitized = [];
+  const seen = new Set();
+  tags.forEach((tag) => {
+    const text = typeof tag === "string" ? tag.trim() : "";
+    if (!text) {
+      return;
+    }
+    const fingerprint = text.toLowerCase();
+    if (seen.has(fingerprint)) {
+      return;
+    }
+    if (sanitized.length >= limit) {
+      return;
+    }
+    seen.add(fingerprint);
+    sanitized.push(text);
+  });
+  return sanitized;
+};
+
+const sanitizePersonalTag = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 40 ? trimmed.slice(0, 40) : trimmed;
+};
+
+const sanitizePersonalNotes = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
+};
+
+const createDeckPersonalizationDefaults = () => ({
+  version: 2,
+  ratings: {},
+  bracket: null,
+  playstyle: null,
+  tags: [],
+  personalTag: "",
+  notes: "",
+  updatedAt: null,
+});
+
+const normalizeDeckPersonalizationEntry = (entry) => {
+  const defaults = createDeckPersonalizationDefaults();
+  if (!entry || typeof entry !== "object") {
+    return defaults;
+  }
+
+  const hasStructuredFields =
+    "ratings" in entry ||
+    "bracket" in entry ||
+    "playstyle" in entry ||
+    "tags" in entry ||
+    "personalTag" in entry ||
+    "notes" in entry ||
+    entry.version >= 2;
+
+  const normalized = {
+    ...defaults,
+    ratings: sanitizeDeckRatings(hasStructuredFields ? entry.ratings ?? {} : entry),
+  };
+
+  if (hasStructuredFields) {
+    normalized.bracket = sanitizeBracketId(entry.bracket);
+    const playstyle = sanitizeOptionalString(entry.playstyle ?? entry.archetype);
+    normalized.playstyle = playstyle;
+    normalized.tags = sanitizeTagList(entry.tags);
+    normalized.personalTag = sanitizePersonalTag(entry.personalTag);
+    normalized.notes = sanitizePersonalNotes(entry.notes);
+    if (typeof entry.updatedAt === "number" && Number.isFinite(entry.updatedAt)) {
+      normalized.updatedAt = entry.updatedAt;
+    }
+  }
+
+  return normalized;
+};
+
+const applyDeckPersonalizationUpdates = (existingEntry, updates) => {
+  const base = normalizeDeckPersonalizationEntry(existingEntry);
+  const next = { ...base };
+
+  if (updates && typeof updates === "object") {
+    if ("ratings" in updates) {
+      next.ratings = sanitizeDeckRatings(updates.ratings);
+    }
+    if ("bracket" in updates) {
+      next.bracket = sanitizeBracketId(updates.bracket);
+    }
+    if ("playstyle" in updates) {
+      next.playstyle = sanitizeOptionalString(updates.playstyle);
+    }
+    if ("tags" in updates) {
+      next.tags = sanitizeTagList(updates.tags);
+    }
+    if ("personalTag" in updates) {
+      next.personalTag = sanitizePersonalTag(updates.personalTag);
+    }
+    if ("notes" in updates) {
+      next.notes = sanitizePersonalNotes(updates.notes);
+    }
+  }
+
+  next.version = 2;
+  next.updatedAt = Date.now();
+  return next;
+};
+
+const getDeckPersonalization = (deckId) => {
   if (!deckId) {
     return null;
   }
   const evaluations = loadDeckEvaluations();
-  const evaluation = evaluations?.[deckId];
-  if (!evaluation || typeof evaluation !== "object") {
+  const entry = evaluations?.[deckId];
+  if (!entry || typeof entry !== "object") {
     return null;
   }
+  return normalizeDeckPersonalizationEntry(entry);
+};
 
-  const sanitized = {};
-  Object.entries(evaluation).forEach(([key, value]) => {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      sanitized[key] = Math.min(Math.max(Math.round(numeric), 1), 5);
-    }
-  });
-  return sanitized;
+const setDeckPersonalization = (deckId, updates) => {
+  if (!deckId) {
+    return null;
+  }
+  const current = loadDeckEvaluations();
+  const existing = current?.[deckId];
+  const next = applyDeckPersonalizationUpdates(existing, updates);
+  current[deckId] = next;
+  persistDeckEvaluations(current);
+  return next;
+};
+
+const getDeckEvaluation = (deckId) => {
+  const personalization = getDeckPersonalization(deckId);
+  return personalization?.ratings ?? null;
 };
 
 const setDeckEvaluation = (deckId, evaluation) => {
   if (!deckId || !evaluation || typeof evaluation !== "object") {
     return null;
   }
-  const current = loadDeckEvaluations();
-  const sanitized = {};
-  Object.entries(evaluation).forEach(([key, value]) => {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      sanitized[key] = Math.min(Math.max(Math.round(numeric), 1), 5);
-    }
-  });
-  current[deckId] = sanitized;
-
-  try {
-    localStorage.setItem(DECK_EVALUATIONS_STORAGE_KEY, JSON.stringify(current));
-  } catch (error) {
-    if (isQuotaExceededError(error)) {
-      console.warn("Stockage local saturé : impossible d'enregistrer l'évaluation du deck.", error);
-      const quotaError = new Error("Local storage quota exceeded while saving deck evaluation.");
-      quotaError.code = "STORAGE_QUOTA";
-      throw quotaError;
-    }
-    throw error;
-  }
-
-  return sanitized;
+  const personalization = setDeckPersonalization(deckId, { ratings: evaluation });
+  return personalization?.ratings ?? null;
 };
 
 const cloneSession = (session) => {
