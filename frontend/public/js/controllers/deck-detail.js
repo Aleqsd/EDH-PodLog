@@ -8,6 +8,8 @@
   let deckMetaEl = null;
   let deckDescriptionEl = null;
   let deckBoardsEl = null;
+  let deckBoardsToggleBtn = null;
+  let deckListCollapsed = false;
   let deckErrorEl = null;
   let deckLoadingEl = null;
   let deckHandleBadgeEl = null;
@@ -24,6 +26,26 @@
   let deckSortToolbarEl = null;
   let deckSortSelectEl = null;
   const SORT_CONTROL_ID = "deckSortMode";
+
+  const applyDeckListVisibility = () => {
+    if (deckBoardsEl) {
+      deckBoardsEl.classList.toggle("is-collapsed", deckListCollapsed);
+      deckBoardsEl.hidden = deckListCollapsed;
+      deckBoardsEl.setAttribute("aria-hidden", deckListCollapsed ? "true" : "false");
+    }
+    if (deckBoardsToggleBtn) {
+      deckBoardsToggleBtn.classList.toggle("is-active", !deckListCollapsed);
+      deckBoardsToggleBtn.setAttribute("aria-expanded", deckListCollapsed ? "false" : "true");
+      deckBoardsToggleBtn.textContent = deckListCollapsed
+        ? "Afficher la decklist"
+        : "Masquer la decklist";
+    }
+  };
+
+  const setDeckListVisibility = (collapsed) => {
+    deckListCollapsed = collapsed;
+    applyDeckListVisibility();
+  };
 
   const CARD_NAME_COLLATOR = new Intl.Collator("fr", { sensitivity: "base" });
 
@@ -203,19 +225,18 @@
     const header = document.createElement("div");
     header.className = "deck-card-item-header";
 
-    const quantityBadge = document.createElement("span");
-    quantityBadge.className = "deck-card-quantity";
-    quantityBadge.textContent = `x${quantity}`;
-    header.appendChild(quantityBadge);
+    const cardName = cardData?.name ?? "Carte inconnue";
+    const label = quantity > 1 ? `x${quantity} ${cardName}` : cardName;
 
     const link = createCardLink(cardData, board, cardEntry, { deck, deckId, handle });
     if (link) {
       link.classList.add("deck-card-name");
+      link.textContent = label;
       header.appendChild(link);
     } else {
       const name = document.createElement("span");
       name.className = "deck-card-name";
-      name.textContent = cardData?.name ?? "Carte inconnue";
+      name.textContent = label;
       header.appendChild(name);
     }
 
@@ -226,19 +247,28 @@
 
     item.appendChild(header);
 
-    const type = document.createElement("span");
-    type.className = "deck-card-type";
-    type.textContent = cardData?.type_line ?? "—";
-    item.appendChild(type);
-
     return item;
   };
 
   const initializeDeckSortControls = () => {
-    if (!deckSortToolbarEl || deckSortSelectEl) {
-      if (deckSortSelectEl) {
-        deckSortSelectEl.value = deckSortMode;
-      }
+    if (!deckSortToolbarEl) {
+      return;
+    }
+
+    if (!deckBoardsToggleBtn) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "deck-board-toggle";
+      toggle.id = "deckListToggle";
+      toggle.setAttribute("aria-controls", "deckBoards");
+      toggle.addEventListener("click", () => setDeckListVisibility(!deckListCollapsed));
+      deckSortToolbarEl.appendChild(toggle);
+      deckBoardsToggleBtn = toggle;
+      applyDeckListVisibility();
+    }
+
+    if (deckSortSelectEl) {
+      deckSortSelectEl.value = deckSortMode;
       return;
     }
 
@@ -305,6 +335,10 @@
       if (deckSortToolbarEl) {
         deckSortToolbarEl.classList.add("is-hidden");
       }
+      if (deckBoardsToggleBtn) {
+        deckBoardsToggleBtn.classList.add("is-hidden");
+      }
+      setDeckListVisibility(false);
     }
   };
 
@@ -313,20 +347,26 @@
       return;
     }
 
+    const previousDeck = currentDeckData;
     if (deck) {
       currentDeckData = deck;
     }
     if (typeof handle !== "undefined") {
       currentDeckHandle = handle ?? null;
     }
+    const activeDeck = currentDeckData ?? deck ?? null;
 
     deckBoardsEl.innerHTML = "";
 
-    const boards = collectDeckBoards(deck);
+    const boards = collectDeckBoards(activeDeck);
     if (boards.length === 0) {
       if (deckSortToolbarEl) {
         deckSortToolbarEl.classList.add("is-hidden");
       }
+      if (deckBoardsToggleBtn) {
+        deckBoardsToggleBtn.classList.add("is-hidden");
+      }
+      setDeckListVisibility(false);
       const empty = document.createElement("p");
       empty.className = "deck-board-empty";
       empty.textContent =
@@ -334,16 +374,26 @@
       deckBoardsEl.appendChild(empty);
       updateDeckSummary(null);
       updateDeckInsights(null);
-      renderCommanderHighlight([], deck);
+      renderCommanderHighlight([], activeDeck);
       return;
     }
 
-    const deckId = getDeckIdentifier(deck);
+    const previousDeckId =
+      previousDeck && typeof previousDeck === "object"
+        ? getDeckIdentifier(previousDeck) ?? previousDeck?.id ?? null
+        : null;
+    const deckId = activeDeck ? getDeckIdentifier(activeDeck) ?? activeDeck?.id ?? null : null;
+    if (!previousDeckId || previousDeckId !== deckId) {
+      deckListCollapsed = false;
+    }
     const commanderEntries = [];
 
     initializeDeckSortControls();
     if (deckSortToolbarEl) {
       deckSortToolbarEl.classList.remove("is-hidden");
+    }
+    if (deckBoardsToggleBtn) {
+      deckBoardsToggleBtn.classList.remove("is-hidden");
     }
     if (deckSortSelectEl) {
       deckSortSelectEl.value = deckSortMode;
@@ -497,21 +547,23 @@
       deckBoardsEl.appendChild(section);
     }
 
-    const deckStats = computeDeckStatistics(deck);
+    applyDeckListVisibility();
+
+    const deckStats = computeDeckStatistics(activeDeck);
 
     updateDeckSummary({
       stats: deckStats,
       deckId,
-      deckName: deck?.name ?? null,
-      deck,
+      deckName: activeDeck?.name ?? null,
+      deck: activeDeck,
     });
     updateDeckInsights({
       stats: deckStats,
-      deckName: deck?.name ?? null,
+      deckName: activeDeck?.name ?? null,
       deckId,
     });
 
-    renderCommanderHighlight(commanderEntries, deck, { deckId, handle });
+    renderCommanderHighlight(commanderEntries, activeDeck, { deckId, handle });
   };
 
   const populateDeckDetail = (deck, { handle } = {}) => {
@@ -691,8 +743,15 @@
       deckSortToolbarEl.innerHTML = "";
       deckSortToolbarEl.classList.add("is-hidden");
     }
+    deckBoardsToggleBtn = null;
+    deckListCollapsed = false;
     deckSortSelectEl = null;
     deckBoardsEl = document.getElementById("deckBoards");
+    if (deckBoardsEl) {
+      deckBoardsEl.hidden = false;
+      deckBoardsEl.classList.remove("is-collapsed");
+      deckBoardsEl.setAttribute("aria-hidden", "false");
+    }
     deckErrorEl = document.getElementById("deckError");
     deckLoadingEl = document.getElementById("deckLoading");
     deckHandleBadgeEl = document.getElementById("deckHandleBadge");

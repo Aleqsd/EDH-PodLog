@@ -1215,29 +1215,13 @@ const buildManaCurveCard = (stats) => {
       CARD_NAME_COLLATOR.compare(a?.name ?? "", b?.name ?? "")
     );
     sorted.forEach((entry) => {
-      const safeQuantity = Math.max(1, Number(entry?.quantity ?? 1));
       const item = document.createElement("li");
-      item.className = "deck-mana-detail-item";
-
-      const line = document.createElement("div");
-      line.className = "deck-mana-detail-line";
-
-      const quantityBadge = document.createElement("span");
-      quantityBadge.className = "deck-mana-detail-quantity";
-      quantityBadge.textContent = `x${safeQuantity}`;
-      line.appendChild(quantityBadge);
+      item.classList.add("deck-mana-detail-item");
 
       const name = document.createElement("span");
       name.className = "deck-mana-detail-name";
       name.textContent = entry?.name ?? "Carte inconnue";
-      line.appendChild(name);
-
-      item.appendChild(line);
-
-      const typeLine = document.createElement("span");
-      typeLine.className = "deck-mana-detail-type";
-      typeLine.textContent = entry?.typeLine ?? "—";
-      item.appendChild(typeLine);
+      item.appendChild(name);
 
       list.appendChild(item);
     });
@@ -1318,17 +1302,6 @@ const buildManaCurveCard = (stats) => {
     permanentSegment.style.order = "2";
     barFill.appendChild(permanentSegment);
 
-    const breakdown = document.createElement("div");
-    breakdown.className = "deck-mana-bar-breakdown";
-    const permanentBadge = document.createElement("span");
-    permanentBadge.className = "deck-mana-breakdown-item deck-mana-breakdown-permanents";
-    permanentBadge.textContent = `Perm. ${NUMBER_FORMAT.format(permanentCount)}`;
-    breakdown.appendChild(permanentBadge);
-    const spellBadge = document.createElement("span");
-    spellBadge.className = "deck-mana-breakdown-item deck-mana-breakdown-spells";
-    spellBadge.textContent = `Sorts ${NUMBER_FORMAT.format(spellCount)}`;
-    breakdown.appendChild(spellBadge);
-
     const label = document.createElement("span");
     label.className = "deck-mana-bar-label";
     label.textContent = bucket?.label ?? "—";
@@ -1345,7 +1318,7 @@ const buildManaCurveCard = (stats) => {
       }
     });
 
-    bar.appendChild(breakdown);
+    bar.title = `Permanents : ${NUMBER_FORMAT.format(permanentCount)} · Sorts : ${NUMBER_FORMAT.format(spellCount)}`;
     bar.appendChild(label);
     chart.appendChild(bar);
     bars.push(bar);

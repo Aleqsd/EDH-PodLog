@@ -923,7 +923,7 @@ const replaceDeckInIntegration = (integration, updatedDeck) => {
 
 const BOARD_LABELS = {
   commanders: "Commandants",
-  mainboard: "Liste",
+  mainboard: "Decklist",
   sideboard: "Réserve",
   maybeboard: "Peut-être",
   companions: "Compagnons",
