@@ -4,10 +4,11 @@
     return;
   }
 
-  const GAME_HISTORY_STORAGE_KEY = "edhPodlogGameHistory";
   const KNOWN_PLAYERS_STORAGE_KEY = "edhPodlogKnownPlayers";
+  const LAST_PLAYGROUP_STORAGE_KEY = "edhPodlogLastPlaygroup";
   const DEFAULT_PLAYER_NAMES = ["Joueur 1", "Joueur 2", "Joueur 3", "Joueur 4"];
   const MANUAL_DECK_OPTION = "__manual__";
+  const MAX_DASHBOARD_HISTORY = 5;
 
   const runSoon = (callback) => {
     if (typeof queueMicrotask === "function") {
@@ -31,9 +32,7 @@
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
-      if (typeof console !== "undefined") {
-        console.warn(`Impossible de lire ${key} depuis le stockage.`, error);
-      }
+      console.warn(`Impossible de lire ${key} depuis le stockage.`, error);
       return [];
     }
   };
@@ -43,14 +42,33 @@
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      if (typeof console !== "undefined") {
-        if (typeof isQuotaExceededError === "function" && isQuotaExceededError(error)) {
-          console.warn(`Stockage plein, impossible de sauvegarder ${key}.`);
-        } else {
-          console.warn(`Impossible d'écrire ${key} dans le stockage.`, error);
-        }
+      if (typeof isQuotaExceededError === "function" && isQuotaExceededError(error)) {
+        console.warn(`Stockage plein, impossible de sauvegarder ${key}.`);
+      } else {
+        console.warn(`Impossible d'écrire ${key} dans le stockage.`, error);
       }
       return false;
+    }
+  };
+
+  const readValueFromStorage = (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.warn(`Impossible de lire ${key} depuis le stockage.`, error);
+      return null;
+    }
+  };
+
+  const writeValueToStorage = (key, value) => {
+    try {
+      if (value) {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch (error) {
+      console.warn(`Impossible de persister ${key}.`, error);
     }
   };
 
@@ -58,19 +76,26 @@
 
   const clonePlayer = (player) => ({ ...player });
 
-  api.registerPageController("dashboard", (context) => {
+  const safeToDate = (value) => {
+    if (!value) {
+      return null;
+    }
+    const date = value instanceof Date ? value : new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  api.registerPageController("dashboard", async (context) => {
     const toggleBtn = document.getElementById("gameSetupToggle");
     const container = document.getElementById("gameSetupContainer");
     const setupForm = document.getElementById("gameSetupForm");
+    const playgroupInput = document.getElementById("playgroupInput");
+    const playgroupListEl = document.getElementById("knownPlaygroups");
     const playersListEl = document.getElementById("gamePlayersList");
     const playerTemplate = document.getElementById("playerRowTemplate");
     const addPlayerButton = document.getElementById("addPlayerButton");
     const knownPlayersListEl = document.getElementById("knownPlayers");
-    const summarySection = document.getElementById("gameSummary");
-    const summaryList = document.getElementById("gameSummaryList");
-    const editPlayersButton = document.getElementById("editPlayersButton");
+    const saveResultButton = document.getElementById("saveResultButton");
     const startGameButton = document.getElementById("startGameButton");
-    const openResultButton = document.getElementById("openResultButton");
     const resultForm = document.getElementById("gameResultForm");
     const resultGrid = document.getElementById("gameResultGrid");
     const cancelResultButton = document.getElementById("cancelResultButton");
@@ -82,12 +107,13 @@
       !toggleBtn ||
       !container ||
       !setupForm ||
+      !playgroupInput ||
+      !playgroupListEl ||
       !playersListEl ||
       !playerTemplate ||
       !addPlayerButton ||
-      !summarySection ||
-      !summaryList ||
-      !openResultButton ||
+      !saveResultButton ||
+      !startGameButton ||
       !resultForm ||
       !resultGrid ||
       !cancelResultButton ||
@@ -98,23 +124,47 @@
       return;
     }
 
+    setupForm.addEventListener("submit", (event) => event.preventDefault());
+
+    const setStatus = (message, variant = "neutral") => {
+      statusEl.textContent = message ?? "";
+      statusEl.classList.remove("is-error", "is-success");
+      if (!message) {
+        return;
+      }
+      if (variant === "error") {
+        statusEl.classList.add("is-error");
+      } else if (variant === "success") {
+        statusEl.classList.add("is-success");
+      }
+    };
+
     const session = context.session ?? (typeof getSession === "function" ? getSession() : null);
+    const googleSub = session?.googleSub || null;
+
+    const ownerDisplayName =
+      normalizeString(session?.userName) ||
+      normalizeString(session?.givenName) ||
+      DEFAULT_PLAYER_NAMES[0];
+
     const integration =
       typeof getMoxfieldIntegration === "function" ? getMoxfieldIntegration(session) : null;
     const deckOptions = Array.isArray(integration?.decks)
       ? integration.decks
           .map((deck) => {
-            const id =
+            const identifier =
               typeof getDeckIdentifier === "function"
                 ? getDeckIdentifier(deck)
-                : deck?.publicId ?? deck?.id ?? null;
-            if (!id) {
+                : deck?.publicId ?? deck?.id ?? deck?.slug ?? null;
+            if (!identifier) {
               return null;
             }
+            const slug = deck?.slug ?? deck?.id ?? deck?.publicId ?? identifier;
             return {
-              id,
-              name: deck.name || "Deck sans nom",
-              format: deck.format || "",
+              id: identifier,
+              name: deck?.name || "Deck sans nom",
+              format: deck?.format || "",
+              slug,
             };
           })
           .filter(Boolean)
@@ -127,9 +177,6 @@
     );
 
     const refreshKnownPlayersDatalist = () => {
-      if (!knownPlayersListEl) {
-        return;
-      }
       knownPlayersListEl.innerHTML = "";
       Array.from(knownPlayers)
         .sort((a, b) => a.localeCompare(b, "fr"))
@@ -139,7 +186,6 @@
           knownPlayersListEl.appendChild(option);
         });
     };
-
     refreshKnownPlayersDatalist();
 
     const addKnownPlayers = (names) => {
@@ -158,110 +204,124 @@
       }
     };
 
-    let gameHistory = readArrayFromStorage(GAME_HISTORY_STORAGE_KEY);
+    let playgroups = [];
+    let playgroupSelection = { id: null, name: "" };
 
-    const renderHistory = () => {
-      historyList.innerHTML = "";
-      if (!Array.isArray(gameHistory) || gameHistory.length === 0) {
-        historyEmpty.hidden = false;
-        return;
-      }
-      historyEmpty.hidden = true;
-
-      gameHistory.forEach((record, index) => {
-        const entry = document.createElement("li");
-        entry.className = "game-history-entry";
-
-        const header = document.createElement("div");
-        header.className = "game-history-header";
-
-        const title = document.createElement("span");
-        title.textContent = `Partie ${gameHistory.length - index}`;
-
-        const meta = document.createElement("span");
-        meta.className = "game-history-meta";
-        if (typeof formatDateTime === "function") {
-          meta.textContent = formatDateTime(record.createdAt, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          });
-        } else {
-          meta.textContent = new Date(record.createdAt).toLocaleString("fr-FR");
-        }
-
-        header.append(title, meta);
-
-        const playersList = document.createElement("ul");
-        playersList.className = "game-history-players";
-
-        const rankingMap = new Map();
-        if (Array.isArray(record.rankings)) {
-          record.rankings.forEach((entryRanking) => {
-            if (entryRanking?.playerId) {
-              rankingMap.set(entryRanking.playerId, Number.parseInt(entryRanking.rank, 10));
-            }
-          });
-        }
-
-        (Array.isArray(record.players) ? record.players : []).forEach((player) => {
-          const item = document.createElement("li");
-          const rankValue = rankingMap.get(player.id);
-          const rankSpan = document.createElement("span");
-          rankSpan.className = "game-history-rank";
-          rankSpan.textContent =
-            typeof rankValue === "number" && Number.isFinite(rankValue)
-              ? formatRankLabel(rankValue)
-              : "–";
-
-          const nameText = document.createTextNode(` ${player.name || "Joueur inconnu"}`);
-
-          item.append(rankSpan, nameText);
-
-          const metaParts = [];
-          if (player.isOwner) {
-            metaParts.push("Propriétaire");
-          }
-          if (player.deckName) {
-            metaParts.push(player.deckName);
-          }
-
-          if (metaParts.length > 0) {
-            const metaSpan = document.createElement("span");
-            metaSpan.className = "game-history-player-meta";
-            metaSpan.textContent = metaParts.join(" · ");
-            item.append(document.createTextNode(" "), metaSpan);
-          }
-
-          playersList.appendChild(item);
+    const refreshPlaygroupDatalist = () => {
+      playgroupListEl.innerHTML = "";
+      playgroups
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "fr"))
+        .forEach((group) => {
+          const option = document.createElement("option");
+          option.value = group.name;
+          playgroupListEl.appendChild(option);
         });
-
-        entry.append(header, playersList);
-        historyList.appendChild(entry);
-      });
     };
 
-    renderHistory();
+    const findPlaygroupByName = (name) => {
+      const normalized = normalizeString(name).toLowerCase();
+      if (!normalized) {
+        return null;
+      }
+      return (
+        playgroups.find(
+          (group) => normalizeString(group.name).toLowerCase() === normalized
+        ) || null
+      );
+    };
 
-    const setStatus = (message, variant = "neutral") => {
-      statusEl.textContent = message ?? "";
-      statusEl.classList.remove("is-error", "is-success");
-      if (!message) {
+    const updatePlaygroupSelection = (group, { preserveInput = false } = {}) => {
+      if (group) {
+        playgroupSelection = { id: group.id || null, name: group.name || "" };
+        if (!preserveInput) {
+          playgroupInput.value = group.name || "";
+        }
+        writeValueToStorage(LAST_PLAYGROUP_STORAGE_KEY, playgroupSelection.id || "");
+      } else {
+        playgroupSelection = {
+          id: null,
+          name: normalizeString(playgroupInput.value),
+        };
+        if (!playgroupSelection.name) {
+          writeValueToStorage(LAST_PLAYGROUP_STORAGE_KEY, "");
+        }
+      }
+    };
+
+    const handlePlaygroupInputChange = () => {
+      const typed = playgroupInput.value;
+      const match = findPlaygroupByName(typed);
+      if (match) {
+        updatePlaygroupSelection(match);
+      } else {
+        playgroupSelection = { id: null, name: normalizeString(typed) };
+      }
+    };
+
+    playgroupInput.addEventListener("input", handlePlaygroupInputChange);
+
+    const ensureDefaultPlaygroup = async () => {
+      if (!googleSub) {
+        return null;
+      }
+      const defaultName = `Groupe de ${ownerDisplayName}`;
+      try {
+        return await upsertUserPlaygroup(googleSub, defaultName);
+      } catch (error) {
+        console.warn("Impossible de créer le groupe par défaut :", error);
+        return null;
+      }
+    };
+
+    const loadPlaygroups = async () => {
+      if (!googleSub) {
+        if (!playgroupSelection.name && ownerDisplayName) {
+          playgroupSelection = { id: null, name: `Groupe de ${ownerDisplayName}` };
+          playgroupInput.value = playgroupSelection.name;
+        }
         return;
       }
-      if (variant === "error") {
-        statusEl.classList.add("is-error");
-      } else if (variant === "success") {
-        statusEl.classList.add("is-success");
+      try {
+        const payload = await fetchUserPlaygroups(googleSub);
+        playgroups = Array.isArray(payload?.playgroups) ? payload.playgroups : [];
+        if (!playgroups.length) {
+          const created = await ensureDefaultPlaygroup();
+          if (created) {
+            playgroups = [created];
+          }
+        }
+      } catch (error) {
+        console.warn("Impossible de charger les groupes :", error);
+        setStatus("Impossible de charger vos groupes.", "error");
+      }
+      refreshPlaygroupDatalist();
+      const lastId = readValueFromStorage(LAST_PLAYGROUP_STORAGE_KEY);
+      const matchById = lastId ? playgroups.find((group) => group.id === lastId) : null;
+      if (matchById) {
+        updatePlaygroupSelection(matchById);
+      } else if (playgroups.length > 0) {
+        updatePlaygroupSelection(playgroups[0]);
+      } else if (!normalizeString(playgroupInput.value) && ownerDisplayName) {
+        playgroupSelection = { id: null, name: `Groupe de ${ownerDisplayName}` };
+        playgroupInput.value = playgroupSelection.name;
+      } else {
+        updatePlaygroupSelection(null, { preserveInput: true });
       }
     };
+
+    let players = [];
+    let latestConfirmedPlayers = null;
 
     const createInitialPlayers = () =>
       DEFAULT_PLAYER_NAMES.map((name, index) => ({
         id: createIdentifier("player"),
-        name,
+        name: index === 0 ? ownerDisplayName : name,
         deckName: "",
         deckId: "",
-        deckMode: deckOptions.length > 0 && index === 0 ? "library" : "manual",
+        deckFormat: "",
+        deckSlug: "",
+        deckMode: index === 0 && deckOptions.length > 0 ? "library" : "manual",
         isOwner: index === 0,
         isDefault: true,
       }));
@@ -271,13 +331,12 @@
       name: `Joueur ${players.length + 1}`,
       deckName: "",
       deckId: "",
+      deckFormat: "",
+      deckSlug: "",
       deckMode: "manual",
       isOwner: false,
       isDefault: false,
     });
-
-    let players = createInitialPlayers();
-    let latestConfirmedPlayers = null;
 
     const ensureOwnerExists = () => {
       if (players.some((player) => player.isOwner)) {
@@ -285,15 +344,70 @@
       }
       if (players.length > 0) {
         players[0].isOwner = true;
-        if (deckOptions.length > 0) {
-          players[0].deckMode = "library";
-        }
+        players[0].name = ownerDisplayName;
+        players[0].deckMode = deckOptions.length > 0 ? players[0].deckMode : "manual";
       }
     };
 
     const reindexPlayerNames = () => {
       players.forEach((player, index) => {
         player.index = index + 1;
+      });
+    };
+
+    const createDeckSelect = (player, deckSelect) => {
+      deckSelect.innerHTML = "";
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Sélectionner un deck";
+      placeholder.disabled = true;
+      placeholder.selected = !player.deckId;
+      deckSelect.appendChild(placeholder);
+
+      deckOptions.forEach((deck) => {
+        const option = document.createElement("option");
+        option.value = deck.id;
+        option.textContent = deck.format
+          ? `${deck.name} · ${deck.format.toUpperCase()}`
+          : deck.name;
+        deckSelect.appendChild(option);
+      });
+
+      const manualOption = document.createElement("option");
+      manualOption.value = MANUAL_DECK_OPTION;
+      manualOption.textContent = "Saisir un deck manuellement";
+      deckSelect.appendChild(manualOption);
+
+      if (player.deckMode === "library" && player.deckId) {
+        deckSelect.value = player.deckId;
+      } else if (player.deckMode === "manual") {
+        deckSelect.value = MANUAL_DECK_OPTION;
+      } else {
+        deckSelect.value = "";
+      }
+
+      deckSelect.addEventListener("change", (event) => {
+        const selectedValue = event.target.value;
+        if (selectedValue === MANUAL_DECK_OPTION) {
+          player.deckMode = "manual";
+          player.deckId = "";
+          player.deckSlug = "";
+          player.deckFormat = "";
+          if (!player.deckName) {
+            player.deckName = "";
+          }
+          renderPlayers();
+          return;
+        }
+
+        const selectedDeck = deckOptions.find((deck) => deck.id === selectedValue);
+        player.deckMode = "library";
+        player.deckId = selectedDeck?.id ?? "";
+        player.deckSlug = selectedDeck?.slug ?? selectedDeck?.id ?? "";
+        player.deckFormat = selectedDeck?.format ?? "";
+        player.deckName = selectedDeck?.name ?? "";
+        renderPlayers();
       });
     };
 
@@ -328,9 +442,7 @@
         if (ownerRadio) {
           ownerRadio.value = player.id;
           ownerRadio.checked = Boolean(player.isOwner);
-          ownerRadio.addEventListener("change", () => {
-            setOwner(player.id);
-          });
+          ownerRadio.addEventListener("change", () => setOwner(player.id));
         }
 
         const nameInput = row.querySelector(".player-name-input");
@@ -341,8 +453,7 @@
             nameInput.setAttribute("list", knownPlayersListEl.id);
           }
           nameInput.addEventListener("input", (event) => {
-            const nextName = normalizeString(event.target.value);
-            player.name = nextName || event.target.value;
+            player.name = event.target.value;
           });
         }
 
@@ -353,63 +464,17 @@
 
         if (player.isOwner && deckOptions.length > 0 && deckSelect && selectDeckLabel) {
           selectDeckLabel.hidden = false;
-          deckSelect.innerHTML = "";
-
-          const placeholder = document.createElement("option");
-          placeholder.value = "";
-          placeholder.textContent = "Sélectionner un deck";
-          placeholder.disabled = true;
-          deckSelect.appendChild(placeholder);
-
-          deckOptions.forEach((deck) => {
-            const option = document.createElement("option");
-            option.value = deck.id;
-            option.textContent = deck.format ? `${deck.name} · ${deck.format.toUpperCase()}` : deck.name;
-            deckSelect.appendChild(option);
-          });
-
-          const manualOption = document.createElement("option");
-          manualOption.value = MANUAL_DECK_OPTION;
-          manualOption.textContent = "Saisir un deck manuellement";
-          deckSelect.appendChild(manualOption);
-
-          if (player.deckMode === "library" && player.deckId) {
-            deckSelect.value = player.deckId;
-          } else if (player.deckMode === "manual") {
-            deckSelect.value = MANUAL_DECK_OPTION;
-          } else {
-            deckSelect.value = "";
-          }
-
-          deckSelect.addEventListener("change", (event) => {
-            const selectedValue = event.target.value;
-            if (selectedValue === MANUAL_DECK_OPTION) {
-              player.deckMode = "manual";
-              player.deckId = "";
-              if (manualDeckInput) {
-                player.deckName = manualDeckInput.value.trim();
-              }
-              renderPlayers();
-              return;
-            }
-
-            const selectedDeck = deckOptions.find((deck) => deck.id === selectedValue);
-            player.deckMode = "library";
-            player.deckId = selectedValue;
-            player.deckName = selectedDeck?.name ?? "";
-            renderPlayers();
-          });
-        } else {
-          if (selectDeckLabel) {
-            selectDeckLabel.hidden = true;
-          }
+          createDeckSelect(player, deckSelect);
+        } else if (selectDeckLabel) {
+          selectDeckLabel.hidden = true;
           if (deckSelect) {
             deckSelect.innerHTML = "";
           }
         }
 
         if (manualDeckLabel && manualDeckInput) {
-          manualDeckLabel.hidden = player.isOwner && deckOptions.length > 0 && player.deckMode !== "manual";
+          const hideManual = player.isOwner && deckOptions.length > 0 && player.deckMode !== "manual";
+          manualDeckLabel.hidden = hideManual;
           manualDeckInput.value = player.deckName ?? "";
           manualDeckInput.placeholder = "Nom du deck (optionnel)";
           manualDeckInput.addEventListener("input", (event) => {
@@ -417,6 +482,8 @@
             if (player.isOwner && deckOptions.length > 0) {
               player.deckMode = "manual";
               player.deckId = "";
+              player.deckSlug = "";
+              player.deckFormat = "";
             }
           });
         }
@@ -429,9 +496,7 @@
             removeBtn.setAttribute("aria-disabled", "true");
           } else {
             removeBtn.removeAttribute("aria-disabled");
-            removeBtn.addEventListener("click", () => {
-              removePlayer(player.id);
-            });
+            removeBtn.addEventListener("click", () => removePlayer(player.id));
           }
         }
 
@@ -439,9 +504,7 @@
         if (moveUpBtn) {
           moveUpBtn.disabled = index === 0;
           if (!moveUpBtn.disabled) {
-            moveUpBtn.addEventListener("click", () => {
-              movePlayer(player.id, -1);
-            });
+            moveUpBtn.addEventListener("click", () => movePlayer(player.id, -1));
           }
         }
 
@@ -449,9 +512,7 @@
         if (moveDownBtn) {
           moveDownBtn.disabled = index === players.length - 1;
           if (!moveDownBtn.disabled) {
-            moveDownBtn.addEventListener("click", () => {
-              movePlayer(player.id, 1);
-            });
+            moveDownBtn.addEventListener("click", () => movePlayer(player.id, 1));
           }
         }
 
@@ -459,56 +520,35 @@
       });
     };
 
-    const movePlayer = (playerId, delta) => {
-      const currentIndex = players.findIndex((player) => player.id === playerId);
-      if (currentIndex < 0) {
-        return;
-      }
-      const nextIndex = currentIndex + delta;
-      if (nextIndex < 0 || nextIndex >= players.length) {
-        return;
-      }
-      const [player] = players.splice(currentIndex, 1);
-      players.splice(nextIndex, 0, player);
+    const setOwner = (playerId) => {
+      players = players.map((player) => {
+        if (player.id === playerId) {
+          return {
+            ...player,
+            isOwner: true,
+            name: ownerDisplayName,
+            deckMode: deckOptions.length > 0 ? player.deckMode : "manual",
+          };
+        }
+        return { ...player, isOwner: false };
+      });
       renderPlayers();
     };
 
-    const setOwner = (playerId) => {
-      let updated = false;
-      players = players.map((player) => {
-        if (player.id === playerId) {
-          if (!player.isOwner) {
-            updated = true;
-          }
-          const next = {
-            ...player,
-            isOwner: true,
-          };
-          if (deckOptions.length === 0) {
-            next.deckMode = "manual";
-            next.deckId = "";
-          } else if (next.deckMode !== "manual" && !next.deckId) {
-            next.deckMode = "library";
-          }
-          return next;
-        }
-
-        if (!player.isOwner) {
-          return player;
-        }
-
-        updated = true;
-        return {
-          ...player,
-          isOwner: false,
-          deckMode: player.deckMode === "library" ? "manual" : player.deckMode,
-          deckId: "",
-        };
-      });
-
-      if (updated) {
-        renderPlayers();
+    const movePlayer = (playerId, delta) => {
+      const index = players.findIndex((player) => player.id === playerId);
+      if (index === -1) {
+        return;
       }
+      const newIndex = index + delta;
+      if (newIndex < 0 || newIndex >= players.length) {
+        return;
+      }
+      const updated = [...players];
+      const [item] = updated.splice(index, 1);
+      updated.splice(newIndex, 0, item);
+      players = updated;
+      renderPlayers();
     };
 
     const removePlayer = (playerId) => {
@@ -523,7 +563,6 @@
       players = createInitialPlayers();
       latestConfirmedPlayers = null;
       setupForm.hidden = false;
-      summarySection.hidden = true;
       resultForm.hidden = true;
       resultForm.reset();
       resultGrid.innerHTML = "";
@@ -539,32 +578,6 @@
       });
     };
 
-    renderPlayers();
-
-    toggleBtn.addEventListener("click", () => {
-      const isHidden = container.hasAttribute("hidden");
-      if (isHidden) {
-        container.removeAttribute("hidden");
-        toggleBtn.textContent = "Fermer la préparation";
-        resetWorkflow();
-      } else {
-        container.setAttribute("hidden", "hidden");
-        toggleBtn.textContent = "Lancer une partie";
-        setStatus("");
-      }
-    });
-
-    addPlayerButton.addEventListener("click", () => {
-      players.push(createAdditionalPlayer());
-      renderPlayers();
-      runSoon(() => {
-        const inputs = playersListEl.querySelectorAll(".player-name-input");
-        if (inputs.length > 0) {
-          inputs[inputs.length - 1].focus();
-        }
-      });
-    });
-
     const validatePlayers = () => {
       if (!Array.isArray(players) || players.length < 4) {
         setStatus("Veuillez renseigner au moins quatre joueurs.", "error");
@@ -579,33 +592,13 @@
         }
       }
 
+      if (!normalizeString(playgroupInput.value) && !normalizeString(playgroupSelection.name)) {
+        setStatus("Indiquez le groupe associé à la partie.", "error");
+        return false;
+      }
+
       setStatus("");
       return true;
-    };
-
-    const renderSummary = (playerList) => {
-      summaryList.innerHTML = "";
-      playerList.forEach((player, index) => {
-        const item = document.createElement("li");
-        item.className = "game-summary-item";
-
-        const nameEl = document.createElement("strong");
-        nameEl.textContent = `${index + 1}. ${player.name}`;
-
-        const metaParts = [];
-        if (player.isOwner) {
-          metaParts.push("Propriétaire");
-        }
-        if (player.deckName) {
-          metaParts.push(player.deckName);
-        }
-
-        const metaEl = document.createElement("span");
-        metaEl.textContent = metaParts.length > 0 ? metaParts.join(" · ") : "Deck non précisé";
-
-        item.append(nameEl, metaEl);
-        summaryList.appendChild(item);
-      });
     };
 
     const populateResultForm = (playerList) => {
@@ -646,60 +639,261 @@
       });
     };
 
-    setupForm.addEventListener("submit", (event) => {
-      event.preventDefault();
+    const prepareResultCapture = () => {
       if (!validatePlayers()) {
         return;
       }
-
       latestConfirmedPlayers = players.map(clonePlayer);
-      renderSummary(latestConfirmedPlayers);
-      setupForm.hidden = true;
-      summarySection.hidden = false;
-      resultForm.hidden = true;
-      resultForm.reset();
-      resultGrid.innerHTML = "";
-      setStatus("La composition de la partie est prête.");
-
+      populateResultForm(latestConfirmedPlayers);
+      resultForm.hidden = false;
+      setStatus("");
+      runSoon(() => {
+        const firstSelect = resultGrid.querySelector("select");
+        if (firstSelect) {
+          firstSelect.focus();
+        }
+      });
       const additionalNames = latestConfirmedPlayers
         .filter((player) => !player.isDefault)
         .map((player) => player.name);
       addKnownPlayers(additionalNames);
-    });
+    };
 
-    editPlayersButton?.addEventListener("click", () => {
-      if (!latestConfirmedPlayers) {
-        resetWorkflow();
+    const buildRankingPayload = () => {
+      const formData = new FormData(resultForm);
+      const rankings = [];
+      for (const player of latestConfirmedPlayers) {
+        const rawValue = formData.get(`result-${player.id}`);
+        const rank = Number.parseInt(rawValue, 10);
+        if (!rawValue || !Number.isFinite(rank) || rank < 1 || rank > latestConfirmedPlayers.length) {
+          setStatus("Veuillez attribuer un rang à chaque joueur.", "error");
+          return null;
+        }
+        rankings.push({ playerId: player.id, rank });
+      }
+      return rankings;
+    };
+
+    const createDeckLink = (player) => {
+      if (!player.deck_id) {
+        return null;
+      }
+      const link = document.createElement("a");
+      link.href = `deck.html?deck=${encodeURIComponent(player.deck_id)}`;
+      link.className = "game-history-deck";
+      link.textContent =
+        player.deck_name ||
+        (player.deck_format ? `Deck ${player.deck_format.toUpperCase()}` : "Voir le deck");
+      return link;
+    };
+
+    let gameHistory = [];
+
+    const renderHistory = () => {
+      historyList.innerHTML = "";
+      if (!Array.isArray(gameHistory) || gameHistory.length === 0) {
+        historyEmpty.hidden = false;
         return;
       }
-      players = latestConfirmedPlayers.map(clonePlayer);
-      setupForm.hidden = false;
-      summarySection.hidden = true;
-      resultForm.hidden = true;
-      resultForm.reset();
-      resultGrid.innerHTML = "";
-      setStatus("");
+      historyEmpty.hidden = true;
+
+      gameHistory.slice(0, MAX_DASHBOARD_HISTORY).forEach((record) => {
+        const entry = document.createElement("li");
+        entry.className = "game-history-entry";
+
+        const header = document.createElement("div");
+        header.className = "game-history-header";
+
+        const title = document.createElement("span");
+        title.className = "game-history-title";
+        title.textContent = record.playgroup?.name || "Partie enregistrée";
+        header.appendChild(title);
+
+        const meta = document.createElement("span");
+        meta.className = "game-history-meta";
+        const createdAt = safeToDate(record.created_at);
+        if (typeof formatDateTime === "function") {
+          meta.textContent = formatDateTime(createdAt || record.created_at, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          });
+        } else if (createdAt) {
+          meta.textContent = createdAt.toLocaleString("fr-FR");
+        }
+        header.appendChild(meta);
+
+        const playersList = document.createElement("ul");
+        playersList.className = "game-history-players";
+
+        const rankingMap = new Map();
+        if (Array.isArray(record.rankings)) {
+          record.rankings.forEach((ranking) => {
+            if (ranking?.player_id) {
+              rankingMap.set(ranking.player_id, Number.parseInt(ranking.rank, 10));
+            }
+          });
+        }
+
+        (Array.isArray(record.players) ? record.players : []).forEach((player) => {
+          const item = document.createElement("li");
+          const rankValue = rankingMap.get(player.id);
+          const rankSpan = document.createElement("span");
+          rankSpan.className = "game-history-rank";
+          rankSpan.textContent =
+            typeof rankValue === "number" && Number.isFinite(rankValue)
+              ? formatRankLabel(rankValue)
+              : "–";
+
+          const nameStrong = document.createElement("strong");
+          nameStrong.textContent = ` ${player.name || "Joueur inconnu"}`;
+
+          item.append(rankSpan, nameStrong);
+
+          const metaParts = [];
+          if (player.is_owner) {
+            metaParts.push("Propriétaire");
+          }
+          if (player.deck_name) {
+            metaParts.push(player.deck_name);
+          } else if (player.deck_id && player.deck_format) {
+            metaParts.push(player.deck_format.toUpperCase());
+          }
+
+          if (metaParts.length > 0) {
+            const metaSpan = document.createElement("span");
+            metaSpan.className = "game-history-player-meta";
+            metaSpan.textContent = metaParts.join(" · ");
+            item.append(document.createTextNode(" "), metaSpan);
+          }
+
+          if (player.deck_id) {
+            const deckLink = createDeckLink(player);
+            if (deckLink) {
+              item.append(document.createTextNode(" · "), deckLink);
+            }
+          }
+
+          playersList.appendChild(item);
+        });
+
+        entry.append(header, playersList);
+        historyList.appendChild(entry);
+      });
+    };
+
+    const loadGameHistory = async () => {
+      if (!googleSub) {
+        gameHistory = [];
+        renderHistory();
+        return;
+      }
+      try {
+        const payload = await fetchUserGames(googleSub);
+        gameHistory = Array.isArray(payload?.games) ? payload.games : [];
+        renderHistory();
+      } catch (error) {
+        console.warn("Impossible de charger l'historique des parties :", error);
+        setStatus("Impossible de charger l'historique des parties.", "error");
+      }
+    };
+
+    const recordResult = async () => {
+      if (!Array.isArray(latestConfirmedPlayers) || latestConfirmedPlayers.length === 0) {
+        setStatus("Préparez d'abord la composition de la table.", "error");
+        return;
+      }
+
+      const rankings = buildRankingPayload();
+      if (!rankings) {
+        return;
+      }
+
+      const playgroupName =
+        normalizeString(playgroupInput.value) || normalizeString(playgroupSelection.name);
+      if (!playgroupName) {
+        setStatus("Indiquez le groupe associé à la partie.", "error");
+        return;
+      }
+
+      if (!googleSub) {
+        setStatus("Connectez-vous pour enregistrer vos parties.", "error");
+        return;
+      }
+
+      const payload = {
+        playgroup: {
+          id: playgroupSelection.id,
+          name: playgroupName,
+        },
+        players: latestConfirmedPlayers.map((player, index) => ({
+          id: player.id,
+          name: player.name,
+          is_owner: Boolean(player.isOwner),
+          deck_id: player.deckMode === "library" ? player.deckId || null : null,
+          deck_name: player.deckName || null,
+          deck_format: player.deckMode === "library" ? player.deckFormat || null : null,
+          deck_slug: player.deckMode === "library" ? player.deckSlug || player.deckId || null : null,
+          order: index,
+        })),
+        rankings: rankings.map((ranking) => ({
+          player_id: ranking.playerId,
+          rank: ranking.rank,
+        })),
+      };
+
+      try {
+        const record = await recordUserGame(googleSub, payload);
+        setStatus("La partie a été enregistrée. Retrouvez-la dans l'onglet Parties.", "success");
+        resultForm.hidden = true;
+        resultForm.reset();
+        resultGrid.innerHTML = "";
+        players = createInitialPlayers();
+        latestConfirmedPlayers = null;
+        renderPlayers();
+        addKnownPlayers(payload.players.map((player) => player.name));
+        if (record?.playgroup) {
+          updatePlaygroupSelection(record.playgroup);
+          await loadPlaygroups();
+        } else {
+          await loadPlaygroups();
+        }
+        await loadGameHistory();
+      } catch (error) {
+        setStatus(error?.message || "Impossible d'enregistrer la partie.", "error");
+      }
+    };
+
+    toggleBtn.addEventListener("click", () => {
+      const isHidden = container.hasAttribute("hidden");
+      if (isHidden) {
+        container.removeAttribute("hidden");
+        toggleBtn.textContent = "Fermer la préparation";
+        resetWorkflow();
+      } else {
+        container.setAttribute("hidden", "hidden");
+        toggleBtn.textContent = "Lancer une partie";
+        setStatus("");
+        resultForm.hidden = true;
+      }
+    });
+
+    addPlayerButton.addEventListener("click", () => {
+      players.push(createAdditionalPlayer());
       renderPlayers();
-      requestAnimationFrame(() => {
-        const firstInput = playersListEl.querySelector(".player-name-input");
-        if (firstInput) {
-          firstInput.focus();
+      runSoon(() => {
+        const inputs = playersListEl.querySelectorAll(".player-name-input");
+        if (inputs.length > 0) {
+          inputs[inputs.length - 1].focus();
         }
       });
     });
 
-    startGameButton?.addEventListener("click", () => {
-      setStatus("La fonctionnalité de suivi en direct arrive bientôt.", "error");
+    saveResultButton.addEventListener("click", () => {
+      prepareResultCapture();
     });
 
-    openResultButton.addEventListener("click", () => {
-      if (!Array.isArray(latestConfirmedPlayers) || latestConfirmedPlayers.length === 0) {
-        setStatus("Confirmez d'abord la composition de la partie.", "error");
-        return;
-      }
-      populateResultForm(latestConfirmedPlayers);
-      resultForm.hidden = false;
-      setStatus("");
+    startGameButton.addEventListener("click", () => {
+      setStatus("La fonctionnalité de suivi en direct arrive bientôt.", "error");
     });
 
     cancelResultButton.addEventListener("click", () => {
@@ -711,44 +905,11 @@
 
     resultForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (!Array.isArray(latestConfirmedPlayers) || latestConfirmedPlayers.length === 0) {
-        setStatus("Confirmez la composition avant d'enregistrer un résultat.", "error");
-        return;
-      }
-
-      const formData = new FormData(resultForm);
-      const rankings = [];
-      for (const player of latestConfirmedPlayers) {
-        const rawValue = formData.get(`result-${player.id}`);
-        const rank = Number.parseInt(rawValue, 10);
-        if (!rawValue || !Number.isFinite(rank) || rank < 1 || rank > latestConfirmedPlayers.length) {
-          setStatus("Veuillez attribuer un rang à chaque joueur.", "error");
-          return;
-        }
-        rankings.push({ playerId: player.id, rank });
-      }
-
-      const record = {
-        id: createIdentifier("game"),
-        createdAt: new Date().toISOString(),
-        players: latestConfirmedPlayers.map((player, index) => ({
-          id: player.id,
-          name: player.name,
-          deckName: player.deckName ?? "",
-          deckId: player.deckId ?? "",
-          isOwner: Boolean(player.isOwner),
-          order: index,
-        })),
-        rankings,
-      };
-
-      gameHistory = [record, ...gameHistory].slice(0, 100);
-      writeArrayToStorage(GAME_HISTORY_STORAGE_KEY, gameHistory);
-      renderHistory();
-
-      setStatus("La partie a été enregistrée dans votre historique.", "success");
-      resetWorkflow({ preserveStatus: true });
-      resultForm.hidden = true;
+      recordResult();
     });
+
+    await loadPlaygroups();
+    resetWorkflow({ preserveStatus: true });
+    await loadGameHistory();
   });
 })();

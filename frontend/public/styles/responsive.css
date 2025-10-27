@@ -79,8 +79,7 @@
     }
 
     .game-setup-form,
-    .game-result-form,
-    .game-summary {
+    .game-result-form {
       padding: var(--space-md);
     }
 
@@ -100,6 +99,41 @@
     .game-result-actions > * {
       width: 100%;
       text-align: center;
+    }
+
+    .game-setup-actions-primary {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .game-setup-actions-primary > * {
+      width: 100%;
+    }
+
+    .playgroup-selector {
+      min-width: 100%;
+    }
+
+    .parties-main,
+    .groupes-main {
+      padding: var(--space-xl) var(--space-md);
+    }
+
+    .parties-header,
+    .groupes-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-md);
+    }
+
+    .parties-filters,
+    .groupes-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .parties-filter {
+      min-width: 100%;
     }
   }
 

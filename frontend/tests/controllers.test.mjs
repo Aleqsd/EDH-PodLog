@@ -579,15 +579,14 @@ test("dashboard controller initialises pod composition with four default players
   container.hasAttribute = (name) => container.attributes.has(name);
   const setupForm = createElement("form", { id: "gameSetupForm" });
   setupForm.reset = () => {};
+  const playgroupInput = createElement("input", { id: "playgroupInput" });
+  const knownPlaygroups = createElement("datalist", { id: "knownPlaygroups" });
   const playersList = createElement("ol", { id: "gamePlayersList" });
   const playerTemplate = createPlayerTemplate();
   const addPlayerButton = createElement("button", { id: "addPlayerButton" });
   const knownPlayers = createElement("datalist", { id: "knownPlayers" });
-  const summary = createElement("div", { id: "gameSummary" });
-  const summaryList = createElement("ul", { id: "gameSummaryList" });
-  const editPlayersButton = createElement("button", { id: "editPlayersButton" });
   const startGameButton = createElement("button", { id: "startGameButton" });
-  const openResultButton = createElement("button", { id: "openResultButton" });
+  const saveResultButton = createElement("button", { id: "saveResultButton" });
   const resultForm = createElement("form", { id: "gameResultForm" });
   resultForm.reset = () => {};
   const resultGrid = createElement("div", { id: "gameResultGrid" });
@@ -600,15 +599,14 @@ test("dashboard controller initialises pod composition with four default players
     gameSetupToggle: toggleBtn,
     gameSetupContainer: container,
     gameSetupForm: setupForm,
+    playgroupInput,
+    knownPlaygroups,
     gamePlayersList: playersList,
     playerRowTemplate: playerTemplate,
     addPlayerButton,
     knownPlayers,
-    gameSummary: summary,
-    gameSummaryList: summaryList,
-    editPlayersButton,
     startGameButton,
-    openResultButton,
+    saveResultButton,
     gameResultForm: resultForm,
     gameResultGrid: resultGrid,
     cancelResultButton,
@@ -643,16 +641,14 @@ test("dashboard controller records additional players into the known list after 
   container.hasAttribute = (name) => container.attributes.has(name);
   const setupForm = createElement("form", { id: "gameSetupForm" });
   setupForm.reset = () => {};
+  const playgroupInput = createElement("input", { id: "playgroupInput" });
+  const knownPlaygroups = createElement("datalist", { id: "knownPlaygroups" });
   const playersList = createElement("ol", { id: "gamePlayersList" });
   const playerTemplate = createPlayerTemplate();
   const addPlayerButton = createElement("button", { id: "addPlayerButton" });
   const knownPlayers = createElement("datalist", { id: "knownPlayers" });
-  const summary = createElement("div", { id: "gameSummary" });
-  summary.hidden = true;
-  const summaryList = createElement("ul", { id: "gameSummaryList" });
-  const editPlayersButton = createElement("button", { id: "editPlayersButton" });
   const startGameButton = createElement("button", { id: "startGameButton" });
-  const openResultButton = createElement("button", { id: "openResultButton" });
+  const saveResultButton = createElement("button", { id: "saveResultButton" });
   const resultForm = createElement("form", { id: "gameResultForm" });
   resultForm.reset = () => {};
   const resultGrid = createElement("div", { id: "gameResultGrid" });
@@ -665,15 +661,14 @@ test("dashboard controller records additional players into the known list after 
     gameSetupToggle: toggleBtn,
     gameSetupContainer: container,
     gameSetupForm: setupForm,
+    playgroupInput,
+    knownPlaygroups,
     gamePlayersList: playersList,
     playerRowTemplate: playerTemplate,
     addPlayerButton,
     knownPlayers,
-    gameSummary: summary,
-    gameSummaryList: summaryList,
-    editPlayersButton,
     startGameButton,
-    openResultButton,
+    saveResultButton,
     gameResultForm: resultForm,
     gameResultGrid: resultGrid,
     cancelResultButton,
@@ -697,13 +692,9 @@ test("dashboard controller records additional players into the known list after 
   nameInput.value = "Alice Example";
   nameInput.dispatchEvent({ type: "input", target: nameInput });
 
-  setupForm.dispatchEvent({
-    type: "submit",
-    preventDefault() {},
-  });
+  saveResultButton.dispatchEvent({ type: "click" });
 
-  assert.equal(summary.hidden, false);
+  assert.equal(resultForm.hidden, false);
   assert.equal(knownPlayers.children.length, 1);
   assert.equal(knownPlayers.children[0].value, "Alice Example");
-  assert.equal(status.textContent.includes("La composition"), true);
 });

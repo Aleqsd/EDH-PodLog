@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
@@ -16,192 +15,10 @@ if str(ROOT) not in sys.path:
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_mongo_database, get_moxfield_client
-from app.main import create_app
+from app.dependencies import get_moxfield_client
 from app.moxfield import MoxfieldError, MoxfieldNotFoundError
 from app.routers import cache_router, profiles_router, users_router
-
-
-class _StubMoxfieldClient:
-    """Simple stub that mimics the Moxfield client behaviour."""
-
-    def __init__(
-        self,
-        payload: Dict[str, Any] | None = None,
-        *,
-        error: Exception | None = None,
-        summary_payload: Dict[str, Any] | None = None,
-        deck_summaries: List[Dict[str, Any]] | None = None,
-    ) -> None:
-        self._payload = payload
-        self._error = error
-        self._summary_payload = summary_payload or {}
-        self._deck_summaries = list(deck_summaries or [])
-
-    async def collect_user_decks_with_details(self, username: str, **_: Any) -> Dict[str, Any]:
-        if self._error:
-            raise self._error
-        return self._payload or {}
-
-    async def get_user_summary(self, username: str, **_: Any) -> Dict[str, Any]:
-        if self._error:
-            raise self._error
-        if self._summary_payload:
-            return self._summary_payload
-        return {
-            "userName": username,
-            "displayName": username,
-            "profileImageUrl": None,
-            "badges": [],
-        }
-
-    async def get_user_deck_summaries(self, username: str, **_: Any) -> List[Dict[str, Any]]:
-        if self._error:
-            raise self._error
-        return self._deck_summaries
-
-
-class _StubCursor:
-    """Minimal cursor wrapper to simulate Motor's async cursor."""
-
-    def __init__(self, documents: list[dict[str, Any]]) -> None:
-        self._documents = documents
-
-    async def to_list(self, length: int | None = None) -> list[dict[str, Any]]:
-        return deepcopy(self._documents if length is None else self._documents[:length])
-
-
-class _StubCollection:
-    """In-memory Motor-like collection used for API tests."""
-
-    def __init__(self) -> None:
-        self.documents: list[dict[str, Any]] = []
-        self.created_indexes: list[dict[str, Any]] = []
-
-    def _matches(self, document: dict[str, Any], filter_: dict[str, Any]) -> bool:
-        for key, value in filter_.items():
-            if key == "$or":
-                if not any(self._matches(document, clause) for clause in value):
-                    return False
-            else:
-                if document.get(key) != value:
-                    return False
-        return True
-
-    async def update_one(
-        self,
-        filter_: dict[str, Any],
-        update: dict[str, Any],
-        *,
-        upsert: bool = False,
-        **_: Any,
-    ):
-        match = None
-        for document in self.documents:
-            if self._matches(document, filter_):
-                match = document
-                break
-
-        matched_count = 0
-
-        if match is not None:
-            match.update(deepcopy(update.get("$set", {})))
-            matched_count = 1
-            return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": None})()
-
-        if upsert:
-            new_document = deepcopy(update.get("$set", {}))
-            self.documents.append(new_document)
-            return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": object()})()
-
-        return type("UpdateResult", (), {"matched_count": matched_count, "upserted_id": None})()
-
-    async def find_one(self, filter_: dict[str, Any]) -> dict[str, Any] | None:
-        for document in self.documents:
-            if self._matches(document, filter_):
-                return deepcopy(document)
-        return None
-
-    def find(self, filter_: dict[str, Any]) -> _StubCursor:
-        results = [
-            deepcopy(document)
-            for document in self.documents
-            if self._matches(document, filter_)
-        ]
-        return _StubCursor(results)
-
-    async def replace_one(
-        self,
-        filter_: dict[str, Any],
-        replacement: dict[str, Any],
-        *,
-        upsert: bool = False,
-        **_: Any,
-    ):
-        for index, document in enumerate(self.documents):
-            if self._matches(document, filter_):
-                self.documents[index] = deepcopy(replacement)
-                return type(
-                    "ReplaceResult",
-                    (),
-                    {"matched_count": 1, "upserted_id": None},
-                )()
-        if upsert:
-            self.documents.append(deepcopy(replacement))
-            return type(
-                "ReplaceResult",
-                (),
-                {"matched_count": 0, "upserted_id": object()},
-            )()
-        return type("ReplaceResult", (), {"matched_count": 0, "upserted_id": None})()
-
-    async def delete_one(self, filter_: dict[str, Any]):
-        for index, document in enumerate(self.documents):
-            if self._matches(document, filter_):
-                self.documents.pop(index)
-                return type("DeleteResult", (), {"deleted_count": 1})()
-        return type("DeleteResult", (), {"deleted_count": 0})()
-
-    async def count_documents(self, filter_: dict[str, Any]) -> int:
-        return sum(1 for document in self.documents if self._matches(document, filter_))
-
-    async def create_indexes(self, indexes: list[Any]):
-        for raw in indexes:
-            document = getattr(raw, "document", raw)
-            name = document.get("name")
-            key_spec = document.get("key")
-            if isinstance(key_spec, dict):
-                keys = tuple(key_spec.items())
-            elif isinstance(key_spec, list):
-                keys = tuple(tuple(item) for item in key_spec)
-            else:
-                keys = ()
-            self.created_indexes.append({"name": name, "keys": keys})
-        return [entry["name"] for entry in self.created_indexes]
-
-
-class _StubDatabase:
-    """Dictionary-like helper that returns stub collections."""
-
-    def __init__(self) -> None:
-        self._collections: dict[str, _StubCollection] = {}
-
-    def __getitem__(self, name: str) -> _StubCollection:
-        if name not in self._collections:
-            self._collections[name] = _StubCollection()
-        return self._collections[name]
-
-
-@pytest.fixture()
-def api_client() -> TestClient:
-    """Provide a FastAPI TestClient with dependency overrides reset after use."""
-    app = create_app()
-    stub_db = _StubDatabase()
-    app.dependency_overrides[get_mongo_database] = lambda: stub_db
-    app.state.stub_db = stub_db
-    client = TestClient(app)
-    yield client
-    app.dependency_overrides.clear()
+from backend.tests.utils import StubMoxfieldClient
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -272,7 +89,7 @@ def test_get_user_decks_success(api_client: TestClient) -> None:
         ],
     }
 
-    stub_client = _StubMoxfieldClient(stub_payload)
+    stub_client = StubMoxfieldClient(stub_payload)
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -344,7 +161,7 @@ def test_get_user_decks_color_identity_from_cards(api_client: TestClient) -> Non
         ],
     }
 
-    stub_client = _StubMoxfieldClient(stub_payload)
+    stub_client = StubMoxfieldClient(stub_payload)
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -411,7 +228,7 @@ def test_upsert_user_profile_creates_and_updates_document(api_client: TestClient
 
 def test_get_user_decks_not_found(api_client: TestClient) -> None:
     """The endpoint should convert client not-found errors into HTTP 404."""
-    stub_client = _StubMoxfieldClient(error=MoxfieldNotFoundError("missing"))
+    stub_client = StubMoxfieldClient(error=MoxfieldNotFoundError("missing"))
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -424,7 +241,7 @@ def test_get_user_decks_not_found(api_client: TestClient) -> None:
 
 def test_get_user_decks_generic_error(api_client: TestClient) -> None:
     """Any other client error should surface as a 502."""
-    stub_client = _StubMoxfieldClient(error=MoxfieldError("boom"))
+    stub_client = StubMoxfieldClient(error=MoxfieldError("boom"))
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -464,7 +281,7 @@ def test_get_user_deck_summaries_success(api_client: TestClient) -> None:
         }
     ]
 
-    stub_client = _StubMoxfieldClient(summary_payload=stub_summary, deck_summaries=stub_decks)
+    stub_client = StubMoxfieldClient(summary_payload=stub_summary, deck_summaries=stub_decks)
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -482,7 +299,7 @@ def test_get_user_deck_summaries_success(api_client: TestClient) -> None:
 
 def test_get_user_deck_summaries_not_found(api_client: TestClient) -> None:
     """Not found errors should surface as HTTP 404 for summaries."""
-    stub_client = _StubMoxfieldClient(error=MoxfieldNotFoundError("missing"))
+    stub_client = StubMoxfieldClient(error=MoxfieldNotFoundError("missing"))
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -495,7 +312,7 @@ def test_get_user_deck_summaries_not_found(api_client: TestClient) -> None:
 
 def test_get_user_deck_summaries_generic_error(api_client: TestClient) -> None:
     """Any other client error should surface as a 502 for summaries."""
-    stub_client = _StubMoxfieldClient(error=MoxfieldError("boom"))
+    stub_client = StubMoxfieldClient(error=MoxfieldError("boom"))
 
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
@@ -530,7 +347,7 @@ def test_get_cached_user_decks_returns_cached_payload(api_client: TestClient) ->
         ],
     }
 
-    stub_client = _StubMoxfieldClient(stub_payload)
+    stub_client = StubMoxfieldClient(stub_payload)
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
 
@@ -572,7 +389,7 @@ def test_get_cached_deck_summaries_returns_cached_payload(api_client: TestClient
         }
     ]
 
-    stub_client = _StubMoxfieldClient(summary_payload=stub_summary, deck_summaries=stub_decks)
+    stub_client = StubMoxfieldClient(summary_payload=stub_summary, deck_summaries=stub_decks)
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
 
@@ -680,7 +497,7 @@ def test_delete_user_deck_removes_documents_and_updates_cache(api_client: TestCl
         ],
     }
 
-    stub_client = _StubMoxfieldClient(stub_payload)
+    stub_client = StubMoxfieldClient(stub_payload)
     app = api_client.app
     app.dependency_overrides[get_moxfield_client] = lambda: stub_client
 

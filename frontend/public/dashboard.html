@@ -24,7 +24,8 @@
       </a>
       <nav class="app-nav">
         <a class="app-nav-link is-active" href="dashboard.html">Tableau de bord</a>
-        <a class="app-nav-link" href="#">Parties</a>
+        <a class="app-nav-link" href="parties.html">Parties</a>
+        <a class="app-nav-link" href="groupes.html">Groupe</a>
         <a class="app-nav-link" href="decks.html">Decks</a>
         <a class="app-nav-link" href="#">Statistiques</a>
         <a class="app-nav-link" href="synchronisation.html">Synchronisation</a>
@@ -81,37 +82,40 @@
           <div class="game-card-body" id="gameSetupContainer" hidden>
             <form class="game-setup-form" id="gameSetupForm" novalidate>
               <div class="game-setup-header">
-                <h2>Composition du pod</h2>
-                <p>Les noms des quatre joueurs sont requis. Ajoutez des participants supplémentaires si besoin.</p>
+                <div class="game-setup-header-text">
+                  <h2>Composition de la table</h2>
+                  <p>
+                    Choisissez le groupe, ajustez les joueurs et préparez le résultat. Les champs se compressent pour vous permettre de tout gérer en un coup d'œil.
+                  </p>
+                </div>
+                <label class="playgroup-selector">
+                  <span>Groupe</span>
+                  <input
+                    class="playgroup-input"
+                    type="text"
+                    id="playgroupInput"
+                    name="playgroup"
+                    placeholder="Sélectionner ou créer un groupe"
+                    autocomplete="off"
+                    list="knownPlaygroups"
+                  />
+                </label>
               </div>
               <ol class="player-list" id="gamePlayersList"></ol>
               <div class="game-setup-actions">
                 <button class="inline-button" type="button" id="addPlayerButton">
                   Ajouter un joueur
                 </button>
-                <button class="primary-action" type="submit">Confirmer la composition</button>
+                <div class="game-setup-actions-primary">
+                  <button class="secondary-action" type="button" id="startGameButton" disabled>
+                    Démarrer la partie (bientôt)
+                  </button>
+                  <button class="primary-action" type="button" id="saveResultButton">
+                    Enregistrer le résultat
+                  </button>
+                </div>
               </div>
             </form>
-            <div class="game-summary" id="gameSummary" hidden>
-              <div class="game-summary-header">
-                <h2>Pod confirmé</h2>
-                <p>
-                  Vous pouvez démarrer la partie ou enregistrer directement un résultat.
-                </p>
-              </div>
-              <ul class="game-summary-list" id="gameSummaryList"></ul>
-              <div class="game-actions">
-                <button class="inline-button" type="button" id="editPlayersButton">
-                  Modifier les joueurs
-                </button>
-                <button class="secondary-action" type="button" id="startGameButton" disabled>
-                  Démarrer la partie (bientôt disponible)
-                </button>
-                <button class="primary-action" type="button" id="openResultButton">
-                  Enregistrer un résultat
-                </button>
-              </div>
-            </div>
             <form class="game-result-form" id="gameResultForm" hidden>
               <div class="game-result-header">
                 <h2>Classement de la partie</h2>
@@ -170,7 +174,7 @@
             <div>
               <h2 id="gameHistoryTitle">Historique de parties</h2>
               <p class="history-subtitle">
-                Consultez vos parties enregistrées et leurs classements.
+                Un aperçu de vos dernières parties. L'onglet Parties rassemble l'historique complet.
               </p>
             </div>
           </div>
@@ -180,6 +184,7 @@
           <ol class="game-history-list" id="gameHistoryList"></ol>
         </section>
       </div>
+      <datalist id="knownPlaygroups"></datalist>
       <datalist id="knownPlayers"></datalist>
     </main>
     <script

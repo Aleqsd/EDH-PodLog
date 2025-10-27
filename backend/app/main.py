@@ -9,8 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .dependencies import close_mongo_client, get_mongo_database
 from .logging_utils import get_logger
-from .repositories import ensure_moxfield_cache_indexes
-from .routers import cache_router, meta_router, profiles_router, users_router
+from .repositories import ensure_moxfield_cache_indexes, ensure_play_data_indexes
+from .routers import (
+    cache_router,
+    games_router,
+    meta_router,
+    playgroups_router,
+    profiles_router,
+    users_router,
+)
 
 logger = get_logger("backend")
 
@@ -26,6 +33,10 @@ def create_app() -> FastAPI:
             await ensure_moxfield_cache_indexes(database)
         except Exception:  # pragma: no cover - defensive logging
             logger.exception("Failed to ensure Mongo indexes during startup.")
+        try:
+            await ensure_play_data_indexes(database)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to ensure play data indexes during startup.")
         try:
             yield
         finally:
@@ -53,6 +64,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(meta_router)
+    app.include_router(playgroups_router)
+    app.include_router(games_router)
     app.include_router(profiles_router)
     app.include_router(users_router)
     app.include_router(cache_router)

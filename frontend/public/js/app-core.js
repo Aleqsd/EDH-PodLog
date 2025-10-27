@@ -340,6 +340,22 @@ const buildProfileEndpoint = (googleSub) => {
   return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}`);
 };
 
+const buildPlaygroupsEndpoint = (googleSub) => {
+  if (!googleSub) {
+    return null;
+  }
+  return buildBackendUrl(
+    `/profiles/${encodeURIComponent(googleSub)}/playgroups`
+  );
+};
+
+const buildGamesEndpoint = (googleSub) => {
+  if (!googleSub) {
+    return null;
+  }
+  return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}/games`);
+};
+
 const fetchBackendProfile = async (googleSub) => {
   const endpoint = buildProfileEndpoint(googleSub);
   if (!endpoint) {
@@ -391,6 +407,118 @@ const upsertBackendProfile = async (googleSub, payload) => {
     return response.json();
   } catch (error) {
     console.warn("Impossible d'enregistrer le profil utilisateur :", error);
+    throw error;
+  }
+};
+
+const fetchUserPlaygroups = async (googleSub) => {
+  const endpoint = buildPlaygroupsEndpoint(googleSub);
+  if (!endpoint) {
+    return { playgroups: [] };
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible de récupérer les groupes (${response.status}).`);
+    }
+    const payload = await response.json();
+    if (!payload || typeof payload !== "object") {
+      return { playgroups: [] };
+    }
+    return {
+      playgroups: Array.isArray(payload.playgroups) ? payload.playgroups : [],
+    };
+  } catch (error) {
+    console.warn("Échec de récupération des groupes :", error);
+    throw error;
+  }
+};
+
+const upsertUserPlaygroup = async (googleSub, name) => {
+  const endpoint = buildPlaygroupsEndpoint(googleSub);
+  if (!endpoint) {
+    return null;
+  }
+  const payload = { name };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible d'enregistrer le groupe (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de l'enregistrement du groupe :", error);
+    throw error;
+  }
+};
+
+const fetchUserGames = async (googleSub, { playgroupId } = {}) => {
+  const endpoint = buildGamesEndpoint(googleSub);
+  if (!endpoint) {
+    return { games: [] };
+  }
+  let url = endpoint;
+  if (playgroupId) {
+    const params = new URLSearchParams({ playgroup_id: playgroupId });
+    url = `${endpoint}?${params}`;
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible de récupérer les parties (${response.status}).`);
+    }
+    const payload = await response.json();
+    if (!payload || typeof payload !== "object") {
+      return { games: [] };
+    }
+    return {
+      games: Array.isArray(payload.games) ? payload.games : [],
+    };
+  } catch (error) {
+    console.warn("Échec de récupération des parties :", error);
+    throw error;
+  }
+};
+
+const recordUserGame = async (googleSub, payload) => {
+  const endpoint = buildGamesEndpoint(googleSub);
+  if (!endpoint || !payload || typeof payload !== "object") {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      const message =
+        errorBody?.detail ||
+        `Impossible d'enregistrer la partie (${response.status}).`;
+      throw new Error(message);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de l'enregistrement de la partie :", error);
     throw error;
   }
 };

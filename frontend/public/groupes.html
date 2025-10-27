@@ -2,8 +2,11 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>EDH PodLog · Détail du deck</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>EDH PodLog · Groupes</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,7 +15,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="app-shell" data-require-auth="true" data-page="deck-detail">
+  <body class="app-shell" data-require-auth="true" data-page="groupes">
     <div class="app-background" aria-hidden="true"></div>
     <header class="app-header">
       <a class="brand brand-link" href="dashboard.html">
@@ -22,8 +25,8 @@
       <nav class="app-nav">
         <a class="app-nav-link" href="dashboard.html">Tableau de bord</a>
         <a class="app-nav-link" href="parties.html">Parties</a>
-        <a class="app-nav-link" href="groupes.html">Groupe</a>
-        <a class="app-nav-link is-active" href="decks.html">Decks</a>
+        <a class="app-nav-link is-active" href="groupes.html">Groupe</a>
+        <a class="app-nav-link" href="decks.html">Decks</a>
         <a class="app-nav-link" href="#">Statistiques</a>
         <a class="app-nav-link" href="synchronisation.html">Synchronisation</a>
       </nav>
@@ -59,35 +62,24 @@
       </div>
     </header>
 
-    <main class="deck-detail-main">
-      <section class="deck-detail-section">
-        <div class="deck-detail-header">
-          <a class="back-link" href="decks.html">← Retour à vos decks</a>
-          <span class="deck-handle-badge is-hidden" id="deckHandleBadge"></span>
-          <h1 id="deckTitle">Chargement du deck…</h1>
-          <p class="deck-meta" id="deckMeta"></p>
+    <main class="groupes-main">
+      <section class="groupes-header">
+        <div>
+          <h1>Groupes de jeu</h1>
+          <p>
+            Visualisez vos groupes, consultez les dernières parties associées et accédez rapidement aux historiques détaillés.
+          </p>
         </div>
-        <div class="deck-hero">
-          <div class="deck-hero-copy">
-            <div
-              class="deck-commander-area is-hidden"
-              id="deckCommanderHighlight"
-              aria-live="polite"
-            ></div>
-            <p class="deck-description" id="deckDescription">
-              Retrouvez ici la liste complète de votre deck importé depuis Moxfield.
-            </p>
-          </div>
-          <div class="deck-summary is-hidden" id="deckSummary" aria-live="polite"></div>
+        <div class="groupes-actions">
+          <a class="primary-action" href="dashboard.html">Enregistrer une partie</a>
         </div>
-        <p class="deck-loading" id="deckLoading">
-          <span aria-hidden="true">⏳</span>
-          <span>Chargement des cartes…</span>
-        </p>
-        <p class="deck-error is-hidden" id="deckError"></p>
-        <div class="deck-board-toolbar is-hidden" id="deckBoardsToolbar"></div>
-        <div class="deck-board-list" id="deckBoards"></div>
-        <section class="deck-insights is-hidden" id="deckInsights" aria-live="polite"></section>
+      </section>
+
+      <section class="groupes-list">
+        <div class="groupes-empty" id="groupsEmpty">
+          Aucun groupe n'a encore été enregistré. Créez-en un depuis le tableau de bord lors de la composition d'une table.
+        </div>
+        <ul class="group-card-list" id="groupsList"></ul>
       </section>
     </main>
 
@@ -107,7 +99,7 @@
     <script src="js/controllers/synchronisation.js"></script>
     <script src="js/controllers/deck-detail.js"></script>
     <script src="js/controllers/card-detail.js"></script>
-    <script src="js/controllers/profile.js"></script>
-    <script src="js/controllers/landing.js"></script>
+    <script src="js/controllers/parties.js"></script>
+    <script src="js/controllers/groupes.js"></script>
   </body>
 </html>

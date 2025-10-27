@@ -17,6 +17,8 @@ class Settings:
     mongo_moxfield_users_collection: str
     mongo_decks_collection: str
     mongo_deck_summaries_collection: str
+    mongo_playgroups_collection: str
+    mongo_games_collection: str
     cors_allow_origins: tuple[str, ...]
 
     @classmethod
@@ -33,6 +35,8 @@ class Settings:
             mongo_deck_summaries_collection=os.getenv(
                 "MONGO_DECK_SUMMARIES_COLLECTION", "deck_summaries"
             ),
+            mongo_playgroups_collection=os.getenv("MONGO_PLAYGROUPS_COLLECTION", "playgroups"),
+            mongo_games_collection=os.getenv("MONGO_GAMES_COLLECTION", "games"),
             cors_allow_origins=_load_cors_origins(),
         )
 

@@ -2,8 +2,11 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>EDH PodLog · Détail du deck</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>EDH PodLog · Parties</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,7 +15,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="app-shell" data-require-auth="true" data-page="deck-detail">
+  <body class="app-shell" data-require-auth="true" data-page="parties">
     <div class="app-background" aria-hidden="true"></div>
     <header class="app-header">
       <a class="brand brand-link" href="dashboard.html">
@@ -21,9 +24,9 @@
       </a>
       <nav class="app-nav">
         <a class="app-nav-link" href="dashboard.html">Tableau de bord</a>
-        <a class="app-nav-link" href="parties.html">Parties</a>
+        <a class="app-nav-link is-active" href="parties.html">Parties</a>
         <a class="app-nav-link" href="groupes.html">Groupe</a>
-        <a class="app-nav-link is-active" href="decks.html">Decks</a>
+        <a class="app-nav-link" href="decks.html">Decks</a>
         <a class="app-nav-link" href="#">Statistiques</a>
         <a class="app-nav-link" href="synchronisation.html">Synchronisation</a>
       </nav>
@@ -59,35 +62,29 @@
       </div>
     </header>
 
-    <main class="deck-detail-main">
-      <section class="deck-detail-section">
-        <div class="deck-detail-header">
-          <a class="back-link" href="decks.html">← Retour à vos decks</a>
-          <span class="deck-handle-badge is-hidden" id="deckHandleBadge"></span>
-          <h1 id="deckTitle">Chargement du deck…</h1>
-          <p class="deck-meta" id="deckMeta"></p>
+    <main class="parties-main">
+      <section class="parties-header">
+        <div>
+          <h1>Historique des parties</h1>
+          <p>
+            Consultez vos parties enregistrées, filtrez par groupe et accédez rapidement aux decks utilisés.
+          </p>
         </div>
-        <div class="deck-hero">
-          <div class="deck-hero-copy">
-            <div
-              class="deck-commander-area is-hidden"
-              id="deckCommanderHighlight"
-              aria-live="polite"
-            ></div>
-            <p class="deck-description" id="deckDescription">
-              Retrouvez ici la liste complète de votre deck importé depuis Moxfield.
-            </p>
-          </div>
-          <div class="deck-summary is-hidden" id="deckSummary" aria-live="polite"></div>
+        <div class="parties-filters">
+          <label class="parties-filter">
+            <span>Filtrer par groupe</span>
+            <select id="gamesPlaygroupFilter">
+              <option value="">Tous les groupes</option>
+            </select>
+          </label>
         </div>
-        <p class="deck-loading" id="deckLoading">
-          <span aria-hidden="true">⏳</span>
-          <span>Chargement des cartes…</span>
-        </p>
-        <p class="deck-error is-hidden" id="deckError"></p>
-        <div class="deck-board-toolbar is-hidden" id="deckBoardsToolbar"></div>
-        <div class="deck-board-list" id="deckBoards"></div>
-        <section class="deck-insights is-hidden" id="deckInsights" aria-live="polite"></section>
+      </section>
+
+      <section class="parties-history">
+        <div class="history-empty" id="partiesHistoryEmpty">
+          Aucune partie enregistrée. Enregistrez une partie depuis le tableau de bord pour alimenter cet historique.
+        </div>
+        <ol class="game-history-list" id="partiesHistoryList"></ol>
       </section>
     </main>
 
@@ -107,7 +104,7 @@
     <script src="js/controllers/synchronisation.js"></script>
     <script src="js/controllers/deck-detail.js"></script>
     <script src="js/controllers/card-detail.js"></script>
-    <script src="js/controllers/profile.js"></script>
-    <script src="js/controllers/landing.js"></script>
+    <script src="js/controllers/parties.js"></script>
+    <script src="js/controllers/groupes.js"></script>
   </body>
 </html>
