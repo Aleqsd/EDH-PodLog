@@ -27,7 +27,7 @@ const parseRevisionDate = (raw) => {
 const REVISION_DATE = parseRevisionDate(APP_REVISION_DATE_RAW);
 const formatRevisionDate = (date) => {
   if (!(date instanceof Date)) {
-    return { display: "", abbreviation: "" };
+    return "";
   }
   try {
     const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -42,34 +42,11 @@ const formatRevisionDate = (date) => {
       minute: "2-digit",
       hour12: false,
     });
-    const longOffsetFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Paris",
-      timeZoneName: "longOffset",
-    });
 
-    const tzPart = longOffsetFormatter
-      .formatToParts(date)
-      .find((part) => part.type === "timeZoneName")?.value;
-
-    let abbreviation = "CET";
-    if (typeof tzPart === "string") {
-      const match = tzPart.match(/GMT([+-])(\d{2}):(\d{2})/);
-      if (match) {
-        const sign = match[1] === "-" ? -1 : 1;
-        const hours = parseInt(match[2], 10);
-        const minutes = parseInt(match[3], 10);
-        const offsetMinutes = sign * (hours * 60 + minutes);
-        abbreviation = offsetMinutes === 120 ? "CEST" : "CET";
-      }
-    }
-
-    return {
-      display: `${dateFormatter.format(date)} à ${timeFormatter.format(date)}`,
-      abbreviation,
-    };
+    return `${dateFormatter.format(date)} à ${timeFormatter.format(date)}`;
   } catch (error) {
     console.warn("EDH PodLog failed to format revision date:", error);
-    return { display: date.toISOString(), abbreviation: "" };
+    return date.toISOString();
   }
 };
 
@@ -86,7 +63,11 @@ const mountAppRevisionBadge = () => {
   const badge = document.createElement("aside");
   badge.id = "appRevisionBadge";
   badge.className = "app-revision-badge";
-  badge.setAttribute("aria-label", `Révision ${APP_REVISION}`);
+  if (APP_REVISION_MESSAGE) {
+    badge.setAttribute("aria-label", `Dernière mise à jour : ${APP_REVISION_MESSAGE} (${APP_REVISION})`);
+  } else {
+    badge.setAttribute("aria-label", `Révision ${APP_REVISION}`);
+  }
   badge.dataset.revision = APP_REVISION;
 
   if (APP_REVISION_FULL) {
@@ -94,32 +75,49 @@ const mountAppRevisionBadge = () => {
     badge.dataset.revisionFull = APP_REVISION_FULL;
   }
 
+  const previewMessage = (() => {
+    if (!APP_REVISION_MESSAGE) {
+      return `Révision ${APP_REVISION}`;
+    }
+    const maxLength = 80;
+    if (APP_REVISION_MESSAGE.length <= maxLength) {
+      return APP_REVISION_MESSAGE;
+    }
+    return `${APP_REVISION_MESSAGE.slice(0, maxLength - 1)}…`;
+  })();
+
   const header = document.createElement("span");
   header.className = "app-revision-header";
+  if (APP_REVISION_MESSAGE) {
+    header.title = APP_REVISION_MESSAGE;
+  }
 
-  const label = document.createElement("span");
-  label.className = "app-revision-label";
-  label.textContent = "rev";
+  const messageSpan = document.createElement("span");
+  messageSpan.className = "app-revision-message";
+  messageSpan.textContent = previewMessage;
+  if (APP_REVISION_MESSAGE) {
+    messageSpan.title = APP_REVISION_MESSAGE;
+  }
 
-  const value = document.createElement("span");
-  value.className = "app-revision-value";
-  value.textContent = APP_REVISION;
+  const revisionSpan = document.createElement("span");
+  revisionSpan.className = "app-revision-value";
+  revisionSpan.textContent = `(${APP_REVISION})`;
 
-  header.append(label, value);
+  header.append(messageSpan, revisionSpan);
   badge.append(header);
 
+  if (APP_REVISION_MESSAGE) {
+    badge.dataset.revisionMessage = APP_REVISION_MESSAGE;
+  }
+
   if (REVISION_DATE) {
-    const { display, abbreviation } = formatRevisionDate(REVISION_DATE);
+    const display = formatRevisionDate(REVISION_DATE);
     if (display) {
       const dateEl = document.createElement("time");
       dateEl.className = "app-revision-date";
       dateEl.dateTime = REVISION_DATE.toISOString();
-      const tzLabel = abbreviation ? ` (${abbreviation})` : "";
-      dateEl.textContent = `Mis à jour le ${display} · heure de Paris${tzLabel}`;
+      dateEl.textContent = `Mis à jour le ${display}`;
       badge.dataset.revisionDate = REVISION_DATE.toISOString();
-      if (abbreviation) {
-        badge.dataset.revisionDateTz = abbreviation;
-      }
       badge.append(dateEl);
     }
   }

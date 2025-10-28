@@ -162,6 +162,37 @@ const deriveCommitTimestamp = (env) => {
   return new Date().toISOString();
 };
 
+const deriveCommitMessage = (env) => {
+  const candidateMessages = [
+    env.EDH_PODLOG_COMMIT_MESSAGE,
+    env.EDH_PODLOG_COMMIT_MSG,
+    env.GIT_COMMIT_MESSAGE,
+    env.CI_COMMIT_MESSAGE,
+    env.VERCEL_GIT_COMMIT_MESSAGE,
+    env.NETLIFY_COMMIT_MESSAGE,
+  ];
+
+  for (const candidate of candidateMessages) {
+    if (candidate && typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  try {
+    const message = execSync("git show -s --format=%s HEAD", {
+      cwd: repoRoot,
+      encoding: "utf8",
+    }).trim();
+    if (message) {
+      return message;
+    }
+  } catch (error) {
+    console.warn("[generate-config] Impossible de déterminer le message du commit :", error.message);
+  }
+
+  return "";
+};
+
 const main = async () => {
   const env = await loadEnv();
   const clientId = env.GOOGLE_CLIENT_ID ?? PLACEHOLDER;
@@ -188,6 +219,10 @@ const main = async () => {
   const commitTimestamp = deriveCommitTimestamp(env);
   if (commitTimestamp) {
     config.APP_REVISION_DATE = commitTimestamp;
+  }
+  const commitMessage = deriveCommitMessage(env);
+  if (commitMessage) {
+    config.APP_REVISION_MESSAGE = commitMessage;
   }
 
   const fileContent = `window.EDH_PODLOG_CONFIG = ${JSON.stringify(config, null, 2)};\n`;

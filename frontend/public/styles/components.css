@@ -628,19 +628,22 @@
   display: inline-flex;
   align-items: baseline;
   gap: var(--space-4xs);
+  max-width: min(320px, 80vw);
 }
 
-.app-revision-badge .app-revision-label {
-  color: var(--color-text-footnote-ghost);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.68rem;
+.app-revision-badge .app-revision-message {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-footnote);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-revision-badge .app-revision-value {
-  font-weight: 600;
+  font-size: 0.68rem;
   letter-spacing: 0.05em;
-  color: var(--color-text-footnote);
+  color: var(--color-text-footnote-ghost);
 }
 
 .app-revision-badge .app-revision-date {
