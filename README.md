@@ -1,4 +1,4 @@
-# EDH PodLog
+# EDH-PodLog
 
 This repository now groups the static frontend, the FastAPI backend that proxies Moxfield, and a local MongoDB data directory in a single tree. Everything runs without Docker and can be started with a handful of `make` commands.
 
