@@ -13,6 +13,8 @@
   let deckErrorEl = null;
   let deckLoadingEl = null;
   let deckHandleBadgeEl = null;
+  let deckPerformanceDeckId = null;
+  let deckPerformanceRequestToken = 0;
   const SORT_MODES = {
     TYPE: "type",
     MANA: "mana",
@@ -332,6 +334,19 @@
       updateDeckSummary(null);
       updateDeckInsights(null);
       renderCommanderHighlight([], null);
+      if (typeof updateDeckPerformance === "function") {
+        const activeDeckId =
+          currentDeckData && typeof currentDeckData === "object"
+            ? getDeckIdentifier(currentDeckData) ?? currentDeckData?.id ?? null
+            : null;
+        updateDeckPerformance({
+          status: "empty",
+          message,
+          deckId: activeDeckId,
+          deckName: currentDeckData?.name ?? null,
+        });
+      }
+      deckPerformanceDeckId = null;
       if (deckSortToolbarEl) {
         deckSortToolbarEl.classList.add("is-hidden");
       }
@@ -375,6 +390,19 @@
       updateDeckSummary(null);
       updateDeckInsights(null);
       renderCommanderHighlight([], activeDeck);
+      if (typeof updateDeckPerformance === "function") {
+        const activeDeckId =
+          activeDeck && typeof activeDeck === "object"
+            ? getDeckIdentifier(activeDeck) ?? activeDeck?.id ?? null
+            : null;
+        updateDeckPerformance({
+          status: "empty",
+          message: "Les performances seront disponibles après la prochaine synchronisation de ce deck.",
+          deckId: activeDeckId,
+          deckName: activeDeck?.name ?? null,
+        });
+      }
+      deckPerformanceDeckId = null;
       return;
     }
 
@@ -566,6 +594,77 @@
     renderCommanderHighlight(commanderEntries, activeDeck, { deckId, handle });
   };
 
+  const refreshDeckPerformance = async (deck, { force = false } = {}) => {
+    if (typeof updateDeckPerformance !== "function" || typeof summariseDeckPerformance !== "function") {
+      return;
+    }
+    if (!deckPerformanceEl) {
+      return;
+    }
+
+    const deckId = deck ? getDeckIdentifier(deck) ?? deck?.id ?? null : null;
+
+    if (!deckId) {
+      updateDeckPerformance({
+        status: "empty",
+        message: "Identifiant de deck introuvable pour analyser les performances.",
+        deckId: null,
+        deckName: deck?.name ?? null,
+      });
+      deckPerformanceDeckId = null;
+      return;
+    }
+
+    const currentState = deckPerformanceEl.dataset?.state ?? "";
+    const isSameDeck = deckPerformanceDeckId === deckId;
+    if (!force && isSameDeck && currentState === "ready") {
+      return;
+    }
+
+    const session = currentSession ?? null;
+    const googleSub = session?.googleSub ?? null;
+    if (!googleSub || typeof fetchUserGames !== "function") {
+      updateDeckPerformance({
+        status: "empty",
+        message: "Connectez-vous pour consulter les performances de ce deck.",
+        deckId,
+        deckName: deck?.name ?? null,
+      });
+      deckPerformanceDeckId = null;
+      return;
+    }
+
+    deckPerformanceDeckId = deckId;
+    const requestToken = ++deckPerformanceRequestToken;
+    updateDeckPerformance({ status: "loading", deckId, deckName: deck?.name ?? null });
+
+    try {
+      const payload = await fetchUserGames(googleSub);
+      if (requestToken !== deckPerformanceRequestToken) {
+        return;
+      }
+      const games = Array.isArray(payload?.games) ? payload.games : [];
+      const summary = summariseDeckPerformance(deck, games);
+      summary.deckId = summary.deckId ?? deckId;
+      summary.deckName = summary.deckName ?? deck?.name ?? null;
+      if (summary.status === "empty" && !summary.message) {
+        summary.message = "Aucune partie enregistrée avec ce deck pour le moment.";
+      }
+      updateDeckPerformance(summary);
+    } catch (error) {
+      if (requestToken !== deckPerformanceRequestToken) {
+        return;
+      }
+      console.error("Unable to load deck performance data:", error);
+      updateDeckPerformance({
+        status: "error",
+        message: "Impossible de charger les performances de ce deck.",
+        deckId,
+        deckName: deck?.name ?? null,
+      });
+    }
+  };
+
   const populateDeckDetail = (deck, { handle } = {}) => {
     if (!deck) {
       showDeckError("Ce deck n'a pas pu être trouvé.");
@@ -653,6 +752,9 @@
     }
 
     renderDeckBoards(deck, { handle });
+
+    const shouldForcePerformance = !previousDeckId || previousDeckId !== nextDeckId;
+    refreshDeckPerformance(deck, { force: shouldForcePerformance });
   };
 
   const initDeckDetailPage = async (context) => {
@@ -758,6 +860,15 @@
     deckSummaryEl = document.getElementById("deckSummary");
     deckCommanderEl = document.getElementById("deckCommanderHighlight");
     deckInsightsEl = document.getElementById("deckInsights");
+    deckPerformanceEl = document.getElementById("deckPerformance");
+    if (deckPerformanceEl) {
+      deckPerformanceEl.innerHTML = "";
+      deckPerformanceEl.classList.add("is-hidden");
+      deckPerformanceEl.dataset.state = "idle";
+      deckPerformanceEl.dataset.deckId = "";
+    }
+    deckPerformanceDeckId = null;
+    deckPerformanceRequestToken = 0;
 
     await initDeckDetailPage(context);
   });

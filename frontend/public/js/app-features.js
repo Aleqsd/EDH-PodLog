@@ -1922,6 +1922,580 @@ const computeDeckStatistics = (deck) => {
   };
 };
 
+const toDateSafe = (value) => {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const normalizeIdentifier = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+  return text.toLowerCase();
+};
+
+const addIdentifierToSet = (set, value) => {
+  const normalized = normalizeIdentifier(value);
+  if (normalized) {
+    set.add(normalized);
+  }
+};
+
+const collectDeckIdentifiers = (deck) => {
+  const identifiers = new Set();
+  if (!deck || typeof deck !== "object") {
+    return identifiers;
+  }
+
+  addIdentifierToSet(identifiers, getDeckIdentifier(deck));
+  addIdentifierToSet(identifiers, deck.id);
+  addIdentifierToSet(identifiers, deck.slug);
+  addIdentifierToSet(identifiers, deck.publicId);
+  addIdentifierToSet(identifiers, deck.public_id);
+  addIdentifierToSet(identifiers, deck.deckId);
+
+  const raw = deck.raw && typeof deck.raw === "object" ? deck.raw : null;
+  if (raw) {
+    addIdentifierToSet(identifiers, raw.id);
+    addIdentifierToSet(identifiers, raw.slug);
+    addIdentifierToSet(identifiers, raw.public_id);
+    addIdentifierToSet(identifiers, raw.publicId);
+  }
+
+  const addUrlTokens = (url) => {
+    if (typeof url !== "string") {
+      return;
+    }
+    url
+      .split(/[/?#]/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => addIdentifierToSet(identifiers, part));
+  };
+
+  addUrlTokens(deck.url);
+  addUrlTokens(deck.publicUrl);
+  addUrlTokens(deck.public_url);
+  if (raw) {
+    addUrlTokens(raw.url);
+    addUrlTokens(raw.public_url);
+  }
+
+  return identifiers;
+};
+
+const collectPlayerIdentifiers = (player) => {
+  const identifiers = [];
+  const push = (value) => {
+    const normalized = normalizeIdentifier(value);
+    if (normalized) {
+      identifiers.push(normalized);
+    }
+  };
+
+  if (!player || typeof player !== "object") {
+    return identifiers;
+  }
+
+  [
+    player.deck_id,
+    player.deckId,
+    player.deck_slug,
+    player.deckSlug,
+    player.deck_public_id,
+    player.deckPublicId,
+    player.deck_publicId,
+  ].forEach(push);
+
+  const addUrlTokens = (url) => {
+    if (typeof url !== "string") {
+      return;
+    }
+    url
+      .split(/[/?#]/)
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .forEach(push);
+  };
+
+  addUrlTokens(player.deck_public_url);
+  addUrlTokens(player.deck_publicUrl);
+  addUrlTokens(player.deckUrl);
+
+  return identifiers;
+};
+
+const doesPlayerMatchDeck = (player, deckIdentifiers) => {
+  if (!player || !(deckIdentifiers instanceof Set) || deckIdentifiers.size === 0) {
+    return false;
+  }
+  const identifiers = collectPlayerIdentifiers(player);
+  return identifiers.some((identifier) => deckIdentifiers.has(identifier));
+};
+
+const summariseDeckPerformance = (deck, games) => {
+  const deckId = getDeckIdentifier(deck) ?? deck?.id ?? null;
+  const result = {
+    status: "empty",
+    deckId,
+    deckName: deck?.name ?? null,
+    totalGames: 0,
+    rankedGames: 0,
+    unrankedGames: 0,
+    winCount: 0,
+    lossCount: 0,
+    winRate: null,
+    positions: [],
+    history: [],
+    lastPlayedAt: null,
+  };
+
+  if (!deckId || !Array.isArray(games) || games.length === 0) {
+    return result;
+  }
+
+  const deckIdentifiers = collectDeckIdentifiers(deck);
+  if (deckIdentifiers.size === 0) {
+    deckIdentifiers.add(normalizeIdentifier(deckId));
+  }
+
+  const history = [];
+  const positionMap = new Map();
+  let winCount = 0;
+  let rankedGames = 0;
+
+  games.forEach((game) => {
+    if (!game || typeof game !== "object") {
+      return;
+    }
+    const players = Array.isArray(game.players) ? game.players : [];
+    if (players.length === 0) {
+      return;
+    }
+
+    const rankingMap = new Map();
+    (Array.isArray(game.rankings) ? game.rankings : []).forEach((ranking) => {
+      const playerId = ranking?.player_id ?? ranking?.playerId;
+      if (!playerId) {
+        return;
+      }
+      const parsedRank = Number.parseInt(ranking.rank ?? ranking?.position ?? ranking?.value, 10);
+      if (Number.isFinite(parsedRank) && parsedRank > 0) {
+        rankingMap.set(playerId, parsedRank);
+      }
+    });
+
+    const matchingPlayers = players.filter((player) => doesPlayerMatchDeck(player, deckIdentifiers));
+    if (matchingPlayers.length === 0) {
+      return;
+    }
+
+    const participant =
+      matchingPlayers.find((player) => Boolean(player?.is_owner)) ?? matchingPlayers[0];
+    const rawRank = rankingMap.get(participant?.id) ?? null;
+    const rank = Number.isFinite(rawRank) && rawRank > 0 ? rawRank : null;
+
+    const createdAt = toDateSafe(game.created_at ?? game.updated_at ?? null);
+    const opponents = players
+      .filter((player) => player && player.id !== participant?.id)
+      .map((player) => ({
+        id: player.id ?? null,
+        name:
+          typeof player.name === "string" && player.name.trim().length > 0
+            ? player.name.trim()
+            : "Joueur inconnu",
+        rank: rankingMap.get(player.id) ?? null,
+        isOwner: Boolean(player.is_owner),
+        deckName: typeof player.deck_name === "string" ? player.deck_name : null,
+      }));
+
+    const historyEntry = {
+      id:
+        game.id ??
+        `${game.created_at ?? game.updated_at ?? Date.now()}-${participant?.id ?? "participant"}`,
+      createdAt,
+      createdAtRaw: game.created_at ?? game.updated_at ?? null,
+      playgroupName:
+        typeof game.playgroup?.name === "string" && game.playgroup.name.trim().length > 0
+          ? game.playgroup.name.trim()
+          : "Partie enregistrée",
+      rank,
+      playerCount: players.length,
+      isWin: rank === 1,
+      notes: typeof game.notes === "string" ? game.notes.trim() : "",
+      opponents,
+    };
+    history.push(historyEntry);
+
+    if (rank !== null) {
+      rankedGames += 1;
+      if (rank === 1) {
+        winCount += 1;
+      }
+      positionMap.set(rank, (positionMap.get(rank) ?? 0) + 1);
+    }
+  });
+
+  history.sort((a, b) => {
+    const timeA =
+      a.createdAt instanceof Date && !Number.isNaN(a.createdAt.getTime())
+        ? a.createdAt.getTime()
+        : a.createdAtRaw
+        ? new Date(a.createdAtRaw).getTime()
+        : 0;
+    const timeB =
+      b.createdAt instanceof Date && !Number.isNaN(b.createdAt.getTime())
+        ? b.createdAt.getTime()
+        : b.createdAtRaw
+        ? new Date(b.createdAtRaw).getTime()
+        : 0;
+    return timeB - timeA;
+  });
+
+  const totalGames = history.length;
+  const unrankedGames = totalGames - rankedGames;
+  const lossCount = Math.max(0, rankedGames - winCount);
+  const winRate = rankedGames > 0 ? winCount / rankedGames : null;
+  const positions = Array.from(positionMap.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([rank, count]) => ({ rank, count }));
+
+  result.status = totalGames > 0 ? "ready" : "empty";
+  result.totalGames = totalGames;
+  result.rankedGames = rankedGames;
+  result.unrankedGames = unrankedGames;
+  result.winCount = winCount;
+  result.lossCount = lossCount;
+  result.winRate = winRate;
+  result.positions = positions;
+  result.history = history;
+  result.lastPlayedAt = history[0]?.createdAt ?? null;
+
+  return result;
+};
+
+const formatFinishLabel = (rank) => {
+  if (!Number.isFinite(rank) || rank <= 0) {
+    return "—";
+  }
+  return rank === 1 ? "1er" : `${rank}e`;
+};
+
+const formatPercentageLabel = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${Number(value).toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  })}%`;
+};
+
+const updateDeckPerformance = (state) => {
+  if (!deckPerformanceEl) {
+    return;
+  }
+
+  deckPerformanceEl.innerHTML = "";
+  deckPerformanceEl.classList.add("is-hidden");
+  deckPerformanceEl.dataset.state = state?.status ?? "idle";
+  deckPerformanceEl.dataset.deckId =
+    state?.deckId !== undefined && state?.deckId !== null ? String(state.deckId) : "";
+
+  if (!state) {
+    return;
+  }
+
+  const renderStatus = (message, className = "") => {
+    const statusEl = document.createElement("p");
+    statusEl.className = `deck-performance-status${className ? ` ${className}` : ""}`;
+    statusEl.textContent = message;
+    deckPerformanceEl.appendChild(statusEl);
+    deckPerformanceEl.classList.remove("is-hidden");
+  };
+
+  switch (state.status) {
+    case "loading": {
+      const loader = document.createElement("p");
+      loader.className = "deck-performance-status deck-performance-status-loading";
+      loader.innerHTML = `<span aria-hidden="true">⏳</span><span>Analyse des parties…</span>`;
+      deckPerformanceEl.appendChild(loader);
+      deckPerformanceEl.classList.remove("is-hidden");
+      return;
+    }
+    case "error": {
+      renderStatus(
+        state.message ?? "Impossible de charger les performances de ce deck.",
+        "is-error"
+      );
+      return;
+    }
+    case "empty": {
+      renderStatus(
+        state.message ?? "Aucune partie enregistrée avec ce deck pour le moment."
+      );
+      return;
+    }
+    case "ready":
+    default:
+      break;
+  }
+
+  if (!Array.isArray(state.history) || state.history.length === 0) {
+    renderStatus(
+      state.message ?? "Aucune partie enregistrée avec ce deck pour le moment."
+    );
+    deckPerformanceEl.dataset.state = "empty";
+    return;
+  }
+
+  const content = document.createElement("div");
+  content.className = "deck-performance-content";
+
+  const overview = document.createElement("div");
+  overview.className = "deck-performance-overview";
+
+  const summaryCard = document.createElement("article");
+  summaryCard.className = "deck-performance-card deck-stats-card deck-performance-card-summary";
+  const summaryTitle = document.createElement("h3");
+  summaryTitle.className = "deck-performance-card-title";
+  summaryTitle.textContent = "Winrate";
+  summaryCard.appendChild(summaryTitle);
+
+  const winrateValue = document.createElement("span");
+  winrateValue.className = "deck-performance-winrate-value";
+  if (state.winRate === null) {
+    winrateValue.textContent = "—";
+  } else {
+    const percent = state.winRate * 100;
+    winrateValue.textContent = `${percent.toLocaleString("fr-FR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}%`;
+  }
+  summaryCard.appendChild(winrateValue);
+
+  const detail = document.createElement("p");
+  detail.className = "deck-performance-winrate-detail";
+  if (state.rankedGames > 0) {
+    detail.textContent = `${NUMBER_FORMAT.format(state.winCount)} victoire${
+      state.winCount > 1 ? "s" : ""
+    } · ${NUMBER_FORMAT.format(state.lossCount)} autre${
+      state.lossCount > 1 ? "s" : ""
+    }`;
+  } else {
+    detail.textContent = "Aucune partie classée disponible pour calculer un winrate.";
+  }
+  summaryCard.appendChild(detail);
+
+  const summaryMeta = document.createElement("p");
+  summaryMeta.className = "deck-performance-summary-meta";
+  const metaParts = [
+    `${NUMBER_FORMAT.format(state.totalGames)} partie${
+      state.totalGames > 1 ? "s" : ""
+    }`,
+  ];
+  if (state.unrankedGames > 0) {
+    metaParts.push(
+      `${NUMBER_FORMAT.format(state.rankedGames)} avec classement`
+    );
+  }
+  if (state.lastPlayedAt instanceof Date && !Number.isNaN(state.lastPlayedAt.getTime())) {
+    metaParts.push(
+      `Dernière partie le ${formatDateTime(state.lastPlayedAt, { dateStyle: "medium" })}`
+    );
+  }
+  summaryMeta.textContent = metaParts.join(" · ");
+  summaryCard.appendChild(summaryMeta);
+
+  overview.appendChild(summaryCard);
+
+  const positionsCard = document.createElement("article");
+  positionsCard.className = "deck-performance-card deck-stats-card deck-performance-card-positions";
+  const positionsTitle = document.createElement("h3");
+  positionsTitle.className = "deck-performance-card-title";
+  positionsTitle.textContent = "Positions finales";
+  positionsCard.appendChild(positionsTitle);
+
+  if (!Array.isArray(state.positions) || state.positions.length === 0) {
+    const emptyPositions = document.createElement("p");
+    emptyPositions.className = "deck-performance-card-empty";
+    emptyPositions.textContent = "Aucune position disponible.";
+    positionsCard.appendChild(emptyPositions);
+  } else {
+    const positionsList = document.createElement("ul");
+    positionsList.className = "deck-performance-positions-list";
+    state.positions.forEach((position) => {
+      const listItem = document.createElement("li");
+      listItem.className = "deck-performance-position";
+      listItem.setAttribute(
+        "aria-label",
+        `${formatFinishLabel(position.rank)} : ${NUMBER_FORMAT.format(position.count)} partie${
+          position.count > 1 ? "s" : ""
+        }`
+      );
+
+      const rankEl = document.createElement("span");
+      rankEl.className = "deck-performance-position-rank";
+      rankEl.textContent = formatFinishLabel(position.rank);
+      listItem.appendChild(rankEl);
+
+      const progress = document.createElement("div");
+      progress.className = "deck-performance-position-progress";
+      progress.setAttribute("aria-hidden", "true");
+      const progressFill = document.createElement("div");
+      progressFill.className = "deck-performance-position-progress-fill";
+      const ratio =
+        state.rankedGames > 0
+          ? Math.max(0, Math.min(1, position.count / state.rankedGames))
+          : 0;
+      progressFill.style.setProperty("--deck-performance-position-ratio", String(ratio));
+      progress.appendChild(progressFill);
+      listItem.appendChild(progress);
+
+      const valueEl = document.createElement("span");
+      valueEl.className = "deck-performance-position-value";
+      const percentage =
+        state.rankedGames > 0
+          ? (position.count / state.rankedGames) * 100
+          : 0;
+      valueEl.textContent = `${NUMBER_FORMAT.format(position.count)} partie${
+        position.count > 1 ? "s" : ""
+      } (${percentage.toLocaleString("fr-FR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      })}%)`;
+      listItem.appendChild(valueEl);
+
+      positionsList.appendChild(listItem);
+    });
+    positionsCard.appendChild(positionsList);
+  }
+
+  if (state.unrankedGames > 0) {
+    const footnote = document.createElement("p");
+    footnote.className = "deck-performance-footnote";
+    footnote.textContent = `${NUMBER_FORMAT.format(
+      state.unrankedGames
+    )} partie${state.unrankedGames > 1 ? "s" : ""} sans classement.`;
+    positionsCard.appendChild(footnote);
+  }
+
+  overview.appendChild(positionsCard);
+  content.appendChild(overview);
+
+  const historyCard = document.createElement("article");
+  historyCard.className = "deck-performance-card deck-stats-card deck-performance-card-history";
+  const historyTitle = document.createElement("h3");
+  historyTitle.className = "deck-performance-card-title";
+  historyTitle.textContent = "Historique des parties";
+  historyCard.appendChild(historyTitle);
+
+  const historyList = document.createElement("ol");
+  historyList.className = "deck-performance-history-list";
+  historyList.setAttribute(
+    "aria-label",
+    "Liste des parties enregistrées avec ce deck (les plus récentes en premier)."
+  );
+
+  state.history.forEach((entry) => {
+    const item = document.createElement("li");
+    item.className = "deck-performance-history-item";
+
+    const header = document.createElement("div");
+    header.className = "deck-performance-history-header";
+
+    const dateEl = document.createElement("time");
+    dateEl.className = "deck-performance-history-date";
+    if (entry.createdAt instanceof Date && !Number.isNaN(entry.createdAt.getTime())) {
+      dateEl.dateTime = entry.createdAt.toISOString();
+      dateEl.textContent = formatDateTime(entry.createdAt, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+    } else if (entry.createdAtRaw) {
+      dateEl.textContent = formatDateTime(entry.createdAtRaw, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+    } else {
+      dateEl.textContent = "Date inconnue";
+    }
+    header.appendChild(dateEl);
+
+    const groupEl = document.createElement("span");
+    groupEl.className = "deck-performance-history-playgroup";
+    groupEl.textContent = entry.playgroupName ?? "Partie enregistrée";
+    header.appendChild(groupEl);
+
+    item.appendChild(header);
+
+    const outcome = document.createElement("div");
+    outcome.className = "deck-performance-history-outcome";
+    const rankBadge = document.createElement("span");
+    rankBadge.className = "deck-performance-history-rank";
+    rankBadge.textContent = formatFinishLabel(entry.rank);
+    if (entry.isWin) {
+      rankBadge.classList.add("is-win");
+      rankBadge.setAttribute("aria-label", "Victoire");
+    }
+    outcome.appendChild(rankBadge);
+
+    const countEl = document.createElement("span");
+    countEl.className = "deck-performance-history-count";
+    countEl.textContent = `${NUMBER_FORMAT.format(entry.playerCount ?? 0)} joueur${
+      (entry.playerCount ?? 0) > 1 ? "s" : ""
+    }`;
+    outcome.appendChild(countEl);
+
+    item.appendChild(outcome);
+
+    if (entry.notes) {
+      const notesEl = document.createElement("p");
+      notesEl.className = "deck-performance-history-notes";
+      notesEl.textContent = entry.notes;
+      item.appendChild(notesEl);
+    }
+
+    if (Array.isArray(entry.opponents) && entry.opponents.length > 0) {
+      const opponentsList = document.createElement("ul");
+      opponentsList.className = "deck-performance-history-opponents";
+      opponentsList.setAttribute("aria-label", "Adversaires");
+      entry.opponents.forEach((opponent) => {
+        const opponentItem = document.createElement("li");
+        const opponentParts = [
+          opponent.name ?? "Adversaire",
+        ];
+        if (Number.isFinite(opponent.rank) && opponent.rank > 0) {
+          opponentParts.push(formatFinishLabel(opponent.rank));
+        }
+        opponentItem.textContent = opponentParts.join(" · ");
+        opponentsList.appendChild(opponentItem);
+      });
+      item.appendChild(opponentsList);
+    }
+
+    historyList.appendChild(item);
+  });
+
+  historyCard.appendChild(historyList);
+  content.appendChild(historyCard);
+
+  deckPerformanceEl.appendChild(content);
+  deckPerformanceEl.classList.remove("is-hidden");
+  deckPerformanceEl.dataset.state = "ready";
+};
+
 const extractDeckBracket = (deck) => {
   if (!deck || typeof deck !== "object") {
     return { bracket: null, justification: null };
@@ -2152,8 +2726,6 @@ const buildManaCurveCard = (stats) => {
     bars.push(bar);
   });
 
-  card.appendChild(chart);
-
   const legend = document.createElement("div");
   legend.className = "deck-mana-legend-split";
   const buildLegendItem = (label, className) => {
@@ -2170,9 +2742,18 @@ const buildManaCurveCard = (stats) => {
   };
   legend.appendChild(buildLegendItem("Permanents", "deck-mana-legend-permanents"));
   legend.appendChild(buildLegendItem("Sorts", "deck-mana-legend-spells"));
-  card.appendChild(legend);
 
-  card.appendChild(detail);
+  const layout = document.createElement("div");
+  layout.className = "deck-mana-body";
+
+  const visual = document.createElement("div");
+  visual.className = "deck-mana-visual";
+  visual.appendChild(chart);
+  visual.appendChild(legend);
+
+  layout.appendChild(visual);
+  layout.appendChild(detail);
+  card.appendChild(layout);
 
   const initialIndex = stats.manaCurve.findIndex(
     (bucket) => (bucket?.total ?? bucket?.value ?? 0) > 0
@@ -2218,9 +2799,17 @@ const buildColorDistributionCard = (stats) => {
   chart.setAttribute("aria-hidden", "true");
 
   let start = 0;
+  const totalPips = stats.colorDistribution.reduce(
+    (sum, entry) => sum + Math.max(0, entry?.pipCount ?? 0),
+    0
+  );
+  const usePipSegments = totalPips > 0;
   const segments = [];
   stats.colorDistribution.forEach((entry, index) => {
-    const ratio = Math.max(0, entry?.ratio ?? 0);
+    const pipCount = Math.max(0, entry?.pipCount ?? 0);
+    const ratio = usePipSegments
+      ? pipCount / totalPips
+      : Math.max(0, entry?.ratio ?? 0);
     const portion = Math.round(ratio * 1000) / 10;
     const end = index === stats.colorDistribution.length - 1 ? 100 : Math.min(100, start + portion);
     const token = entry?.token ?? "--color-mana-colorless";
@@ -2261,13 +2850,12 @@ const buildColorDistributionCard = (stats) => {
       stats.colorWeightTotal > 0
         ? Math.round((Math.max(0, entry?.ratio ?? 0) * 1000)) / 10
         : 0;
+    const pipCountValue = Math.max(0, entry?.pipCount ?? 0);
     const pipPercentage =
-      stats.manaPips && stats.manaPips.total > 0
-        ? Math.round((Math.max(0, entry?.pipRatio ?? 0) * 1000)) / 10
-        : null;
+      totalPips > 0 ? Math.round((pipCountValue / totalPips) * 1000) / 10 : null;
     const pipCount =
-      typeof entry?.pipCount === "number"
-        ? entry.pipCount.toLocaleString("fr-FR", {
+      totalPips > 0
+        ? pipCountValue.toLocaleString("fr-FR", {
             minimumFractionDigits: 0,
             maximumFractionDigits: 1,
           })
@@ -2279,7 +2867,7 @@ const buildColorDistributionCard = (stats) => {
         maximumFractionDigits: 1,
       })}% des cartes`,
     ];
-    if (pipCount && Number(entry?.pipCount ?? 0) > 0) {
+    if (pipCount && pipCountValue > 0) {
       const details = pipPercentage !== null ? `${pipCount} symboles (${pipPercentage.toLocaleString("fr-FR", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 1,

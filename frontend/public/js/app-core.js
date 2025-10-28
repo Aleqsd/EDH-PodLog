@@ -161,6 +161,7 @@ let defaultSyncLabel = "Synchroniser avec Moxfield";
 let deckSummaryEl = null;
 let deckCommanderEl = null;
 let deckInsightsEl = null;
+let deckPerformanceEl = null;
 let currentSyncAbortController = null;
 let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;

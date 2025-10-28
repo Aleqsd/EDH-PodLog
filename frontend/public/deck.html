@@ -64,7 +64,7 @@
     </header>
 
     <main class="deck-detail-main">
-      <section class="deck-detail-section">
+      <section class="deck-detail-section deck-section-overview">
         <div class="deck-detail-header">
           <a class="back-link" href="decks.html">← Retour à vos decks</a>
           <span class="deck-handle-badge is-hidden" id="deckHandleBadge"></span>
@@ -84,14 +84,33 @@
           </div>
           <div class="deck-summary is-hidden" id="deckSummary" aria-live="polite"></div>
         </div>
+      </section>
+
+      <section class="deck-detail-section deck-section-list">
+        <header class="deck-section-header">
+          <h2 class="deck-section-title">Decklist</h2>
+          <div class="deck-board-toolbar is-hidden" id="deckBoardsToolbar"></div>
+        </header>
         <p class="deck-loading" id="deckLoading">
           <span aria-hidden="true">⏳</span>
           <span>Chargement des cartes…</span>
         </p>
         <p class="deck-error is-hidden" id="deckError"></p>
-        <div class="deck-board-toolbar is-hidden" id="deckBoardsToolbar"></div>
         <div class="deck-board-list" id="deckBoards"></div>
+      </section>
+
+      <section class="deck-detail-section deck-section-stats">
+        <header class="deck-section-header">
+          <h2 class="deck-section-title">Statistiques du deck</h2>
+        </header>
         <section class="deck-insights is-hidden" id="deckInsights" aria-live="polite"></section>
+      </section>
+
+      <section class="deck-detail-section deck-section-performance">
+        <header class="deck-section-header">
+          <h2 class="deck-section-title">Performance du deck</h2>
+        </header>
+        <div class="deck-performance is-hidden" id="deckPerformance" aria-live="polite"></div>
       </section>
     </main>
 
