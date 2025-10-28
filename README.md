@@ -1,4 +1,4 @@
-# EDH PodLog Monorepo
+# EDH PodLog
 
 This repository now groups the static frontend, the FastAPI backend that proxies Moxfield, and a local MongoDB data directory in a single tree. Everything runs without Docker and can be started with a handful of `make` commands.
 
@@ -98,35 +98,35 @@ See `backend/README.md` for more detail on testing and contributing changes to t
 
 ## VPS Operations (vps.zqsdev.com)
 
-- **MongoDB service**  
-  - Start/enable: `systemctl enable --now mongod` (listens on `127.0.0.1:27017`).  
-  - Health check: `mongosh --port 27017 --eval 'db.runCommand({ ping: 1 })'`.  
+- **MongoDB service**
+  - Start/enable: `systemctl enable --now mongod` (listens on `127.0.0.1:27017`).
+  - Health check: `mongosh --port 27017 --eval 'db.runCommand({ ping: 1 })'`.
   - Restart: `systemctl restart mongod`. Logs available with `journalctl -u mongod`.
-- **FastAPI backend (`edh-podlog.service`)**  
-  - Managed via `/etc/systemd/system/edh-podlog.service` with `EnvironmentFile=/root/EDH-PodLog/.env`.  
-  - Start/enable: `systemctl enable --now edh-podlog`. Restart after updates: `systemctl restart edh-podlog`.  
+- **FastAPI backend (`edh-podlog.service`)**
+  - Managed via `/etc/systemd/system/edh-podlog.service` with `EnvironmentFile=/root/EDH-PodLog/.env`.
+  - Start/enable: `systemctl enable --now edh-podlog`. Restart after updates: `systemctl restart edh-podlog`.
   - Logs/health: `journalctl -u edh-podlog`, `curl http://127.0.0.1:4310/health`. Externally, hit `https://vps.zqsdev.com/api/health` once the proxy is active.
-- **Reverse proxy (Nginx)**  
-  - Config stored in `/etc/nginx/sites-available/edh-podlog` (symlinked into `sites-enabled`).  
-  - Set `root /var/www/edh-podlog;` (or adjust `VPS_FRONTEND_ROOT`) so workers can read the static bundle staged by `make vps-deploy`. Avoid pointing Nginx at `/root/...` because the default permissions block `www-data`.  
+- **Reverse proxy (Nginx)**
+  - Config stored in `/etc/nginx/sites-available/edh-podlog` (symlinked into `sites-enabled`).
+  - Set `root /var/www/edh-podlog;` (or adjust `VPS_FRONTEND_ROOT`) so workers can read the static bundle staged by `make vps-deploy`. Avoid pointing Nginx at `/root/...` because the default permissions block `www-data`.
   - If your Nginx worker runs under a different account, invoke `make vps-deploy` with `VPS_FRONTEND_OWNER=user:group` so file ownership matches.
   - Reload after edits: `nginx -t && systemctl reload nginx`. Use `certbot --nginx -d vps.zqsdev.com` for TLS.
-- **Log streaming**  
-  - `make log-db` pour `journalctl -u mongod`.  
-  - `make log-back` pour `journalctl -u edh-podlog`.  
-  - `make log-front` pour `tail -f /var/log/nginx/access.log /var/log/nginx/error.log`.  
-  - Chaque commande alimente `/root/EDH-PodLog/{db,back,front}.log`. `make log-front` relaie aussi les journaux Nginx par défaut vers `front.log` pour avoir un flux immédiat. Exécutez `sudo scripts/configure-vps-logs.sh` une fois pour installer les overrides systemd (option `LOG_ROOT=/path`) et mettre à jour les directives `access_log`/`error_log` de Nginx vers ce fichier.  
+- **Log streaming**
+  - `make log-db` pour `journalctl -u mongod`.
+  - `make log-back` pour `journalctl -u edh-podlog`.
+  - `make log-front` pour `tail -f /var/log/nginx/access.log /var/log/nginx/error.log`.
+  - Chaque commande alimente `/root/EDH-PodLog/{db,back,front}.log`. `make log-front` relaie aussi les journaux Nginx par défaut vers `front.log` pour avoir un flux immédiat. Exécutez `sudo scripts/configure-vps-logs.sh` une fois pour installer les overrides systemd (option `LOG_ROOT=/path`) et mettre à jour les directives `access_log`/`error_log` de Nginx vers ce fichier.
   - Deck sync requests emit structured summaries (counts, success/failure, persistence status) in `journalctl -u edh-podlog`.
-- **Frontend on Netlify**  
-  - Production deploy: `make front-build` then `netlify deploy --prod --dir frontend/public --site <SITE_ID>` (requires `NETLIFY_AUTH_TOKEN` or `netlify login`).  
+- **Frontend on Netlify**
+  - Production deploy: `make front-build` then `netlify deploy --prod --dir frontend/public --site <SITE_ID>` (requires `NETLIFY_AUTH_TOKEN` or `netlify login`).
   - Ensure Netlify env vars include `API_BASE_URL=https://vps.zqsdev.com/api` and `API_CORS_ALLOW_ORIGINS` is mirrored in `.env` for the backend. Trigger rebuilds from the Netlify UI if needed.
-- **Autodeploy webhook**  
-  - A dedicated systemd service listens for GitHub webhooks on port `5055`.  
+- **Autodeploy webhook**
+  - A dedicated systemd service listens for GitHub webhooks on port `5055`.
   - Each webhook calls `git pull` inside `/root/EDH-PodLog` and runs `make vps-deploy` to roll out the latest build automatically.
-- **After updating code**  
-  - Pull latest repo changes, regenerate frontend config (`make front-config`), redeploy Netlify, then restart backend (`systemctl restart edh-podlog`).  
+- **After updating code**
+  - Pull latest repo changes, regenerate frontend config (`make front-config`), redeploy Netlify, then restart backend (`systemctl restart edh-podlog`).
   - Run `make test` locally before rolling out and `journalctl -u edh-podlog -f` to monitor for regressions.
-- **One-liner rollout**  
+- **One-liner rollout**
   - From `/root/EDH-PodLog`, run `make vps-deploy` (with `sudo` if needed to write `/var/www/edh-podlog`) to regenerate the frontend config, stage world-readable static assets, restart `mongod`/`edh-podlog`, and push the bundle to Netlify (requires Netlify CLI credentials and `NETLIFY_SITE` configured).
 
 ## Helpful Scripts
