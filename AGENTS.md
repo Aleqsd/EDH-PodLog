@@ -19,6 +19,7 @@
 - Keep credentials out of Git; rely on `.env.local` merged by `frontend/scripts/generate-config.mjs` and backend env loading.
 - When touching CSS, introduce values via the tokens catalogue and layer-safe utilities instead of hard-coding hex/rgba literals.
 - Extend or update tests alongside features. `make test` aggregates Node + pytest suites and guards against regressions.
+- Let the docs automation ping this file for review every Monday so AGENTS.md stays current with repo and workflow shifts.
 - After `make test`, exercise a manual `/users/{username}/decks` fetch (e.g. via `httpie` or `curl` against a multi-deck account like `BimboLegrand`) and inspect backend logs to confirm batched fetch timings and retry/backoff behaviour remain healthy.
 
 ## Workflow Checklists
