@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 
 def test_upsert_and_fetch_deck_personalization(api_client):
     user = "user-123"
@@ -71,3 +73,27 @@ def test_upsert_and_fetch_deck_personalization(api_client):
         f"/profiles/{user}/deck-personalizations/deck-missing"
     )
     assert missing_response.status_code == 404
+
+
+def test_upsert_deck_personalization_supports_slash_in_deck_id(api_client):
+    user = "user-slash"
+    deck = "decks/foo/bar"
+    encoded_deck = quote(deck, safe="")
+
+    response = api_client.put(
+        f"/profiles/{user}/deck-personalizations/{encoded_deck}",
+        json={
+            "playstyle": "Aggro",
+            "tags": ["Test"],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["deckId"] == deck
+
+    get_response = api_client.get(
+        f"/profiles/{user}/deck-personalizations/{encoded_deck}"
+    )
+    assert get_response.status_code == 200
+    retrieved = get_response.json()
+    assert retrieved["deckId"] == deck

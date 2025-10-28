@@ -62,7 +62,7 @@ async def list_deck_personalizations(
 
 
 @router.get(
-    "/{google_sub}/deck-personalizations/{deck_id}",
+    "/{google_sub}/deck-personalizations/{deck_id:path}",
     response_model=DeckPersonalization,
     summary="Fetch personalization for a specific deck.",
 )
@@ -78,7 +78,7 @@ async def get_deck_personalization_endpoint(
 
 
 @router.put(
-    "/{google_sub}/deck-personalizations/{deck_id}",
+    "/{google_sub}/deck-personalizations/{deck_id:path}",
     response_model=DeckPersonalization,
     summary="Create or update personalization for a deck.",
 )
