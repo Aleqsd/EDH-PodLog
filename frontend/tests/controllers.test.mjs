@@ -428,6 +428,7 @@ const setupControllerRuntime = async ({
   querySelectors = {},
   controllerScripts = [],
   loadCachedDecksForHandle = null,
+  fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({}) }),
 }) => {
   const document = new MockDocument({ bodyDataset: { page, requireAuth: String(requireAuth) } });
 
@@ -472,7 +473,7 @@ const setupControllerRuntime = async ({
     URL,
     URLSearchParams,
     AbortController,
-    fetch: async () => ({ ok: true, status: 200, json: async () => ({}) }),
+    fetch: fetchImpl,
     Event,
   };
 
@@ -697,4 +698,186 @@ test("dashboard controller records additional players into the known list after 
   assert.equal(resultForm.hidden, false);
   assert.equal(knownPlayers.children.length, 1);
   assert.equal(knownPlayers.children[0].value, "Alice Example");
+});
+
+test("profile controller allows updating pseudonyme, description, and avatar", async () => {
+  const profileForm = createElement("form", { id: "profileForm" });
+  const profileFormStatus = createElement("p", {
+    id: "profileFormStatus",
+    className: "profile-status",
+  });
+  const profileFormSubmit = createElement("button", {
+    id: "profileFormSubmit",
+    textContent: "Enregistrer",
+  });
+  const displayNameInput = createElement("input", { id: "profileDisplayName" });
+  const bioInput = createElement("textarea", { id: "profileBioInput" });
+  const bioCounter = createElement("span", { id: "profileBioCount" });
+  const avatarPreview = createElement("div", {
+    id: "profileAvatarPreview",
+    className: "profile-avatar profile-avatar-large",
+  });
+  const avatarUploadBtn = createElement("button", {
+    id: "profileAvatarUploadButton",
+    textContent: "Choisir",
+  });
+  const avatarClearBtn = createElement("button", {
+    id: "profileAvatarClearButton",
+    textContent: "Réinitialiser",
+  });
+  const avatarInput = createElement("input", { id: "profileAvatarInput" });
+  avatarInput.value = "";
+  avatarInput.files = [];
+
+  const profileFullName = createElement("h2", { id: "profileFullName" });
+  const profileEmail = createElement("span", { id: "profileEmail" });
+  const profileEmailDetail = createElement("dd", { id: "profileEmailDetail" });
+  const profileMemberSince = createElement("dd", { id: "profileMemberSince" });
+  const profileBadgeLarge = createElement("div", { id: "profileBadgeLarge" });
+  const profileBio = createElement("p", { id: "profileBio" });
+  profileBio.hidden = true;
+
+  const profileName = createElement("span", { id: "profileName" });
+  const profileAvatar = createElement("span", {
+    id: "profileAvatar",
+    className: "profile-avatar",
+  });
+
+  profileForm.elements = [
+    displayNameInput,
+    bioInput,
+    avatarUploadBtn,
+    avatarClearBtn,
+    avatarInput,
+    profileFormSubmit,
+  ];
+
+  profileBadgeLarge.style = {};
+  profileBadgeLarge.hasAttribute = (name) => profileBadgeLarge.attributes.has(name);
+  profileAvatar.style = {};
+  profileAvatar.hasAttribute = (name) => profileAvatar.attributes.has(name);
+  avatarPreview.style = {};
+  avatarPreview.hasAttribute = (name) => avatarPreview.attributes.has(name);
+  avatarPreview.setAttribute("aria-hidden", "true");
+
+  const sessionCreatedAt = Date.now() - 86_400_000;
+  const session = {
+    provider: "google",
+    googleSub: "user-42",
+    userName: "Ancien Pseudo",
+    profileDisplayName: "Ancien Pseudo",
+    profileDescription: "Ancienne bio",
+    email: "planeswalker@example.com",
+    givenName: "Planeswalker",
+    initials: "AP",
+    picture: "data:image/png;base64,custom-avatar",
+    identityPicture: "https://example.com/google.png",
+    integrations: {},
+    createdAt: sessionCreatedAt,
+  };
+
+  const elementsById = {
+    profileForm,
+    profileFormStatus,
+    profileFormSubmit,
+    profileDisplayName: displayNameInput,
+    profileBioInput: bioInput,
+    profileBioCount: bioCounter,
+    profileAvatarPreview: avatarPreview,
+    profileAvatarUploadButton: avatarUploadBtn,
+    profileAvatarClearButton: avatarClearBtn,
+    profileAvatarInput: avatarInput,
+    profileFullName,
+    profileEmail,
+    profileEmailDetail,
+    profileMemberSince,
+    profileBadgeLarge,
+    profileBio,
+    profileName,
+    profileAvatar,
+  };
+
+  let receivedPayload = null;
+  const fetchImpl = async (_url, options = {}) => {
+    receivedPayload =
+      typeof options.body === "string" ? JSON.parse(options.body) : options.body ?? null;
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        const body = receivedPayload ?? {};
+        return {
+          google_sub: session.googleSub,
+          display_name: body.display_name ?? null,
+          description: body.description ?? null,
+          email: session.email,
+          given_name: session.givenName,
+          picture: body.picture ?? null,
+          moxfield_handle: null,
+          moxfield_decks: [],
+          created_at: new Date(sessionCreatedAt).toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      },
+    };
+  };
+
+  const { window } = await setupControllerRuntime({
+    page: "profile",
+    requireAuth: true,
+    session,
+    elementsById,
+    controllerScripts: ["../public/js/controllers/profile.js"],
+    fetchImpl,
+  });
+
+  assert.equal(displayNameInput.value, "Ancien Pseudo");
+  assert.equal(bioInput.value, "Ancienne bio");
+  assert.equal(bioCounter.textContent, "12 / 1000");
+  assert.equal(profileBio.textContent, "Ancienne bio");
+  assert.equal(profileBio.hidden, false);
+  assert.equal(avatarClearBtn.disabled, false);
+
+  displayNameInput.value = "  Nouveau Nom  ";
+  bioInput.value = "Nouvelle présentation";
+  bioInput.dispatchEvent({ type: "input", target: bioInput });
+
+  avatarClearBtn.dispatchEvent({ type: "click" });
+  assert.equal(
+    profileFormStatus.textContent.includes("L'avatar Google sera utilisé"),
+    true,
+  );
+
+  const submitHandler = profileForm.eventListeners.get("submit")[0];
+  const submitEvent = {
+    type: "submit",
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+  };
+  await submitHandler.call(profileForm, submitEvent);
+
+  assert.deepEqual(receivedPayload, {
+    display_name: "Nouveau Nom",
+    description: "Nouvelle présentation",
+    picture: null,
+  });
+
+  const storedSession = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
+  assert.equal(storedSession.profileDisplayName, "Nouveau Nom");
+  assert.equal(storedSession.profileDescription, "Nouvelle présentation");
+  assert.equal(storedSession.userName, "Nouveau Nom");
+  assert.equal(storedSession.picture, session.identityPicture);
+
+  assert.equal(profileFormStatus.textContent, "Profil mis à jour.");
+  assert.equal(profileFormStatus.classList.contains("is-success"), true);
+  assert.equal(bioCounter.textContent, "21 / 1000");
+  assert.equal(profileBio.textContent, "Nouvelle présentation");
+  assert.equal(profileBio.hidden, false);
+  assert.equal(avatarClearBtn.disabled, true);
+  assert.equal(
+    avatarPreview.style.backgroundImage,
+    "url('https://example.com/google.png')",
+  );
 });

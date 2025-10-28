@@ -1201,6 +1201,13 @@
   gap: 1rem;
 }
 
+.profile-bio {
+  margin: 0;
+  color: var(--color-text-subtle);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
 .profile-panel h3 {
   margin: 0;
   font-size: 1.2rem;
@@ -1211,6 +1218,38 @@
   margin: 0;
   color: var(--color-text-subtle);
   line-height: 1.6;
+}
+
+.profile-panel-form {
+  gap: 1.5rem;
+}
+
+.profile-form {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.profile-avatar-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.profile-avatar-preview {
+  width: 74px;
+  height: 74px;
+  font-size: 1.35rem;
+}
+
+.profile-avatar-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.profile-avatar-actions .profile-hint {
+  margin: 0;
+  color: var(--color-text-subtle-soft);
 }
 
 .panel-link {
@@ -1272,6 +1311,11 @@
   box-shadow: 0 0 0 1px var(--color-border-subtle);
 }
 
+.profile-textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
 .inline-button {
   padding: 0.75rem 1.3rem;
   border-radius: 14px;
@@ -1293,6 +1337,29 @@
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+.inline-button.is-primary {
+  background: var(--gradient-brand-button);
+  border-color: transparent;
+  color: var(--color-text-soft);
+}
+
+.inline-button.is-primary:hover {
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-secondary) 0%,
+    var(--color-brand-primary) 100%
+  );
+  border-color: transparent;
+}
+
+.inline-button.is-secondary {
+  background: color-mix(in srgb, var(--color-base-121c30) 75%, transparent);
+}
+
+.inline-button.is-secondary:hover {
+  background: color-mix(in srgb, var(--color-base-121c30) 90%, transparent);
 }
 
 .input-hint {
@@ -1329,6 +1396,38 @@
   font-size: 0.85rem;
   color: var(--color-text-subtle-soft);
   line-height: 1.5;
+}
+
+.profile-field-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.profile-char-count {
+  font-size: 0.85rem;
+  color: var(--color-text-subtle-soft);
+}
+
+.profile-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.profile-status {
+  margin: 0;
+  color: var(--color-text-subtle);
+}
+
+.profile-status.is-error {
+  color: var(--color-status-danger);
+}
+
+.profile-status.is-success {
+  color: var(--color-brand-soft);
 }
 
 .sync-button {

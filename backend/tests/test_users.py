@@ -203,6 +203,7 @@ def test_upsert_user_profile_creates_and_updates_document(api_client: TestClient
     assert body["display_name"] == "Test User"
     assert body["moxfield_handle"] == "Handle"
     assert len(body["moxfield_decks"]) == 1
+    assert body.get("description") is None
 
     created_at = datetime.fromisoformat(body["created_at"].replace("Z", "+00:00"))
     updated_at = datetime.fromisoformat(body["updated_at"].replace("Z", "+00:00"))
@@ -216,6 +217,7 @@ def test_upsert_user_profile_creates_and_updates_document(api_client: TestClient
     second_payload = {
         "display_name": "Updated Name",
         "picture": "https://example.com/avatar.png",
+        "description": "  Explorateur du multivers et de toutes les tables.  ",
     }
     second_response = api_client.put("/profiles/google-sub-123", json=second_payload)
     assert second_response.status_code == 200
@@ -223,7 +225,24 @@ def test_upsert_user_profile_creates_and_updates_document(api_client: TestClient
     updated_body = second_response.json()
     assert updated_body["display_name"] == "Updated Name"
     assert updated_body["picture"] == "https://example.com/avatar.png"
+    assert updated_body["description"] == "Explorateur du multivers et de toutes les tables."
     assert len(updated_body["moxfield_decks"]) == 1  # preserved from first payload
+
+    stored_doc_after_update = api_client.app.state.stub_db["users"].documents[0]
+    assert (
+        stored_doc_after_update["description"]
+        == "Explorateur du multivers et de toutes les tables."
+    )
+
+
+def test_upsert_user_profile_rejects_long_description(api_client: TestClient) -> None:
+    """Description should be limited to 1000 characters."""
+    payload = {
+        "description": "x" * 1001,
+    }
+
+    response = api_client.put("/profiles/google-sub-desc", json=payload)
+    assert response.status_code == 422
 
 
 def test_get_user_decks_not_found(api_client: TestClient) -> None:

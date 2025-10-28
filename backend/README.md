@@ -62,8 +62,9 @@ With the server running, open <http://127.0.0.1:4310/docs> for FastAPI's interac
 
 ## Notes
 
-- User profiles persist Google identity metadata, the saved Moxfield handle, and the list of
-  selected decks. Cached Moxfield payloads now live in the dedicated `MONGO_MOXFIELD_USERS_COLLECTION`.
+- User profiles persist Google identity metadata, the saved pseudonym and bio, an optional avatar
+  override, the Moxfield handle, and the list of selected decks. Cached Moxfield payloads now live
+  in the dedicated `MONGO_MOXFIELD_USERS_COLLECTION`.
 - Only public decks are returned; private decks remain inaccessible without Moxfield authentication.
 - Responses include the raw Moxfield card payload so the frontend can decide how much detail to surface.
 - Moxfield deck detail fetches run through a concurrency-limited task pool (`detail_concurrency_limit`) to balance throughput with upstream friendliness.

@@ -35,6 +35,27 @@ async def upsert_user_profile(
     update_fields = payload.model_dump(mode="python", exclude_unset=True)
     if "moxfield_decks" in update_fields and update_fields["moxfield_decks"] is None:
         update_fields["moxfield_decks"] = []
+    if "display_name" in update_fields:
+        display_name = update_fields["display_name"]
+        if isinstance(display_name, str):
+            normalized_display_name = display_name.strip()
+            update_fields["display_name"] = normalized_display_name or None
+        else:
+            update_fields["display_name"] = None
+    if "description" in update_fields:
+        description = update_fields["description"]
+        if isinstance(description, str):
+            normalized_description = description.strip()
+            update_fields["description"] = normalized_description or None
+        else:
+            update_fields["description"] = None
+    if "picture" in update_fields:
+        picture = update_fields["picture"]
+        if isinstance(picture, str):
+            normalized_picture = picture.strip()
+            update_fields["picture"] = normalized_picture or None
+        elif picture is None:
+            update_fields["picture"] = None
 
     base_document: dict[str, Any]
     if existing:

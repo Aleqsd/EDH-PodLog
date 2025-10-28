@@ -91,6 +91,8 @@
           </div>
         </header>
 
+        <p class="profile-bio" id="profileBio" hidden></p>
+
         <div class="profile-info-grid">
           <section class="profile-panel">
             <h3>Compte EDH PodLog</h3>
@@ -128,6 +130,92 @@
             </a>
           </section>
         </div>
+
+        <section class="profile-panel profile-panel-form">
+          <h3>Identité publique</h3>
+          <form class="profile-form" id="profileForm" novalidate>
+            <div class="profile-avatar-editor">
+              <div
+                class="profile-avatar profile-avatar-large profile-avatar-preview"
+                id="profileAvatarPreview"
+                aria-hidden="true"
+              >
+                VP
+              </div>
+              <div class="profile-avatar-actions">
+                <button
+                  class="inline-button"
+                  type="button"
+                  id="profileAvatarUploadButton"
+                >
+                  Choisir une image
+                </button>
+                <input
+                  type="file"
+                  id="profileAvatarInput"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  hidden
+                />
+                <button
+                  class="inline-button is-secondary"
+                  type="button"
+                  id="profileAvatarClearButton"
+                >
+                  Réinitialiser la photo
+                </button>
+                <p class="profile-hint">
+                  PNG, JPG, WEBP ou GIF (512&nbsp;Ko max). Revenir en arrière pour
+                  retrouver l'avatar Google.
+                </p>
+              </div>
+            </div>
+
+            <div class="input-stack">
+              <label class="profile-label" for="profileDisplayName"
+                >Pseudonyme</label
+              >
+              <input
+                class="profile-input"
+                type="text"
+                id="profileDisplayName"
+                name="display_name"
+                maxlength="80"
+                autocomplete="nickname"
+                placeholder="Planeswalker"
+              />
+              <p class="profile-hint">
+                Ce nom apparaît dans vos playtests, exports et partages.
+              </p>
+            </div>
+
+            <div class="input-stack">
+              <label class="profile-label" for="profileBioInput"
+                >Présentation</label
+              >
+              <textarea
+                class="profile-input profile-textarea"
+                id="profileBioInput"
+                name="description"
+                maxlength="1000"
+                rows="4"
+                placeholder="Présentez-vous aux autres joueurs et décrivez vos formats préférés."
+              ></textarea>
+              <div class="profile-field-footer">
+                <span class="profile-hint">1000 caractères maximum.</span>
+                <span class="profile-char-count" id="profileBioCount"
+                  >0 / 1000</span
+                >
+              </div>
+            </div>
+
+            <div class="profile-form-actions">
+              <p class="profile-status" id="profileFormStatus" role="status"></p>
+              <button class="inline-button is-primary" type="submit" id="profileFormSubmit">
+                Enregistrer les modifications
+              </button>
+            </div>
+          </form>
+        </section>
       </section>
     </main>
     <script

@@ -629,6 +629,382 @@
         "title": "DeckTag",
         "type": "object"
       },
+      "GameCreate": {
+        "additionalProperties": false,
+        "description": "Payload accepted when recording a game result.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/GamePlayerInput"
+            },
+            "title": "Players",
+            "type": "array"
+          },
+          "playgroup": {
+            "$ref": "#/components/schemas/PlaygroupReference"
+          },
+          "rankings": {
+            "items": {
+              "$ref": "#/components/schemas/GameRankingInput"
+            },
+            "title": "Rankings",
+            "type": "array"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          }
+        },
+        "required": [
+          "playgroup",
+          "players",
+          "rankings"
+        ],
+        "title": "GameCreate",
+        "type": "object"
+      },
+      "GameList": {
+        "additionalProperties": false,
+        "description": "Collection wrapper returned when listing games.",
+        "properties": {
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/GameRecord"
+            },
+            "title": "Games",
+            "type": "array"
+          }
+        },
+        "title": "GameList",
+        "type": "object"
+      },
+      "GamePlayer": {
+        "additionalProperties": false,
+        "description": "Player representation within a stored game.",
+        "properties": {
+          "deck_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Format"
+          },
+          "deck_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Id"
+          },
+          "deck_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Name"
+          },
+          "deck_public_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Public Url"
+          },
+          "deck_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Slug"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_owner": {
+            "default": false,
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "GamePlayer",
+        "type": "object"
+      },
+      "GamePlayerInput": {
+        "additionalProperties": false,
+        "description": "Player payload accepted when recording a game.",
+        "properties": {
+          "deck_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Format"
+          },
+          "deck_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Id"
+          },
+          "deck_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Name"
+          },
+          "deck_public_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Public Url"
+          },
+          "deck_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deck Slug"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_owner": {
+            "default": false,
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "GamePlayerInput",
+        "type": "object"
+      },
+      "GamePlaygroup": {
+        "additionalProperties": false,
+        "description": "Playgroup metadata embedded in a stored game.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "GamePlaygroup",
+        "type": "object"
+      },
+      "GameRanking": {
+        "additionalProperties": false,
+        "description": "Ranking entry within a stored game.",
+        "properties": {
+          "player_id": {
+            "title": "Player Id",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "player_id",
+          "rank"
+        ],
+        "title": "GameRanking",
+        "type": "object"
+      },
+      "GameRankingInput": {
+        "additionalProperties": false,
+        "description": "Ranking payload accepted when recording a game.",
+        "properties": {
+          "player_id": {
+            "title": "Player Id",
+            "type": "string"
+          },
+          "rank": {
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "player_id",
+          "rank"
+        ],
+        "title": "GameRankingInput",
+        "type": "object"
+      },
+      "GameRecord": {
+        "additionalProperties": false,
+        "description": "Stored representation of a game result.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/GamePlayer"
+            },
+            "title": "Players",
+            "type": "array"
+          },
+          "playgroup": {
+            "$ref": "#/components/schemas/GamePlaygroup"
+          },
+          "rankings": {
+            "items": {
+              "$ref": "#/components/schemas/GameRanking"
+            },
+            "title": "Rankings",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "playgroup",
+          "created_at",
+          "updated_at",
+          "players",
+          "rankings"
+        ],
+        "title": "GameRecord",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -640,6 +1016,218 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MoxfieldDeckSelection": {
+        "additionalProperties": false,
+        "description": "Deck selection metadata we persist per Google-authenticated user.",
+        "properties": {
+          "card_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Count"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "public_id": {
+            "title": "Public Id",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "public_id"
+        ],
+        "title": "MoxfieldDeckSelection",
+        "type": "object"
+      },
+      "PlaygroupCreate": {
+        "additionalProperties": false,
+        "description": "Payload used to create or upsert a playgroup.",
+        "properties": {
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PlaygroupCreate",
+        "type": "object"
+      },
+      "PlaygroupList": {
+        "additionalProperties": false,
+        "description": "Collection wrapper returned when listing playgroups.",
+        "properties": {
+          "playgroups": {
+            "items": {
+              "$ref": "#/components/schemas/PlaygroupSummary"
+            },
+            "title": "Playgroups",
+            "type": "array"
+          }
+        },
+        "title": "PlaygroupList",
+        "type": "object"
+      },
+      "PlaygroupReference": {
+        "additionalProperties": false,
+        "description": "Reference to a playgroup when creating or serialising games.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PlaygroupReference",
+        "type": "object"
+      },
+      "PlaygroupSummary": {
+        "additionalProperties": false,
+        "description": "Summary representation of a saved playgroup.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "game_count": {
+            "default": 0,
+            "title": "Game Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlaygroupSummary",
         "type": "object"
       },
       "UserDeckSummariesResponse": {
@@ -692,6 +1280,196 @@
           "total_decks"
         ],
         "title": "UserDecksResponse",
+        "type": "object"
+      },
+      "UserProfile": {
+        "additionalProperties": false,
+        "description": "Representation of a Google-authenticated EDH PodLog user.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "given_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Given Name"
+          },
+          "google_sub": {
+            "title": "Google Sub",
+            "type": "string"
+          },
+          "moxfield_decks": {
+            "items": {
+              "$ref": "#/components/schemas/MoxfieldDeckSelection"
+            },
+            "title": "Moxfield Decks",
+            "type": "array"
+          },
+          "moxfield_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moxfield Handle"
+          },
+          "picture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "google_sub",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserProfile",
+        "type": "object"
+      },
+      "UserProfileUpdate": {
+        "additionalProperties": false,
+        "description": "Payload accepted when creating or updating a user profile.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "given_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Given Name"
+          },
+          "moxfield_decks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MoxfieldDeckSelection"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moxfield Decks"
+          },
+          "moxfield_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moxfield Handle"
+          },
+          "picture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture"
+          }
+        },
+        "title": "UserProfileUpdate",
         "type": "object"
       },
       "UserSummary": {
@@ -878,7 +1656,7 @@
     },
     "/health": {
       "get": {
-        "description": "Useful for uptime checks.",
+        "description": "Simple health endpoint for uptime checks.",
         "operationId": "health_check_health_get",
         "responses": {
           "200": {
@@ -899,6 +1677,300 @@
         "summary": "Health Check",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/profiles/{google_sub}": {
+      "get": {
+        "operationId": "get_user_profile_profiles__google_sub__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "google_sub",
+            "required": true,
+            "schema": {
+              "title": "Google Sub",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch a Google-authenticated user profile.",
+        "tags": [
+          "profiles"
+        ]
+      },
+      "put": {
+        "operationId": "upsert_user_profile_endpoint_profiles__google_sub__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "google_sub",
+            "required": true,
+            "schema": {
+              "title": "Google Sub",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create or update a Google-authenticated user profile.",
+        "tags": [
+          "profiles"
+        ]
+      }
+    },
+    "/profiles/{google_sub}/games": {
+      "get": {
+        "operationId": "list_user_games_profiles__google_sub__games_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "google_sub",
+            "required": true,
+            "schema": {
+              "title": "Google Sub",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter games by playgroup identifier.",
+            "in": "query",
+            "name": "playgroup_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter games by playgroup identifier.",
+              "title": "Playgroup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List recorded games for the authenticated user.",
+        "tags": [
+          "games"
+        ]
+      },
+      "post": {
+        "operationId": "create_user_game_profiles__google_sub__games_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "google_sub",
+            "required": true,
+            "schema": {
+              "title": "Google Sub",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GameCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record a completed game for the authenticated user.",
+        "tags": [
+          "games"
+        ]
+      }
+    },
+    "/profiles/{google_sub}/playgroups": {
+      "get": {
+        "operationId": "list_user_playgroups_profiles__google_sub__playgroups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "google_sub",
+            "required": true,
+            "schema": {
+              "title": "Google Sub",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaygroupList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List playgroups associated with the authenticated user.",
+        "tags": [
+          "playgroups"
+        ]
+      },
+      "post": {
+        "operationId": "create_or_update_playgroup_profiles__google_sub__playgroups_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "google_sub",
+            "required": true,
+            "schema": {
+              "title": "Google Sub",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaygroupCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaygroupSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create or update a playgroup for the authenticated user.",
+        "tags": [
+          "playgroups"
         ]
       }
     },
@@ -981,6 +2053,50 @@
           }
         },
         "summary": "Fetch a user's decks including full card details.",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/{username}/decks/{deck_id}": {
+      "delete": {
+        "operationId": "delete_user_deck_endpoint_users__username__decks__deck_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "title": "Username",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete a cached deck for a user.",
         "tags": [
           "users"
         ]

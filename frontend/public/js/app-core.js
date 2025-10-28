@@ -822,17 +822,78 @@ const applyProfileToSession = (session, profile) => {
     ...session,
   };
 
-  if (profile.display_name) {
-    next.userName = profile.display_name;
-    next.initials = computeInitials(profile.display_name);
+  if (Object.prototype.hasOwnProperty.call(profile, "given_name")) {
+    const rawGivenName = profile.given_name;
+    if (typeof rawGivenName === "string" && rawGivenName.trim().length > 0) {
+      next.givenName = rawGivenName.trim();
+    } else if (!next.givenName) {
+      next.givenName = "";
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(profile, "display_name")) {
+    const rawDisplayName = profile.display_name;
+    const trimmedDisplayName =
+      typeof rawDisplayName === "string" ? rawDisplayName.trim() : "";
+    next.profileDisplayName = trimmedDisplayName;
+
+    const fallbackNameCandidates = [
+      trimmedDisplayName,
+      typeof next.givenName === "string" ? next.givenName : "",
+      typeof session?.givenName === "string" ? session.givenName : "",
+      typeof profile.email === "string" ? profile.email : "",
+      typeof session?.userName === "string" ? session.userName : "",
+    ];
+    const resolvedName = fallbackNameCandidates.find(
+      (value) => typeof value === "string" && value.trim().length > 0
+    );
+
+    if (resolvedName) {
+      next.userName = resolvedName.trim();
+      next.initials = computeInitials(next.userName);
+    } else {
+      next.userName = "";
+      next.initials = "";
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(profile, "email") && profile.email) {
     next.email = profile.email;
   }
 
+  if (
+    typeof session?.identityPicture === "string" &&
+    session.identityPicture.length > 0 &&
+    !next.identityPicture
+  ) {
+    next.identityPicture = session.identityPicture;
+  }
+
   if (Object.prototype.hasOwnProperty.call(profile, "picture")) {
-    next.picture = profile.picture || "";
+    const rawPicture = profile.picture;
+    const hasPicture = typeof rawPicture === "string" && rawPicture.length > 0;
+    const isDataUrl = hasPicture && rawPicture.startsWith("data:image/");
+
+    if (hasPicture) {
+      next.picture = rawPicture;
+      if (!isDataUrl) {
+        next.identityPicture = rawPicture;
+      }
+    } else {
+      const identityFallback =
+        typeof next.identityPicture === "string" && next.identityPicture.length > 0
+          ? next.identityPicture
+          : "";
+      next.picture = identityFallback;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(profile, "description")) {
+    const rawDescription = profile.description;
+    next.profileDescription =
+      typeof rawDescription === "string" && rawDescription.length > 0
+        ? rawDescription
+        : "";
   }
 
   const existingIntegration = getMoxfieldIntegration(next) || {};
@@ -966,6 +1027,7 @@ const applyAvatarStyles = (element, session) => {
   }
 
   const initials = session.initials ?? computeInitials(session.userName);
+  const isDecorative = element.hasAttribute("aria-hidden");
 
   if (session.picture) {
     element.style.backgroundImage = `url('${session.picture}')`;
@@ -973,13 +1035,21 @@ const applyAvatarStyles = (element, session) => {
     element.style.backgroundPosition = "center";
     element.style.backgroundColor = "#1b2540";
     element.textContent = "";
-    element.setAttribute("aria-label", session.userName ?? "Profil");
+    if (isDecorative) {
+      element.removeAttribute("aria-label");
+    } else {
+      element.setAttribute("aria-label", session.userName ?? "Profil");
+    }
   } else {
     element.style.backgroundImage = "";
     element.style.backgroundColor = "";
     element.textContent = initials;
-    if (session.userName) {
+    if (isDecorative) {
+      element.removeAttribute("aria-label");
+    } else if (session.userName) {
       element.setAttribute("aria-label", session.userName);
+    } else {
+      element.removeAttribute("aria-label");
     }
   }
 };
@@ -1003,6 +1073,8 @@ const updateProfileDetails = (session) => {
   const emailDetailEl = document.getElementById("profileEmailDetail");
   const memberSinceEl = document.getElementById("profileMemberSince");
   const badgeLargeEl = document.getElementById("profileBadgeLarge");
+  const bioEl = document.getElementById("profileBio");
+  const avatarPreviewEl = document.getElementById("profileAvatarPreview");
 
   if (fullNameEl && session?.userName) {
     fullNameEl.textContent = session.userName;
@@ -1020,10 +1092,26 @@ const updateProfileDetails = (session) => {
     applyAvatarStyles(badgeLargeEl, session);
   }
 
+  if (avatarPreviewEl) {
+    applyAvatarStyles(avatarPreviewEl, session);
+  }
+
   if (memberSinceEl && session?.createdAt) {
     memberSinceEl.textContent = formatDateTime(session.createdAt, {
       dateStyle: "long",
     });
+  }
+
+  if (bioEl) {
+    const description =
+      typeof session?.profileDescription === "string" ? session.profileDescription.trim() : "";
+    if (description) {
+      bioEl.textContent = description;
+      bioEl.hidden = false;
+    } else {
+      bioEl.textContent = "";
+      bioEl.hidden = true;
+    }
   }
 };
 

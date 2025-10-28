@@ -167,6 +167,7 @@ class UserProfile(BaseModel):
     display_name: Optional[str] = None
     given_name: Optional[str] = None
     picture: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=1000)
     moxfield_handle: Optional[str] = None
     moxfield_decks: List[MoxfieldDeckSelection] = Field(default_factory=list)
     created_at: datetime
@@ -182,6 +183,7 @@ class UserProfileUpdate(BaseModel):
     display_name: Optional[str] = None
     given_name: Optional[str] = None
     picture: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=1000)
     moxfield_handle: Optional[str] = None
     moxfield_decks: Optional[List[MoxfieldDeckSelection]] = None
 
