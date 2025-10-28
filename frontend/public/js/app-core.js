@@ -177,6 +177,11 @@ let deckSelectionSelectAllBtn = null;
 let deckSelectionClearBtn = null;
 let pendingDeckSelection = null;
 
+const deckPersonalizationCache = new Map();
+let deckPersonalizationOwner = null;
+let deckPersonalizationsBootstrapped = false;
+let deckPersonalizationLoadPromise = null;
+
 const isGoogleClientConfigured = () =>
   Boolean(
     GOOGLE_CLIENT_ID &&
@@ -341,25 +346,42 @@ const clearSession = () => {
   localStorage.removeItem(STORAGE_KEY);
 };
 
-const loadDeckEvaluations = () => {
+const loadStoredDeckPersonalizations = () => {
   const raw = localStorage.getItem(DECK_EVALUATIONS_STORAGE_KEY);
   if (!raw) {
-    return {};
+    return { owner: null, entries: {} };
   }
 
   try {
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      if (parsed.entries && typeof parsed.entries === "object") {
+        return {
+          owner:
+            typeof parsed.owner === "string" && parsed.owner.trim().length > 0
+              ? parsed.owner.trim()
+              : null,
+          entries: parsed.entries ?? {},
+        };
+      }
+      return { owner: null, entries: parsed };
+    }
   } catch (error) {
     console.warn("Évaluations de deck invalides, nettoyage…", error);
     localStorage.removeItem(DECK_EVALUATIONS_STORAGE_KEY);
-    return {};
+    return { owner: null, entries: {} };
   }
+
+  return { owner: null, entries: {} };
 };
 
-const persistDeckEvaluations = (evaluations) => {
+const persistDeckPersonalizationsToStorage = (owner, entries) => {
+  const payload = {
+    owner: owner ?? null,
+    entries: entries ?? {},
+  };
   try {
-    localStorage.setItem(DECK_EVALUATIONS_STORAGE_KEY, JSON.stringify(evaluations));
+    localStorage.setItem(DECK_EVALUATIONS_STORAGE_KEY, JSON.stringify(payload));
   } catch (error) {
     if (isQuotaExceededError(error)) {
       console.warn(
@@ -374,6 +396,19 @@ const persistDeckEvaluations = (evaluations) => {
     }
     throw error;
   }
+};
+
+const exportDeckPersonalizationsForStorage = () => {
+  const snapshot = {};
+  deckPersonalizationCache.forEach((value, deckId) => {
+    if (!deckId) {
+      return;
+    }
+    const copy = { ...value };
+    delete copy.deckId;
+    snapshot[deckId] = copy;
+  });
+  return snapshot;
 };
 
 const LEGACY_DECK_RATING_KEY_MAP = {
@@ -416,6 +451,21 @@ const sanitizeDeckRatings = (input) => {
     }
   });
   return sanitized;
+};
+
+const toTimestamp = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
 };
 
 const sanitizeOptionalString = (value) => {
@@ -487,6 +537,31 @@ const sanitizePersonalNotes = (value) => {
   return trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
 };
 
+const bootstrapDeckPersonalizationCache = (owner = null) => {
+  if (deckPersonalizationsBootstrapped && (!owner || deckPersonalizationOwner === owner)) {
+    return;
+  }
+
+  const stored = loadStoredDeckPersonalizations();
+  if (owner && stored.owner && stored.owner !== owner) {
+    deckPersonalizationCache.clear();
+    deckPersonalizationOwner = owner;
+    deckPersonalizationsBootstrapped = true;
+    return;
+  }
+
+  deckPersonalizationCache.clear();
+  const entries = stored.entries ?? {};
+  Object.entries(entries).forEach(([deckId, rawEntry]) => {
+    const normalized = normalizeDeckPersonalizationEntry(rawEntry);
+    normalized.deckId =
+      normalized.deckId && normalized.deckId.trim().length > 0 ? normalized.deckId : deckId;
+    deckPersonalizationCache.set(deckId, normalized);
+  });
+  deckPersonalizationOwner = owner ?? stored.owner ?? deckPersonalizationOwner ?? null;
+  deckPersonalizationsBootstrapped = true;
+};
+
 const createDeckPersonalizationDefaults = () => ({
   version: 2,
   ratings: {},
@@ -495,6 +570,8 @@ const createDeckPersonalizationDefaults = () => ({
   tags: [],
   personalTag: "",
   notes: "",
+  deckId: null,
+  createdAt: null,
   updatedAt: null,
 });
 
@@ -507,10 +584,18 @@ const normalizeDeckPersonalizationEntry = (entry) => {
   const hasStructuredFields =
     "ratings" in entry ||
     "bracket" in entry ||
+    "bracket_id" in entry ||
     "playstyle" in entry ||
     "tags" in entry ||
     "personalTag" in entry ||
+    "personal_tag" in entry ||
     "notes" in entry ||
+    "deckId" in entry ||
+    "deck_id" in entry ||
+    "createdAt" in entry ||
+    "created_at" in entry ||
+    "updated_at" in entry ||
+    "updatedAt" in entry ||
     entry.version >= 2;
 
   const normalized = {
@@ -519,14 +604,25 @@ const normalizeDeckPersonalizationEntry = (entry) => {
   };
 
   if (hasStructuredFields) {
-    normalized.bracket = sanitizeBracketId(entry.bracket);
+    normalized.bracket = sanitizeBracketId(entry.bracket ?? entry.bracket_id);
     const playstyle = sanitizeOptionalString(entry.playstyle ?? entry.archetype);
     normalized.playstyle = playstyle;
     normalized.tags = sanitizeTagList(entry.tags);
-    normalized.personalTag = sanitizePersonalTag(entry.personalTag);
+    normalized.personalTag = sanitizePersonalTag(entry.personalTag ?? entry.personal_tag);
     normalized.notes = sanitizePersonalNotes(entry.notes);
-    if (typeof entry.updatedAt === "number" && Number.isFinite(entry.updatedAt)) {
-      normalized.updatedAt = entry.updatedAt;
+    normalized.deckId =
+      typeof entry.deckId === "string" && entry.deckId.trim().length > 0
+        ? entry.deckId.trim()
+        : typeof entry.deck_id === "string" && entry.deck_id.trim().length > 0
+        ? entry.deck_id.trim()
+        : defaults.deckId;
+    const createdAt = toTimestamp(entry.createdAt ?? entry.created_at);
+    if (createdAt !== null) {
+      normalized.createdAt = createdAt;
+    }
+    const updatedAt = toTimestamp(entry.updatedAt ?? entry.updated_at);
+    if (updatedAt !== null) {
+      normalized.updatedAt = updatedAt;
     }
   }
 
@@ -559,32 +655,171 @@ const applyDeckPersonalizationUpdates = (existingEntry, updates) => {
   }
 
   next.version = 2;
+  next.deckId = base.deckId ?? null;
+  next.createdAt = base.createdAt ?? Date.now();
   next.updatedAt = Date.now();
   return next;
+};
+
+const getActiveSession = () => {
+  if (typeof currentSession !== "undefined" && currentSession) {
+    return currentSession;
+  }
+  return getSession();
 };
 
 const getDeckPersonalization = (deckId) => {
   if (!deckId) {
     return null;
   }
-  const evaluations = loadDeckEvaluations();
-  const entry = evaluations?.[deckId];
-  if (!entry || typeof entry !== "object") {
+  const session = getActiveSession();
+  const owner = session?.googleSub ?? null;
+  bootstrapDeckPersonalizationCache(owner);
+  const entry = deckPersonalizationCache.get(deckId);
+  if (!entry) {
     return null;
   }
-  return normalizeDeckPersonalizationEntry(entry);
+  return {
+    ...entry,
+    ratings: { ...entry.ratings },
+    tags: Array.isArray(entry.tags) ? [...entry.tags] : [],
+  };
 };
 
-const setDeckPersonalization = (deckId, updates) => {
-  if (!deckId) {
-    return null;
+const upsertDeckPersonalizationRemote = async (googleSub, deckId, payload) => {
+  const endpoint = buildDeckPersonalizationDetailEndpoint(googleSub, deckId);
+  if (!endpoint) {
+    throw new Error("Point de terminaison d'enregistrement introuvable.");
   }
-  const current = loadDeckEvaluations();
-  const existing = current?.[deckId];
-  const next = applyDeckPersonalizationUpdates(existing, updates);
-  current[deckId] = next;
-  persistDeckEvaluations(current);
-  return next;
+  const response = await fetch(endpoint, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Impossible d'enregistrer les informations personnelles (${response.status}).`
+    );
+  }
+  return response.json();
+};
+
+const fetchDeckPersonalizationsFromBackend = async (googleSub) => {
+  const endpoint = buildDeckPersonalizationsEndpoint(googleSub);
+  if (!endpoint) {
+    return [];
+  }
+  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    throw new Error(
+      `Impossible de charger les informations personnelles (${response.status}).`
+    );
+  }
+  const payload = await response.json();
+  const entries = Array.isArray(payload?.personalizations) ? payload.personalizations : [];
+
+  deckPersonalizationCache.clear();
+  entries.forEach((entry) => {
+    const deckId =
+      (typeof entry?.deckId === "string" && entry.deckId.trim()) ||
+      (typeof entry?.deck_id === "string" && entry.deck_id.trim());
+    if (!deckId) {
+      return;
+    }
+    const normalized = normalizeDeckPersonalizationEntry(entry);
+    normalized.deckId = normalized.deckId && normalized.deckId.trim().length > 0 ? normalized.deckId : deckId;
+    deckPersonalizationCache.set(deckId, normalized);
+  });
+  deckPersonalizationOwner = googleSub;
+  deckPersonalizationsBootstrapped = true;
+  persistDeckPersonalizationsToStorage(googleSub, exportDeckPersonalizationsForStorage());
+  return entries;
+};
+
+const ensureDeckPersonalizationsSynced = async (session = null) => {
+  const activeSession = session ?? getActiveSession();
+  const googleSub = activeSession?.googleSub ?? null;
+  if (!googleSub) {
+    bootstrapDeckPersonalizationCache(null);
+    return;
+  }
+
+  if (deckPersonalizationOwner && deckPersonalizationOwner !== googleSub) {
+    deckPersonalizationCache.clear();
+    deckPersonalizationsBootstrapped = false;
+  }
+
+  bootstrapDeckPersonalizationCache(googleSub);
+
+  if (deckPersonalizationOwner === googleSub && !deckPersonalizationLoadPromise) {
+    return;
+  }
+
+  if (!deckPersonalizationLoadPromise) {
+    deckPersonalizationLoadPromise = fetchDeckPersonalizationsFromBackend(googleSub)
+      .catch((error) => {
+        console.warn("Impossible de synchroniser les personnalisations de deck :", error);
+        throw error;
+      })
+      .finally(() => {
+        deckPersonalizationLoadPromise = null;
+      });
+  }
+
+  try {
+    await deckPersonalizationLoadPromise;
+  } catch (error) {
+    // Keep local cache on failure.
+  }
+};
+
+const setDeckPersonalization = async (deckId, updates) => {
+  if (!deckId) {
+    throw new Error("Identifiant de deck requis.");
+  }
+  const session = getActiveSession();
+  const googleSub = session?.googleSub ?? null;
+  if (!googleSub) {
+    throw new Error("Connectez-vous pour enregistrer vos modifications.");
+  }
+
+  bootstrapDeckPersonalizationCache(googleSub);
+  const existing = deckPersonalizationCache.get(deckId);
+  const nextLocal = applyDeckPersonalizationUpdates(existing, updates);
+  nextLocal.deckId = deckId;
+
+  const payload = {
+    ratings: nextLocal.ratings,
+    bracket: nextLocal.bracket,
+    playstyle: nextLocal.playstyle ?? null,
+    tags: Array.isArray(nextLocal.tags) ? nextLocal.tags : [],
+    personalTag: nextLocal.personalTag ?? "",
+    notes: nextLocal.notes ?? "",
+  };
+
+  const remote = await upsertDeckPersonalizationRemote(googleSub, deckId, payload);
+  const normalizedRemote = normalizeDeckPersonalizationEntry(remote);
+  normalizedRemote.deckId =
+    normalizedRemote.deckId && normalizedRemote.deckId.trim().length > 0
+      ? normalizedRemote.deckId
+      : deckId;
+  if (typeof normalizedRemote.updatedAt !== "number" || !Number.isFinite(normalizedRemote.updatedAt)) {
+    normalizedRemote.updatedAt = Date.now();
+  }
+  if (typeof normalizedRemote.createdAt !== "number" || !Number.isFinite(normalizedRemote.createdAt)) {
+    normalizedRemote.createdAt = normalizedRemote.updatedAt;
+  }
+
+  deckPersonalizationCache.set(deckId, normalizedRemote);
+  persistDeckPersonalizationsToStorage(
+    googleSub,
+    exportDeckPersonalizationsForStorage()
+  );
+
+  return normalizedRemote;
 };
 
 const getDeckEvaluation = (deckId) => {
@@ -592,11 +827,11 @@ const getDeckEvaluation = (deckId) => {
   return personalization?.ratings ?? null;
 };
 
-const setDeckEvaluation = (deckId, evaluation) => {
+const setDeckEvaluation = async (deckId, evaluation) => {
   if (!deckId || !evaluation || typeof evaluation !== "object") {
     return null;
   }
-  const personalization = setDeckPersonalization(deckId, { ratings: evaluation });
+  const personalization = await setDeckPersonalization(deckId, { ratings: evaluation });
   return personalization?.ratings ?? null;
 };
 
@@ -666,6 +901,24 @@ const buildGamesEndpoint = (googleSub) => {
     return null;
   }
   return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}/games`);
+};
+
+const buildDeckPersonalizationsEndpoint = (googleSub) => {
+  if (!googleSub) {
+    return null;
+  }
+  return buildBackendUrl(
+    `/profiles/${encodeURIComponent(googleSub)}/deck-personalizations`
+  );
+};
+
+const buildDeckPersonalizationDetailEndpoint = (googleSub, deckId) => {
+  if (!googleSub || !deckId) {
+    return null;
+  }
+  return buildBackendUrl(
+    `/profiles/${encodeURIComponent(googleSub)}/deck-personalizations/${encodeURIComponent(deckId)}`
+  );
 };
 
 const fetchBackendProfile = async (googleSub) => {

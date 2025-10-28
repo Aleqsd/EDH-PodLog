@@ -743,6 +743,8 @@ const createEmptyDeckPersonalization = () => ({
   tags: [],
   personalTag: "",
   notes: "",
+  deckId: null,
+  createdAt: null,
   updatedAt: null,
 });
 
@@ -769,8 +771,33 @@ const cloneDeckPersonalization = (source) => {
   if (typeof source.notes === "string") {
     base.notes = source.notes.trim();
   }
-  if (typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt)) {
-    base.updatedAt = source.updatedAt;
+  if (typeof source.deckId === "string" && source.deckId.trim()) {
+    base.deckId = source.deckId.trim();
+  }
+  const parseTimestamp = (value) => {
+    if (typeof toTimestamp === "function") {
+      return toTimestamp(value);
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (value instanceof Date) {
+      const ms = value.getTime();
+      return Number.isFinite(ms) ? ms : null;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+  const createdAt = parseTimestamp(source.createdAt);
+  if (createdAt !== null) {
+    base.createdAt = createdAt;
+  }
+  const updatedAt = parseTimestamp(source.updatedAt);
+  if (updatedAt !== null) {
+    base.updatedAt = updatedAt;
   }
   return base;
 };
@@ -794,7 +821,6 @@ let deckPersonalizationCancelBtn = null;
 let deckPersonalizationCloseBtn = null;
 let deckPersonalizationStatusEl = null;
 let deckPersonalizationRatingControls = new Map();
-let deckPersonalizationRadar = null;
 let deckPersonalizationTagInputs = [];
 let deckPersonalizationBracketInputs = [];
 let deckPersonalizationPlaystyleSelect = null;
@@ -815,20 +841,6 @@ const setDeckPersonalizationStatus = (message, tone = "neutral") => {
   }
   deckPersonalizationStatusEl.textContent = message ?? "";
   deckPersonalizationStatusEl.hidden = !message;
-};
-
-const updateDeckPersonalizationRadar = () => {
-  if (!deckPersonalizationRadar) {
-    return;
-  }
-  const values = DECK_RATING_CATEGORIES.map((category) => {
-    const control = deckPersonalizationRatingControls.get(category.key);
-    if (!control) {
-      return DECK_PERSONAL_RATING_DEFAULT;
-    }
-    return clampPersonalRatingValue(control.value);
-  });
-  deckPersonalizationRadar.update(values);
 };
 
 const refreshDeckPersonalizationTagState = () => {
@@ -928,9 +940,9 @@ const ensureDeckPersonalizationModal = () => {
   deckPersonalizationCloseBtn = closeBtn;
   deckPersonalizationStatusEl = status;
 
-  deckPersonalizationForm.addEventListener("submit", (event) => {
+  deckPersonalizationForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    handleDeckPersonalizationSubmit();
+    await handleDeckPersonalizationSubmit();
   });
   deckPersonalizationSaveBtn.addEventListener("click", () => {
     if (deckPersonalizationForm) {
@@ -951,7 +963,6 @@ const ensureDeckPersonalizationModal = () => {
 
 const clearDeckPersonalizationModalState = () => {
   deckPersonalizationRatingControls = new Map();
-  deckPersonalizationRadar = null;
   deckPersonalizationTagInputs = [];
   deckPersonalizationBracketInputs = [];
   deckPersonalizationPlaystyleSelect = null;
@@ -966,20 +977,12 @@ const buildDeckPersonalizationRatingsSection = (personalization) => {
 
   const heading = document.createElement("h3");
   heading.className = "deck-personal-section-title";
-  heading.textContent = "Radar stratégique";
+  heading.textContent = "Notes stratégiques (1 à 5)";
   section.appendChild(heading);
-
-  const layout = document.createElement("div");
-  layout.className = "deck-rating-layout deck-rating-layout-modal";
-  section.appendChild(layout);
 
   const fields = document.createElement("div");
   fields.className = "deck-rating-grid deck-rating-grid-modal";
-  layout.appendChild(fields);
-
-  const radarContainer = document.createElement("div");
-  radarContainer.className = "deck-radar-container deck-radar-container-modal";
-  layout.appendChild(radarContainer);
+  section.appendChild(fields);
 
   deckPersonalizationRatingControls = new Map();
 
@@ -1028,7 +1031,6 @@ const buildDeckPersonalizationRatingsSection = (personalization) => {
         control.value = sanitized;
         slider.value = String(sanitized);
         valueInput.value = String(sanitized);
-        updateDeckPersonalizationRadar();
       },
     };
 
@@ -1063,12 +1065,6 @@ const buildDeckPersonalizationRatingsSection = (personalization) => {
 
     deckPersonalizationRatingControls.set(category.key, control);
   });
-
-  const radar = createRadarChartComponent(DECK_RATING_CATEGORIES);
-  if (radar) {
-    radarContainer.appendChild(radar.element);
-    deckPersonalizationRadar = radar;
-  }
 
   DECK_RATING_CATEGORIES.forEach((category) => {
     const control = deckPersonalizationRatingControls.get(category.key);
@@ -1268,7 +1264,7 @@ const populateDeckPersonalizationForm = (personalization) => {
   const intro = document.createElement("p");
   intro.className = "deck-personal-intro";
   intro.textContent =
-    "Ajustez votre lecture personnelle de ce deck. Ces informations sont stockées uniquement dans votre navigateur.";
+    "Ajustez votre lecture personnelle de ce deck. Les modifications sont synchronisées avec votre compte EDH PodLog.";
   deckPersonalizationForm.appendChild(intro);
 
   const ratingsSection = buildDeckPersonalizationRatingsSection(personalization);
@@ -1329,7 +1325,7 @@ const collectDeckPersonalizationData = () => {
   };
 };
 
-const handleDeckPersonalizationSubmit = () => {
+const handleDeckPersonalizationSubmit = async () => {
   if (!deckPersonalizationContext || !deckPersonalizationSaveBtn) {
     return;
   }
@@ -1344,7 +1340,7 @@ const handleDeckPersonalizationSubmit = () => {
 
   try {
     const payload = collectDeckPersonalizationData();
-    const persisted = setDeckPersonalization(deckId, payload) ?? payload;
+    const persisted = (await setDeckPersonalization(deckId, payload)) ?? payload;
     if (typeof deckPersonalizationContext.onSubmit === "function") {
       deckPersonalizationContext.onSubmit(persisted);
     }
@@ -1352,17 +1348,14 @@ const handleDeckPersonalizationSubmit = () => {
     closeDeckPersonalizationModal("submit");
   } catch (error) {
     console.error("Unable to persist deck personalization", error);
-    if (error && error.code === "STORAGE_QUOTA") {
-      setDeckPersonalizationStatus(
-        "Stockage local saturé : impossible d'enregistrer ces informations.",
-        "error"
-      );
-    } else {
-      setDeckPersonalizationStatus(
-        "Impossible d'enregistrer les informations personnelles pour le moment.",
-        "error"
-      );
-    }
+    const message =
+      error?.message && typeof error.message === "string"
+        ? error.message
+        : "Impossible d'enregistrer les informations personnelles pour le moment.";
+    const fallbackMessage = /failed to fetch/i.test(message)
+      ? "Connexion au serveur impossible. Vérifiez votre réseau et réessayez."
+      : message;
+    setDeckPersonalizationStatus(fallbackMessage, "error");
     deckPersonalizationSaveBtn.disabled = false;
     deckPersonalizationSaveBtn.classList.remove("is-loading");
   }
@@ -3011,7 +3004,7 @@ const createRadarChartComponent = (categories, { maxValue = 5 } = {}) => {
     group.appendChild(polygon);
   }
 
-  categories.forEach((_, index) => {
+  const axisLabels = categories.map((category, index) => {
     const angle = (Math.PI * 2 * index) / categories.length - Math.PI / 2;
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
     line.classList.add("deck-radar-axis");
@@ -3020,6 +3013,26 @@ const createRadarChartComponent = (categories, { maxValue = 5 } = {}) => {
     line.setAttribute("x2", (Math.cos(angle) * radius).toFixed(2));
     line.setAttribute("y2", (Math.sin(angle) * radius).toFixed(2));
     group.appendChild(line);
+    const labelRadius = radius + 26;
+    const labelX = Math.cos(angle) * labelRadius;
+    const labelY = Math.sin(angle) * labelRadius;
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.classList.add("deck-radar-axis-label");
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("x", labelX.toFixed(2));
+    text.setAttribute("y", labelY.toFixed(2));
+    const nameSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    nameSpan.textContent = category.label;
+    nameSpan.setAttribute("x", labelX.toFixed(2));
+    nameSpan.setAttribute("dy", "0");
+    const valueSpan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    valueSpan.classList.add("deck-radar-axis-value");
+    valueSpan.textContent = "-";
+    valueSpan.setAttribute("x", labelX.toFixed(2));
+    valueSpan.setAttribute("dy", "1.1em");
+    text.append(nameSpan, valueSpan);
+    group.appendChild(text);
+    return { text, value: valueSpan };
   });
 
   const shape = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -3047,6 +3060,10 @@ const createRadarChartComponent = (categories, { maxValue = 5 } = {}) => {
       const y = Math.sin(angle) * distance;
       points[index].setAttribute("cx", x.toFixed(2));
       points[index].setAttribute("cy", y.toFixed(2));
+      const axisLabel = axisLabels[index];
+      if (axisLabel) {
+        axisLabel.value.textContent = String(clamped);
+      }
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     });
     shape.setAttribute("points", coordinates.join(" "));
@@ -3083,15 +3100,8 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   header.append(title, editBtn);
   card.appendChild(header);
 
-  const subtitle = document.createElement("p");
-  subtitle.className = "deck-stats-card-subtitle";
-  subtitle.textContent = deckName
-    ? `Affinez votre lecture du deck « ${deckName} ».`
-    : "Affinez votre lecture de ce deck.";
-  card.appendChild(subtitle);
-
   const summaryLayout = document.createElement("div");
-  summaryLayout.className = "deck-rating-summary-layout";
+  summaryLayout.className = "deck-rating-summary-layout deck-rating-summary-layout-profile";
   card.appendChild(summaryLayout);
 
   const ratingList = document.createElement("dl");
@@ -3129,23 +3139,12 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   }
 
   const infoSection = document.createElement("div");
-  infoSection.className = "deck-personal-info";
+  infoSection.className = "deck-personal-info deck-personal-info-grid";
   card.appendChild(infoSection);
 
   const metaList = document.createElement("dl");
   metaList.className = "deck-personal-meta";
   infoSection.appendChild(metaList);
-
-  const personalBracketDescriptionEl = document.createElement("p");
-  personalBracketDescriptionEl.className = "deck-personal-bracket-note";
-  personalBracketDescriptionEl.hidden = true;
-  infoSection.appendChild(personalBracketDescriptionEl);
-
-  const remoteBracketJustificationEl = document.createElement("p");
-  remoteBracketJustificationEl.className =
-    "deck-personal-bracket-note deck-personal-bracket-note-remote";
-  remoteBracketJustificationEl.hidden = true;
-  infoSection.appendChild(remoteBracketJustificationEl);
 
   const tagsSection = document.createElement("div");
   tagsSection.className = "deck-personal-tags-section";
@@ -3184,11 +3183,6 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
     card.appendChild(badges);
   }
 
-  const note = document.createElement("p");
-  note.className = "deck-rating-footnote";
-  note.textContent = "Les évaluations sont stockées localement dans votre navigateur.";
-  card.appendChild(note);
-
   let currentPersonalization = cloneDeckPersonalization(
     getDeckPersonalization(deckId) ?? createEmptyDeckPersonalization()
   );
@@ -3209,24 +3203,15 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
 
   const renderMeta = () => {
     metaList.innerHTML = "";
-    personalBracketDescriptionEl.hidden = true;
-    personalBracketDescriptionEl.textContent = "";
-    remoteBracketJustificationEl.hidden = true;
-    remoteBracketJustificationEl.textContent = "";
 
     const metaItems = [];
 
     if (currentPersonalization.bracket) {
       const definition = findDeckBracketDefinition(currentPersonalization.bracket);
-      const label = definition ? definition.label : `Bracket ${currentPersonalization.bracket}`;
       metaItems.push({
         label: "Bracket (perso)",
-        value: label,
+        value: definition ? definition.label : `Tier ${currentPersonalization.bracket}`,
       });
-      if (definition?.description) {
-        personalBracketDescriptionEl.textContent = definition.description;
-        personalBracketDescriptionEl.hidden = false;
-      }
     }
 
     if (currentPersonalization.playstyle) {
@@ -3250,6 +3235,21 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
       });
     }
 
+    if (typeof currentPersonalization.updatedAt === "number" && Number.isFinite(currentPersonalization.updatedAt)) {
+      const updatedDate = new Date(currentPersonalization.updatedAt);
+      if (!Number.isNaN(updatedDate.getTime())) {
+        const formatter = new Intl.DateTimeFormat("fr-FR", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        metaItems.push({
+          label: "Mis à jour",
+          value: formatter.format(updatedDate),
+        });
+      }
+    }
+
     metaItems.forEach((item) => {
       const wrapper = document.createElement("div");
       wrapper.className = "deck-personal-meta-item";
@@ -3262,11 +3262,6 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
       wrapper.append(dt, dd);
       metaList.appendChild(wrapper);
     });
-
-    if (bracketInfo.justification) {
-      remoteBracketJustificationEl.textContent = bracketInfo.justification;
-      remoteBracketJustificationEl.hidden = false;
-    }
   };
 
   const renderTags = () => {
@@ -3308,7 +3303,11 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
         ? currentPersonalization.notes.trim()
         : "";
     if (notes) {
-      notesDisplay.textContent = `Notes personnelles : ${notes}`;
+      notesDisplay.innerHTML = "";
+      const label = document.createElement("span");
+      label.className = "deck-personal-notes-label";
+      label.textContent = "Notes";
+      notesDisplay.append(label, document.createTextNode(` : ${notes}`));
       notesDisplay.hidden = false;
     } else {
       notesDisplay.textContent = "";
@@ -3325,6 +3324,29 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   };
 
   applyPersonalization(currentPersonalization);
+
+  if (typeof ensureDeckPersonalizationsSynced === "function") {
+    const maybeSync = ensureDeckPersonalizationsSynced();
+    if (maybeSync && typeof maybeSync.then === "function") {
+      maybeSync
+        .then(() => {
+          const refreshed = getDeckPersonalization(deckId);
+          if (!refreshed) {
+            return;
+          }
+          if (
+            typeof refreshed.updatedAt === "number" &&
+            typeof currentPersonalization.updatedAt === "number" &&
+            refreshed.updatedAt === currentPersonalization.updatedAt
+          ) {
+            return;
+          }
+          currentPersonalization = cloneDeckPersonalization(refreshed);
+          applyPersonalization(currentPersonalization);
+        })
+        .catch(() => {});
+    }
+  }
 
   editBtn.addEventListener("click", () => {
     openDeckPersonalizationModal({

@@ -40,6 +40,14 @@
       }
     }
 
+    if (context.session?.googleSub && typeof ensureDeckPersonalizationsSynced === "function") {
+      try {
+        await ensureDeckPersonalizationsSynced(context.session);
+      } catch (error) {
+        console.warn("Impossible de synchroniser les personnalisations de deck :", error);
+      }
+    }
+
     if (context.session) {
       updateProfileBadge(context.session);
       updateProfileDetails(context.session);

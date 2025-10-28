@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class Author(BaseModel):
@@ -139,6 +139,48 @@ class UserDeckSummariesResponse(BaseModel):
     user: UserSummary
     total_decks: int
     decks: List[DeckSummary] = Field(default_factory=list)
+
+
+class DeckPersonalization(BaseModel):
+    """User-authored personalization for a deck."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    deck_id: str = Field(alias="deckId")
+    ratings: Dict[str, int] = Field(default_factory=dict)
+    bracket: Optional[str] = None
+    playstyle: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    personal_tag: str = Field(default="", alias="personalTag")
+    notes: str = ""
+    version: int = 2
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class DeckPersonalizationUpdate(BaseModel):
+    """Payload accepted when storing a deck personalization."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    ratings: Optional[Dict[str, int]] = None
+    bracket: Optional[str] = None
+    playstyle: Optional[str] = None
+    tags: Optional[List[str]] = None
+    personal_tag: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("personal_tag", "personalTag"),
+        serialization_alias="personalTag",
+    )
+    notes: Optional[str] = None
+
+
+class DeckPersonalizationList(BaseModel):
+    """Collection wrapper for personalized decks."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    personalizations: List[DeckPersonalization] = Field(default_factory=list)
 
 
 class MoxfieldDeckSelection(BaseModel):

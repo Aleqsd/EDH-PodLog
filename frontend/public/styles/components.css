@@ -168,6 +168,7 @@
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
+  max-height: 90vh;
 }
 
 .modal-header {
@@ -203,7 +204,7 @@
   padding: 1.25rem 1.75rem;
   display: grid;
   gap: 1.25rem;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .modal-description {
@@ -347,12 +348,12 @@
 }
 
 .deck-personal-modal {
-  width: min(720px, 100%);
+  width: min(900px, 100%);
 }
 
 .deck-personal-form {
   display: grid;
-  gap: 1.5rem;
+  gap: 1.75rem;
 }
 
 .deck-personal-intro {
@@ -379,7 +380,9 @@
 }
 
 .deck-rating-grid-modal {
-  gap: 0.85rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .deck-rating-field-modal {
@@ -399,12 +402,24 @@
   line-height: 1.45;
 }
 
-.deck-radar-container-modal {
-  justify-content: center;
-}
 
 .deck-personal-section-profile {
   gap: 1rem;
+  display: grid;
+}
+
+@media (min-width: 960px) {
+  .deck-personal-section-profile {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  .deck-bracket-fieldset,
+  .deck-tags-wrapper,
+  .deck-personal-notes {
+    grid-column: 1 / -1;
+  }
 }
 
 .deck-bracket-fieldset {

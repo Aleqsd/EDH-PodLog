@@ -18,6 +18,7 @@ class Settings:
     mongo_decks_collection: str
     mongo_deck_summaries_collection: str
     mongo_playgroups_collection: str
+    mongo_deck_personalizations_collection: str
     mongo_games_collection: str
     cors_allow_origins: tuple[str, ...]
 
@@ -36,6 +37,9 @@ class Settings:
                 "MONGO_DECK_SUMMARIES_COLLECTION", "deck_summaries"
             ),
             mongo_playgroups_collection=os.getenv("MONGO_PLAYGROUPS_COLLECTION", "playgroups"),
+            mongo_deck_personalizations_collection=os.getenv(
+                "MONGO_DECK_PERSONALIZATIONS_COLLECTION", "deck_personalizations"
+            ),
             mongo_games_collection=os.getenv("MONGO_GAMES_COLLECTION", "games"),
             cors_allow_origins=_load_cors_origins(),
         )

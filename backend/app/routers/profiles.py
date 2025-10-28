@@ -4,7 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from ..dependencies import get_mongo_database
-from ..schemas import UserProfile, UserProfileUpdate
+from ..schemas import (
+    DeckPersonalization,
+    DeckPersonalizationList,
+    DeckPersonalizationUpdate,
+    UserProfile,
+    UserProfileUpdate,
+)
+from ..services.deck_personalization import (
+    fetch_deck_personalization,
+    fetch_deck_personalizations,
+    upsert_deck_personalization,
+)
 from ..services.profiles import fetch_user_profile, upsert_user_profile
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -36,3 +47,45 @@ async def upsert_user_profile_endpoint(
     database: AsyncIOMotorDatabase = Depends(get_mongo_database),
 ) -> UserProfile:
     return await upsert_user_profile(database, google_sub, payload)
+
+
+@router.get(
+    "/{google_sub}/deck-personalizations",
+    response_model=DeckPersonalizationList,
+    summary="List all saved deck personalizations for the user.",
+)
+async def list_deck_personalizations(
+    google_sub: str,
+    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+) -> DeckPersonalizationList:
+    return await fetch_deck_personalizations(database, google_sub)
+
+
+@router.get(
+    "/{google_sub}/deck-personalizations/{deck_id}",
+    response_model=DeckPersonalization,
+    summary="Fetch personalization for a specific deck.",
+)
+async def get_deck_personalization_endpoint(
+    google_sub: str,
+    deck_id: str,
+    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+) -> DeckPersonalization:
+    personalization = await fetch_deck_personalization(database, google_sub, deck_id)
+    if not personalization:
+        raise HTTPException(status_code=404, detail="Deck personalization not found.")
+    return personalization
+
+
+@router.put(
+    "/{google_sub}/deck-personalizations/{deck_id}",
+    response_model=DeckPersonalization,
+    summary="Create or update personalization for a deck.",
+)
+async def upsert_deck_personalization_endpoint(
+    google_sub: str,
+    deck_id: str,
+    payload: DeckPersonalizationUpdate,
+    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+) -> DeckPersonalization:
+    return await upsert_deck_personalization(database, google_sub, deck_id, payload)
