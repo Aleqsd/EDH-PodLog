@@ -3,6 +3,7 @@ PYTHON ?= python
 FRONTEND_DIR := frontend
 FRONT_PUBLIC_DIR := $(FRONTEND_DIR)/public
 FRONT_CONFIG_SCRIPT := $(FRONTEND_DIR)/scripts/generate-config.mjs
+FRONT_SERVE_CONFIG := $(FRONTEND_DIR)/serve.dev.json
 FRONTEND_PORT ?= 3170
 
 BACKEND_DIR := backend
@@ -50,7 +51,7 @@ front-build: front-config
 	@echo "Static assets ready in $(FRONT_PUBLIC_DIR)"
 
 front-serve: front-config
-	@npx --yes serve --listen tcp://127.0.0.1:$(FRONTEND_PORT) $(FRONT_PUBLIC_DIR)
+	@npx --yes serve --config $(FRONT_SERVE_CONFIG) --listen tcp://127.0.0.1:$(FRONTEND_PORT) $(FRONT_PUBLIC_DIR)
 
 front-test:
 	@node --test $(FRONTEND_DIR)/tests/*.mjs
