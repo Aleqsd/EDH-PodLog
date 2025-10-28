@@ -814,10 +814,21 @@ const setDeckPersonalization = async (deckId, updates) => {
   }
 
   deckPersonalizationCache.set(deckId, normalizedRemote);
-  persistDeckPersonalizationsToStorage(
-    googleSub,
-    exportDeckPersonalizationsForStorage()
-  );
+  try {
+    persistDeckPersonalizationsToStorage(
+      googleSub,
+      exportDeckPersonalizationsForStorage()
+    );
+  } catch (error) {
+    if (error && error.code === "STORAGE_QUOTA") {
+      console.warn(
+        "Le profil stratégique distant a été sauvegardé, mais l'écriture en local est impossible (quota atteint).",
+        error
+      );
+    } else {
+      throw error;
+    }
+  }
 
   return normalizedRemote;
 };
