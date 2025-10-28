@@ -14,6 +14,10 @@ const API_BASE_URL = (() => {
 
 const APP_REVISION = CONFIG.APP_REVISION ?? "";
 const APP_REVISION_FULL = CONFIG.APP_REVISION_FULL ?? "";
+const APP_REVISION_MESSAGE = (() => {
+  const value = CONFIG.APP_REVISION_MESSAGE;
+  return typeof value === "string" ? value.trim() : "";
+})();
 const APP_REVISION_DATE_RAW = CONFIG.APP_REVISION_DATE ?? "";
 
 const parseRevisionDate = (raw) => {
