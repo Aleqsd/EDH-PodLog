@@ -38,6 +38,29 @@
       flex-direction: column;
       align-items: flex-start;
     }
+
+    .decks-main {
+      padding: var(--space-xl) var(--space-md);
+    }
+
+    .decks-section {
+      padding: var(--space-xl) var(--space-md);
+    }
+
+    .deck-collection {
+      scroll-padding-inline: var(--space-xs);
+      scroll-snap-type: x mandatory;
+    }
+
+    .deck-card {
+      min-width: min(85vw, 320px);
+      flex: 0 0 min(85vw, 320px);
+    }
+
+    .game-history-entry {
+      min-width: min(85vw, 320px);
+      flex: 0 0 min(85vw, 320px);
+    }
   }
 
   @media (max-width: 720px) {

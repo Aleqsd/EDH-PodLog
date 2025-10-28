@@ -760,9 +760,28 @@
 .game-history-list {
   list-style: none;
   margin: 0;
-  padding: 0;
-  display: grid;
+  padding: 0 0 var(--space-sm);
+  display: flex;
   gap: var(--space-sm);
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.game-history-list::-webkit-scrollbar {
+  height: 0.6rem;
+}
+
+.game-history-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-base-6175b3) 25%, transparent);
+  border-radius: 999px;
+}
+
+.game-history-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .game-history-entry {
@@ -772,6 +791,9 @@
   background: color-mix(in srgb, var(--color-base-121c30) 75%, transparent);
   display: grid;
   gap: var(--space-xs);
+  min-width: clamp(240px, 70vw, 340px);
+  flex: 0 0 clamp(240px, 70vw, 340px);
+  scroll-snap-align: start;
 }
 
 .game-history-header {
@@ -1433,6 +1455,10 @@
   border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 28%, transparent);
   display: grid;
   gap: 0.6rem;
+  min-width: clamp(220px, 70vw, 320px);
+  flex: 0 0 clamp(220px, 70vw, 320px);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .integration-card {
@@ -1573,9 +1599,30 @@
 
 .deck-collection {
   margin-top: 2.5rem;
-  display: grid;
-  gap: 1.2rem;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-md);
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 0 var(--space-sm);
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--space-sm);
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.deck-collection::-webkit-scrollbar {
+  height: 0.6rem;
+}
+
+.deck-collection::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-base-6175b3) 25%, transparent);
+  border-radius: 999px;
+}
+
+.deck-collection::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .deck-collection-empty {

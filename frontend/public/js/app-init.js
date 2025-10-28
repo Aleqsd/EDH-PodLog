@@ -1,6 +1,28 @@
 (() => {
   const controllers = new Map();
   const sharedControllers = [];
+  let serviceWorkerRegistrationScheduled = false;
+
+  const scheduleServiceWorkerRegistration = () => {
+    if (serviceWorkerRegistrationScheduled || !("serviceWorker" in navigator)) {
+      return;
+    }
+    serviceWorkerRegistrationScheduled = true;
+
+    const register = () => {
+      navigator.serviceWorker
+        .register("./service-worker.js")
+        .catch((error) =>
+          console.warn("EDH PodLog service worker registration failed:", error)
+        );
+    };
+
+    if (document.readyState === "complete") {
+      register();
+    } else {
+      window.addEventListener("load", register, { once: true });
+    }
+  };
 
   const runMaybeAsync = async (fn, context) => {
     if (typeof fn !== "function") {
@@ -63,6 +85,8 @@
   window.EDH_PODLOG.controllers = api;
   window.EDH_PODLOG.loadCachedDecksForHandle =
     window.EDH_PODLOG.loadCachedDecksForHandle || (() => {});
+
+  scheduleServiceWorkerRegistration();
 
   document.addEventListener("DOMContentLoaded", async () => {
     currentSession = getSession();

@@ -1,0 +1,61 @@
+{
+  "name": "EDH PodLog",
+  "short_name": "PodLog",
+  "description": "Suivez vos parties Commander, synchronisez vos decks Moxfield et préparez votre prochain pod.",
+  "lang": "fr",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b1018",
+  "theme_color": "#0b1018",
+  "categories": [
+    "productivity",
+    "lifestyle"
+  ],
+  "icons": [
+    {
+      "src": "assets/edh-podlog-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/edh-podlog-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tableau de bord",
+      "short_name": "Tableau",
+      "description": "Accéder au tableau de bord EDH PodLog",
+      "url": "dashboard.html"
+    },
+    {
+      "name": "Decks synchronisés",
+      "short_name": "Decks",
+      "description": "Consulter vos decks importés",
+      "url": "decks.html"
+    },
+    {
+      "name": "Synchronisation Moxfield",
+      "short_name": "Sync",
+      "description": "Relancer la synchronisation Moxfield",
+      "url": "synchronisation.html"
+    }
+  ]
+}
