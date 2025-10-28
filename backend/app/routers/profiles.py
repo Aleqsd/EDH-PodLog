@@ -17,8 +17,10 @@ from ..services.deck_personalization import (
     upsert_deck_personalization,
 )
 from ..services.profiles import fetch_user_profile, upsert_user_profile
+from ..logging_utils import get_logger
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
+logger = get_logger("profiles")
 
 
 @router.get(
@@ -73,6 +75,11 @@ async def get_deck_personalization_endpoint(
 ) -> DeckPersonalization:
     personalization = await fetch_deck_personalization(database, google_sub, deck_id)
     if not personalization:
+        logger.info(
+            "Deck personalization not found for user '%s' and deck '%s'.",
+            google_sub,
+            deck_id,
+        )
         raise HTTPException(status_code=404, detail="Deck personalization not found.")
     return personalization
 
@@ -88,4 +95,18 @@ async def upsert_deck_personalization_endpoint(
     payload: DeckPersonalizationUpdate,
     database: AsyncIOMotorDatabase = Depends(get_mongo_database),
 ) -> DeckPersonalization:
-    return await upsert_deck_personalization(database, google_sub, deck_id, payload)
+    logger.info(
+        "Upserting deck personalization for user '%s' and deck '%s'.",
+        google_sub,
+        deck_id,
+    )
+    try:
+        result = await upsert_deck_personalization(database, google_sub, deck_id, payload)
+    except Exception:
+        logger.exception(
+            "Failed to upsert deck personalization for user '%s' and deck '%s'.",
+            google_sub,
+            deck_id,
+        )
+        raise
+    return result
