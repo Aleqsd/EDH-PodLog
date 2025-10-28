@@ -181,6 +181,7 @@ const deckPersonalizationCache = new Map();
 let deckPersonalizationOwner = null;
 let deckPersonalizationsBootstrapped = false;
 let deckPersonalizationLoadPromise = null;
+let deckPersonalizationsRemoteHydrated = false;
 
 const isGoogleClientConfigured = () =>
   Boolean(
@@ -547,6 +548,7 @@ const bootstrapDeckPersonalizationCache = (owner = null) => {
     deckPersonalizationCache.clear();
     deckPersonalizationOwner = owner;
     deckPersonalizationsBootstrapped = true;
+    deckPersonalizationsRemoteHydrated = false;
     return;
   }
 
@@ -560,6 +562,9 @@ const bootstrapDeckPersonalizationCache = (owner = null) => {
   });
   deckPersonalizationOwner = owner ?? stored.owner ?? deckPersonalizationOwner ?? null;
   deckPersonalizationsBootstrapped = true;
+  if (!owner) {
+    deckPersonalizationsRemoteHydrated = false;
+  }
 };
 
 const createDeckPersonalizationDefaults = () => ({
@@ -744,22 +749,29 @@ const ensureDeckPersonalizationsSynced = async (session = null) => {
   const googleSub = activeSession?.googleSub ?? null;
   if (!googleSub) {
     bootstrapDeckPersonalizationCache(null);
+    deckPersonalizationsRemoteHydrated = false;
     return;
   }
 
   if (deckPersonalizationOwner && deckPersonalizationOwner !== googleSub) {
     deckPersonalizationCache.clear();
     deckPersonalizationsBootstrapped = false;
+    deckPersonalizationsRemoteHydrated = false;
   }
 
   bootstrapDeckPersonalizationCache(googleSub);
 
-  if (deckPersonalizationOwner === googleSub && !deckPersonalizationLoadPromise) {
+  const isCurrentOwner = deckPersonalizationOwner === googleSub;
+  if (isCurrentOwner && deckPersonalizationsRemoteHydrated && !deckPersonalizationLoadPromise) {
     return;
   }
 
   if (!deckPersonalizationLoadPromise) {
     deckPersonalizationLoadPromise = fetchDeckPersonalizationsFromBackend(googleSub)
+      .then((entries) => {
+        deckPersonalizationsRemoteHydrated = true;
+        return entries;
+      })
       .catch((error) => {
         console.warn("Impossible de synchroniser les personnalisations de deck :", error);
         throw error;
@@ -829,6 +841,7 @@ const setDeckPersonalization = async (deckId, updates) => {
       throw error;
     }
   }
+  deckPersonalizationsRemoteHydrated = true;
 
   return normalizedRemote;
 };
