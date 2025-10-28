@@ -108,6 +108,60 @@ const deriveCommitInfo = (env) => {
   };
 };
 
+const normalizeEpoch = (value) => {
+  if (value == null) {
+    return null;
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return Math.floor(value.getTime() / 1000);
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    if (numeric > 1e12) {
+      return Math.floor(numeric / 1000);
+    }
+    return Math.floor(numeric);
+  }
+  const parsed = Date.parse(String(value));
+  if (!Number.isNaN(parsed)) {
+    return Math.floor(parsed / 1000);
+  }
+  return null;
+};
+
+const deriveCommitTimestamp = (env) => {
+  const timestampCandidates = [
+    env.EDH_PODLOG_COMMIT_TS,
+    env.EDH_PODLOG_COMMIT_TIME,
+    env.VERCEL_GIT_COMMIT_TIME,
+    env.NETLIFY_COMMIT_TIME,
+    env.CI_COMMIT_TIMESTAMP,
+    env.BUILD_TIMESTAMP,
+  ];
+
+  for (const candidate of timestampCandidates) {
+    const epochSeconds = normalizeEpoch(candidate);
+    if (epochSeconds) {
+      return new Date(epochSeconds * 1000).toISOString();
+    }
+  }
+
+  try {
+    const raw = execSync("git show -s --format=%ct HEAD", {
+      cwd: repoRoot,
+      encoding: "utf8",
+    }).trim();
+    const epochSeconds = normalizeEpoch(raw);
+    if (epochSeconds) {
+      return new Date(epochSeconds * 1000).toISOString();
+    }
+  } catch (error) {
+    console.warn("[generate-config] Impossible de déterminer la date du commit :", error.message);
+  }
+
+  return new Date().toISOString();
+};
+
 const main = async () => {
   const env = await loadEnv();
   const clientId = env.GOOGLE_CLIENT_ID ?? PLACEHOLDER;
@@ -130,6 +184,10 @@ const main = async () => {
   }
   if (commitInfo.full) {
     config.APP_REVISION_FULL = commitInfo.full;
+  }
+  const commitTimestamp = deriveCommitTimestamp(env);
+  if (commitTimestamp) {
+    config.APP_REVISION_DATE = commitTimestamp;
   }
 
   const fileContent = `window.EDH_PODLOG_CONFIG = ${JSON.stringify(config, null, 2)};\n`;

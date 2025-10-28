@@ -14,6 +14,34 @@ const API_BASE_URL = (() => {
 
 const APP_REVISION = CONFIG.APP_REVISION ?? "";
 const APP_REVISION_FULL = CONFIG.APP_REVISION_FULL ?? "";
+const APP_REVISION_DATE_RAW = CONFIG.APP_REVISION_DATE ?? "";
+
+const parseRevisionDate = (raw) => {
+  if (!raw || typeof raw !== "string") {
+    return null;
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const REVISION_DATE = parseRevisionDate(APP_REVISION_DATE_RAW);
+const formatRevisionDate = (date) => {
+  if (!(date instanceof Date)) {
+    return "";
+  }
+  try {
+    const formatter = new Intl.DateTimeFormat("fr-FR", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Europe/Paris",
+      timeZoneName: "short",
+    });
+    return formatter.format(date);
+  } catch (error) {
+    console.warn("EDH PodLog failed to format revision date:", error);
+    return date.toISOString();
+  }
+};
 
 const mountAppRevisionBadge = () => {
   if (!APP_REVISION || typeof document === "undefined") {
@@ -36,6 +64,9 @@ const mountAppRevisionBadge = () => {
     badge.dataset.revisionFull = APP_REVISION_FULL;
   }
 
+  const header = document.createElement("span");
+  header.className = "app-revision-header";
+
   const label = document.createElement("span");
   label.className = "app-revision-label";
   label.textContent = "rev";
@@ -44,7 +75,21 @@ const mountAppRevisionBadge = () => {
   value.className = "app-revision-value";
   value.textContent = APP_REVISION;
 
-  badge.append(label, value);
+  header.append(label, value);
+  badge.append(header);
+
+  if (REVISION_DATE) {
+    const formatted = formatRevisionDate(REVISION_DATE);
+    if (formatted) {
+      const dateEl = document.createElement("time");
+      dateEl.className = "app-revision-date";
+      dateEl.dateTime = REVISION_DATE.toISOString();
+      dateEl.textContent = `Mis à jour le ${formatted}`;
+      badge.dataset.revisionDate = REVISION_DATE.toISOString();
+      badge.append(dateEl);
+    }
+  }
+
   body.appendChild(badge);
 };
 
