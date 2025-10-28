@@ -15,6 +15,7 @@ const envRoot = process.env.EDH_PODLOG_ENV_ROOT
 const outputPath = process.env.EDH_PODLOG_CONFIG_OUT
   ? resolve(repoRoot, process.env.EDH_PODLOG_CONFIG_OUT)
   : resolve(projectRoot, "public/config.js");
+const swVersionOutputPath = resolve(projectRoot, "public/service-worker.version.js");
 const envFiles = process.env.EDH_PODLOG_ENV_FILES
   ? process.env.EDH_PODLOG_ENV_FILES.split(":").filter(Boolean)
   : [".env", ".env.local"];
@@ -134,6 +135,11 @@ const main = async () => {
   const fileContent = `window.EDH_PODLOG_CONFIG = ${JSON.stringify(config, null, 2)};\n`;
   await writeFile(outputPath, fileContent, "utf8");
   console.log(`[generate-config] Fichier généré : ${outputPath}`);
+
+  const swVersion = commitInfo.full || `dev-${Date.now()}`;
+  const swVersionContent = `self.EDH_PODLOG_SW_VERSION = ${JSON.stringify(swVersion)};\n`;
+  await writeFile(swVersionOutputPath, swVersionContent, "utf8");
+  console.log(`[generate-config] Version du service worker écrite dans : ${swVersionOutputPath}`);
 };
 
 main().catch((error) => {

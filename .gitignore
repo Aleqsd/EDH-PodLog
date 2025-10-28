@@ -5,6 +5,7 @@
 
 # Generated client config
 frontend/public/config.js
+frontend/public/service-worker.version.js
 
 # Python tooling
 backend/.venv/

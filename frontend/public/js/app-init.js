@@ -2,6 +2,8 @@
   const controllers = new Map();
   const sharedControllers = [];
   let serviceWorkerRegistrationScheduled = false;
+  const isLocalDev =
+    typeof window !== "undefined" && /^(localhost|127(?:\.\d{1,3}){3})$/.test(window.location.hostname);
 
   const scheduleServiceWorkerRegistration = () => {
     if (
@@ -12,6 +14,20 @@
       return;
     }
     serviceWorkerRegistrationScheduled = true;
+
+    if (isLocalDev) {
+      if (navigator.serviceWorker?.getRegistrations) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister().catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+      return;
+    }
 
     const register = () => {
       navigator.serviceWorker

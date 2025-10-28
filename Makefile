@@ -3,7 +3,7 @@ PYTHON ?= python
 FRONTEND_DIR := frontend
 FRONT_PUBLIC_DIR := $(FRONTEND_DIR)/public
 FRONT_CONFIG_SCRIPT := $(FRONTEND_DIR)/scripts/generate-config.mjs
-FRONT_SERVE_CONFIG := $(FRONTEND_DIR)/serve.dev.json
+FRONT_SERVE_CONFIG := $(abspath $(FRONTEND_DIR)/serve.dev.json)
 FRONTEND_PORT ?= 3170
 
 BACKEND_DIR := backend

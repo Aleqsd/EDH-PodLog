@@ -14,6 +14,7 @@
 
 ## Operating Principles
 - Work through the root `Makefile` whenever possible (`make front`, `make back`, `make db`, `make test`).
+- Inside the Codex CLI, skip `make front`; run `make front-config` and start a one-off `npx --yes serve frontend/public` when you need a preview, otherwise the CLI session locks up.
 - Prefer non-standard ports (frontend 3170, API 4310, MongoDB 47017) to coexist with other VPS services.
 - Run `make doctor` before handoff to verify prerequisites and environment variables (requires `GOOGLE_CLIENT_ID`, `MONGO_URI`, etc.).
 - Keep credentials out of Git; rely on `.env.local` merged by `frontend/scripts/generate-config.mjs` and backend env loading.

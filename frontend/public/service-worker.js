@@ -1,4 +1,15 @@
-const CACHE_VERSION = "v1.0.0";
+let CACHE_VERSION = "v1.0.0";
+try {
+  importScripts("./service-worker.version.js");
+  if (typeof self.EDH_PODLOG_SW_VERSION === "string") {
+    const trimmed = self.EDH_PODLOG_SW_VERSION.trim();
+    if (trimmed) {
+      CACHE_VERSION = trimmed;
+    }
+  }
+} catch (error) {
+  console.warn("EDH PodLog SW unable to load dynamic version, using default v1.0.0:", error);
+}
 const CACHE_PREFIX = "edh-podlog-";
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
 
