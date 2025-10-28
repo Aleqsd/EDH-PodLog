@@ -120,6 +120,9 @@ See `backend/README.md` for more detail on testing and contributing changes to t
 - **Frontend on Netlify**  
   - Production deploy: `make front-build` then `netlify deploy --prod --dir frontend/public --site <SITE_ID>` (requires `NETLIFY_AUTH_TOKEN` or `netlify login`).  
   - Ensure Netlify env vars include `API_BASE_URL=https://vps.zqsdev.com/api` and `API_CORS_ALLOW_ORIGINS` is mirrored in `.env` for the backend. Trigger rebuilds from the Netlify UI if needed.
+- **Autodeploy webhook**  
+  - A dedicated systemd service listens for GitHub webhooks on port `5055`.  
+  - Each webhook calls `git pull` inside `/root/EDH-PodLog` and runs `make vps-deploy` to roll out the latest build automatically.
 - **After updating code**  
   - Pull latest repo changes, regenerate frontend config (`make front-config`), redeploy Netlify, then restart backend (`systemctl restart edh-podlog`).  
   - Run `make test` locally before rolling out and `journalctl -u edh-podlog -f` to monitor for regressions.
