@@ -27,19 +27,49 @@ const parseRevisionDate = (raw) => {
 const REVISION_DATE = parseRevisionDate(APP_REVISION_DATE_RAW);
 const formatRevisionDate = (date) => {
   if (!(date instanceof Date)) {
-    return "";
+    return { display: "", abbreviation: "" };
   }
   try {
-    const formatter = new Intl.DateTimeFormat("fr-FR", {
-      dateStyle: "medium",
-      timeStyle: "short",
+    const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
       timeZone: "Europe/Paris",
-      timeZoneName: "short",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
     });
-    return formatter.format(date);
+    const timeFormatter = new Intl.DateTimeFormat("fr-FR", {
+      timeZone: "Europe/Paris",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const longOffsetFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Paris",
+      timeZoneName: "longOffset",
+    });
+
+    const tzPart = longOffsetFormatter
+      .formatToParts(date)
+      .find((part) => part.type === "timeZoneName")?.value;
+
+    let abbreviation = "CET";
+    if (typeof tzPart === "string") {
+      const match = tzPart.match(/GMT([+-])(\d{2}):(\d{2})/);
+      if (match) {
+        const sign = match[1] === "-" ? -1 : 1;
+        const hours = parseInt(match[2], 10);
+        const minutes = parseInt(match[3], 10);
+        const offsetMinutes = sign * (hours * 60 + minutes);
+        abbreviation = offsetMinutes === 120 ? "CEST" : "CET";
+      }
+    }
+
+    return {
+      display: `${dateFormatter.format(date)} à ${timeFormatter.format(date)}`,
+      abbreviation,
+    };
   } catch (error) {
     console.warn("EDH PodLog failed to format revision date:", error);
-    return date.toISOString();
+    return { display: date.toISOString(), abbreviation: "" };
   }
 };
 
@@ -79,13 +109,17 @@ const mountAppRevisionBadge = () => {
   badge.append(header);
 
   if (REVISION_DATE) {
-    const formatted = formatRevisionDate(REVISION_DATE);
-    if (formatted) {
+    const { display, abbreviation } = formatRevisionDate(REVISION_DATE);
+    if (display) {
       const dateEl = document.createElement("time");
       dateEl.className = "app-revision-date";
       dateEl.dateTime = REVISION_DATE.toISOString();
-      dateEl.textContent = `Mis à jour le ${formatted}`;
+      const tzLabel = abbreviation ? ` (${abbreviation})` : "";
+      dateEl.textContent = `Mis à jour le ${display} · heure de Paris${tzLabel}`;
       badge.dataset.revisionDate = REVISION_DATE.toISOString();
+      if (abbreviation) {
+        badge.dataset.revisionDateTz = abbreviation;
+      }
       badge.append(dateEl);
     }
   }
