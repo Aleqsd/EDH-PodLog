@@ -12,6 +12,42 @@ const API_BASE_URL = (() => {
   return base.endsWith("/") ? base.replace(/\/+$/, "") : base;
 })();
 
+const APP_REVISION = CONFIG.APP_REVISION ?? "";
+const APP_REVISION_FULL = CONFIG.APP_REVISION_FULL ?? "";
+
+const mountAppRevisionBadge = () => {
+  if (!APP_REVISION || typeof document === "undefined") {
+    return;
+  }
+
+  const body = document.body;
+  if (!body || document.getElementById("appRevisionBadge")) {
+    return;
+  }
+
+  const badge = document.createElement("aside");
+  badge.id = "appRevisionBadge";
+  badge.className = "app-revision-badge";
+  badge.setAttribute("aria-label", `Révision ${APP_REVISION}`);
+  badge.dataset.revision = APP_REVISION;
+
+  if (APP_REVISION_FULL) {
+    badge.title = `Commit ${APP_REVISION_FULL}`;
+    badge.dataset.revisionFull = APP_REVISION_FULL;
+  }
+
+  const label = document.createElement("span");
+  label.className = "app-revision-label";
+  label.textContent = "rev";
+
+  const value = document.createElement("span");
+  value.className = "app-revision-value";
+  value.textContent = APP_REVISION;
+
+  badge.append(label, value);
+  body.appendChild(badge);
+};
+
 const buildBackendUrl = (path) => {
   if (!path) {
     return API_BASE_URL;

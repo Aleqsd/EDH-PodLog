@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +52,61 @@ const loadEnv = async () => {
   return env;
 };
 
+const normalizeCommitSha = (value) => {
+  if (!value || typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return /^[0-9a-f]+$/i.test(trimmed) ? trimmed : "";
+};
+
+const deriveCommitInfo = (env) => {
+  const candidates = [
+    env.EDH_PODLOG_COMMIT,
+    env.EDH_PODLOG_COMMIT_SHA,
+    env.VERCEL_GIT_COMMIT_SHA,
+    env.NETLIFY_COMMIT_REF,
+    env.COMMIT_SHA,
+    env.COMMIT_REF,
+    env.GIT_COMMIT,
+    env.GITHUB_SHA,
+    env.CI_COMMIT_SHA,
+    env.SOURCE_VERSION,
+    env.BUILD_SOURCEVERSION,
+    env.TRAVIS_COMMIT,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeCommitSha(candidate);
+    if (normalized) {
+      return {
+        full: normalized,
+        short: normalized.slice(0, 8),
+      };
+    }
+  }
+
+  try {
+    const full = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf8" }).trim();
+    if (full && /^[0-9a-f]+$/i.test(full)) {
+      return {
+        full,
+        short: full.slice(0, 8),
+      };
+    }
+  } catch (error) {
+    console.warn("[generate-config] Impossible de déterminer le commit courant :", error.message);
+  }
+
+  return {
+    full: "",
+    short: "",
+  };
+};
+
 const main = async () => {
   const env = await loadEnv();
   const clientId = env.GOOGLE_CLIENT_ID ?? PLACEHOLDER;
@@ -66,6 +122,14 @@ const main = async () => {
     GOOGLE_CLIENT_ID: clientId,
     API_BASE_URL: apiBaseUrl,
   };
+
+  const commitInfo = deriveCommitInfo(env);
+  if (commitInfo.short) {
+    config.APP_REVISION = commitInfo.short;
+  }
+  if (commitInfo.full) {
+    config.APP_REVISION_FULL = commitInfo.full;
+  }
 
   const fileContent = `window.EDH_PODLOG_CONFIG = ${JSON.stringify(config, null, 2)};\n`;
   await writeFile(outputPath, fileContent, "utf8");

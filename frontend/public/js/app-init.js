@@ -4,7 +4,11 @@
   let serviceWorkerRegistrationScheduled = false;
 
   const scheduleServiceWorkerRegistration = () => {
-    if (serviceWorkerRegistrationScheduled || !("serviceWorker" in navigator)) {
+    if (
+      serviceWorkerRegistrationScheduled ||
+      typeof navigator === "undefined" ||
+      !("serviceWorker" in navigator)
+    ) {
       return;
     }
     serviceWorkerRegistrationScheduled = true;
@@ -89,6 +93,10 @@
   scheduleServiceWorkerRegistration();
 
   document.addEventListener("DOMContentLoaded", async () => {
+    if (typeof mountAppRevisionBadge === "function") {
+      mountAppRevisionBadge();
+    }
+
     currentSession = getSession();
     const context = buildContext();
 
