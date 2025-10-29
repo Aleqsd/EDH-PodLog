@@ -382,17 +382,20 @@
 .deck-rating-grid-modal {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .deck-rating-field-modal {
-  grid-template-columns: minmax(120px, 160px) 1fr 3rem;
-  grid-auto-rows: auto;
-  align-items: center;
+  display: grid;
+  gap: 0.65rem;
 }
 
 .deck-rating-field-modal .deck-rating-help {
-  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.deck-rating-field-modal .deck-rating-control {
+  grid-template-columns: minmax(170px, 1fr) minmax(110px, 140px);
 }
 
 .deck-rating-help {

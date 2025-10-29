@@ -2567,6 +2567,10 @@
   align-content: start;
 }
 
+.deck-performance-card-turn-order {
+  align-content: start;
+}
+
 .deck-performance-winrate-value {
   font-size: clamp(2.1rem, 4vw, 2.6rem);
   font-weight: 700;
@@ -2583,6 +2587,110 @@
   margin: 0;
   font-size: 0.82rem;
   color: var(--color-text-subtle-soft);
+}
+
+.deck-turn-order-body {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+  align-items: center;
+}
+
+.deck-turn-order-ring {
+  position: relative;
+  width: min(190px, 100%);
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+
+.deck-turn-order-ring-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.deck-turn-order-ring-base {
+  stroke: color-mix(in srgb, var(--color-border-deck) 55%, transparent);
+  stroke-width: 12;
+  fill: none;
+}
+
+.deck-turn-order-ring-segment {
+  fill: none;
+  stroke-width: 12;
+  stroke-linecap: butt;
+  transition: stroke-dasharray 180ms ease;
+}
+
+.deck-turn-order-ring-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 0.1rem;
+  pointer-events: none;
+  text-align: center;
+}
+
+.deck-turn-order-ring-center strong {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-text-soft);
+}
+
+.deck-turn-order-ring-center span {
+  font-size: 0.75rem;
+  color: var(--color-text-subtle-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.deck-turn-order-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.deck-turn-order-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+}
+
+.deck-turn-order-legend-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--deck-turn-order-swatch-color, var(--color-brand-primary));
+  border: 1px solid color-mix(
+    in srgb,
+    var(--deck-turn-order-swatch-color, var(--color-brand-primary)) 65%,
+    transparent
+  );
+  flex: 0 0 auto;
+}
+
+.deck-turn-order-legend-label {
+  font-weight: 600;
+  color: var(--color-text-subtle-strong);
+}
+
+.deck-turn-order-legend-value {
+  margin-left: auto;
+  color: var(--color-text-subtle-soft);
+  font-size: 0.8rem;
+}
+
+.deck-performance-positions-summary {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 0.9rem;
 }
 
 .deck-performance-positions-list {
@@ -3386,9 +3494,7 @@
 
 .deck-rating-field {
   display: grid;
-  grid-template-columns: minmax(120px, 170px) 1fr 3rem;
-  gap: 0.75rem;
-  align-items: center;
+  gap: 0.55rem;
 }
 
 .deck-rating-label {
@@ -3397,38 +3503,41 @@
   font-weight: 500;
 }
 
-.deck-rating-slider {
-  width: 100%;
-  accent-color: var(--color-brand-primary);
-}
-
-.deck-rating-value {
-  display: flex;
-  justify-content: flex-end;
+.deck-rating-control {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(90px, 130px);
   align-items: center;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  text-align: right;
+  gap: 0.75rem;
 }
 
-.deck-rating-value-input {
+.deck-rating-select {
   width: 100%;
   min-width: 0;
-  padding: 0.15rem 0.35rem;
+  padding: 0.35rem 0.6rem;
   border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--color-border-soft) 45%, transparent);
   background: color-mix(in srgb, var(--color-base-080c18) 72%, transparent);
   color: var(--color-text-primary);
   font-size: 0.9rem;
   font-weight: 600;
-  text-align: right;
+  text-align: left;
 }
 
-.deck-rating-value-input:focus {
+.deck-rating-select:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--color-border-brand) 65%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-border-brand) 38%, transparent);
+}
+
+.deck-rating-select option {
+  color: var(--color-text-primary);
+}
+
+.deck-rating-footnote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  width: 100%;
 }
 
 .deck-radar-container {
@@ -3460,6 +3569,13 @@
   fill: color-mix(in srgb, var(--color-brand-primary) 24%, transparent);
   stroke: color-mix(in srgb, var(--color-brand-primary) 82%, transparent);
   stroke-width: 1.6;
+}
+
+.deck-rating-empty-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 .deck-radar-point {

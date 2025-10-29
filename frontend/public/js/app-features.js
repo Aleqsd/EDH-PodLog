@@ -604,7 +604,7 @@ const collectDeckCards = (deck) => {
   );
 };
 
-const DECK_PERSONAL_RATING_DEFAULT = 3;
+const DECK_PERSONAL_RATING_DEFAULT = null;
 const DECK_PERSONAL_TAG_LIMIT = 7;
 
 const DECK_RATING_CATEGORIES = [
@@ -719,12 +719,16 @@ const findDeckBracketDefinition = (id) => {
 };
 
 const clampPersonalRatingValue = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
   if (typeof clampDeckRatingValue === "function") {
-    return clampDeckRatingValue(value) ?? DECK_PERSONAL_RATING_DEFAULT;
+    const sanitized = clampDeckRatingValue(value);
+    return sanitized === null ? null : sanitized;
   }
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return DECK_PERSONAL_RATING_DEFAULT;
+    return null;
   }
   const rounded = Math.round(numeric);
   if (rounded < 1) {
@@ -754,7 +758,13 @@ const cloneDeckPersonalization = (source) => {
     return base;
   }
   if (source.ratings && typeof source.ratings === "object") {
-    base.ratings = { ...source.ratings };
+    base.ratings = {};
+    Object.entries(source.ratings).forEach(([key, value]) => {
+      const sanitized = clampPersonalRatingValue(value);
+      if (sanitized !== null) {
+        base.ratings[key] = sanitized;
+      }
+    });
   }
   if (typeof source.bracket === "string" && source.bracket.trim()) {
     base.bracket = source.bracket.trim();
@@ -804,11 +814,11 @@ const cloneDeckPersonalization = (source) => {
 
 const resolveDeckRatingValue = (personalization, key) => {
   if (!personalization || !personalization.ratings) {
-    return clampPersonalRatingValue(DECK_PERSONAL_RATING_DEFAULT);
+    return null;
   }
   const raw = personalization.ratings[key];
   if (typeof raw === "undefined") {
-    return clampPersonalRatingValue(DECK_PERSONAL_RATING_DEFAULT);
+    return null;
   }
   return clampPersonalRatingValue(raw);
 };
@@ -987,80 +997,63 @@ const buildDeckPersonalizationRatingsSection = (personalization) => {
   deckPersonalizationRatingControls = new Map();
 
   DECK_RATING_CATEGORIES.forEach((category) => {
-    const field = document.createElement("label");
+    const field = document.createElement("div");
     field.className = "deck-rating-field deck-rating-field-modal";
 
-    const label = document.createElement("span");
+    const controlRow = document.createElement("div");
+    controlRow.className = "deck-rating-control";
+    field.appendChild(controlRow);
+
+    const selectId = `deckRating-${category.key}`;
+    const label = document.createElement("label");
     label.className = "deck-rating-label";
+    label.setAttribute("for", selectId);
     label.textContent = category.label;
 
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "1";
-    slider.max = "5";
-    slider.step = "1";
-    slider.className = "deck-rating-slider";
-    slider.setAttribute("aria-label", `${category.label} (note de 1 à 5)`);
+    const select = document.createElement("select");
+    select.className = "deck-rating-select";
+    select.id = selectId;
+    select.name = selectId;
 
-    const valueInput = document.createElement("input");
-    valueInput.type = "number";
-    valueInput.min = "1";
-    valueInput.max = "5";
-    valueInput.step = "1";
-    valueInput.inputMode = "numeric";
-    valueInput.className = "deck-rating-value-input";
-    valueInput.setAttribute("aria-label", `${category.label} (saisie numérique de 1 à 5)`);
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "—";
+    select.appendChild(placeholder);
 
-    const valueWrapper = document.createElement("span");
-    valueWrapper.className = "deck-rating-value";
-    valueWrapper.appendChild(valueInput);
+    for (let i = 1; i <= 5; i += 1) {
+      const option = document.createElement("option");
+      option.value = String(i);
+      option.textContent = String(i);
+      select.appendChild(option);
+    }
 
     const description = document.createElement("p");
     description.className = "deck-rating-help";
     description.textContent = category.description ?? "";
+    const descriptionId = `${selectId}-description`;
+    description.id = descriptionId;
+    select.setAttribute("aria-describedby", descriptionId);
 
-    field.append(label, slider, valueWrapper, description);
+    controlRow.append(label, select);
+    field.appendChild(description);
     fields.appendChild(field);
 
     const control = {
-      slider,
-      input: valueInput,
+      select,
       value: DECK_PERSONAL_RATING_DEFAULT,
       setValue(next) {
         const sanitized = clampPersonalRatingValue(next);
         control.value = sanitized;
-        slider.value = String(sanitized);
-        valueInput.value = String(sanitized);
+        if (sanitized === null) {
+          select.value = "";
+        } else {
+          select.value = String(sanitized);
+        }
       },
     };
 
-    slider.addEventListener("input", () => {
-      control.setValue(slider.value);
-    });
-    slider.addEventListener("change", () => {
-      control.setValue(slider.value);
-    });
-
-    valueInput.addEventListener("input", () => {
-      if (valueInput.value === "") {
-        return;
-      }
-      control.setValue(valueInput.value);
-    });
-    valueInput.addEventListener("change", () => {
-      control.setValue(valueInput.value);
-    });
-    valueInput.addEventListener("blur", () => {
-      if (valueInput.value === "") {
-        control.setValue(control.value);
-      }
-    });
-    valueInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        control.setValue(valueInput.value);
-        valueInput.blur();
-      }
+    select.addEventListener("change", () => {
+      control.setValue(select.value);
     });
 
     deckPersonalizationRatingControls.set(category.key, control);
@@ -1283,7 +1276,13 @@ const collectDeckPersonalizationData = () => {
   const ratings = {};
   DECK_RATING_CATEGORIES.forEach((category) => {
     const control = deckPersonalizationRatingControls.get(category.key);
-    ratings[category.key] = control ? clampPersonalRatingValue(control.value) : DECK_PERSONAL_RATING_DEFAULT;
+    if (!control) {
+      return;
+    }
+    const value = clampPersonalRatingValue(control.value);
+    if (value !== null) {
+      ratings[category.key] = value;
+    }
   });
 
   let bracket = null;
@@ -2049,6 +2048,7 @@ const summariseDeckPerformance = (deck, games) => {
     lossCount: 0,
     winRate: null,
     positions: [],
+    startingPositions: [],
     history: [],
     lastPlayedAt: null,
   };
@@ -2064,8 +2064,31 @@ const summariseDeckPerformance = (deck, games) => {
 
   const history = [];
   const positionMap = new Map();
+  const startingPositionMap = new Map();
   let winCount = 0;
   let rankedGames = 0;
+
+  const resolveStartingPosition = (player) => {
+    if (!player || typeof player !== "object") {
+      return null;
+    }
+    const candidates = [
+      player.order,
+      player.turn_order,
+      player.turnOrder,
+      player.starting_position,
+      player.startingPosition,
+      player.seat,
+      player.seat_position,
+    ];
+    for (const candidate of candidates) {
+      const numeric = Number.parseInt(candidate, 10);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric;
+      }
+    }
+    return null;
+  };
 
   games.forEach((game) => {
     if (!game || typeof game !== "object") {
@@ -2097,6 +2120,7 @@ const summariseDeckPerformance = (deck, games) => {
       matchingPlayers.find((player) => Boolean(player?.is_owner)) ?? matchingPlayers[0];
     const rawRank = rankingMap.get(participant?.id) ?? null;
     const rank = Number.isFinite(rawRank) && rawRank > 0 ? rawRank : null;
+    const startingPosition = resolveStartingPosition(participant);
 
     const createdAt = toDateSafe(game.created_at ?? game.updated_at ?? null);
     const opponents = players
@@ -2130,6 +2154,13 @@ const summariseDeckPerformance = (deck, games) => {
     };
     history.push(historyEntry);
 
+    if (startingPosition !== null) {
+      startingPositionMap.set(
+        startingPosition,
+        (startingPositionMap.get(startingPosition) ?? 0) + 1
+      );
+    }
+
     if (rank !== null) {
       rankedGames += 1;
       if (rank === 1) {
@@ -2162,6 +2193,9 @@ const summariseDeckPerformance = (deck, games) => {
   const positions = Array.from(positionMap.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([rank, count]) => ({ rank, count }));
+  const startingPositions = Array.from(startingPositionMap.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([position, count]) => ({ position, count }));
 
   result.status = totalGames > 0 ? "ready" : "empty";
   result.totalGames = totalGames;
@@ -2171,6 +2205,7 @@ const summariseDeckPerformance = (deck, games) => {
   result.lossCount = lossCount;
   result.winRate = winRate;
   result.positions = positions;
+  result.startingPositions = startingPositions;
   result.history = history;
   result.lastPlayedAt = history[0]?.createdAt ?? null;
 
@@ -2193,6 +2228,17 @@ const formatPercentageLabel = (value) => {
     maximumFractionDigits: 1,
   })}%`;
 };
+
+const TURN_ORDER_COLOR_PALETTE = [
+  "var(--color-brand-primary)",
+  "var(--color-brand-secondary)",
+  "var(--color-status-success)",
+  "var(--color-status-danger)",
+  "var(--color-brand-muted)",
+  "var(--color-accent-lilac)",
+  "var(--color-brand-plum)",
+  "var(--color-status-warning)",
+];
 
 const updateDeckPerformance = (state) => {
   if (!deckPerformanceEl) {
@@ -2281,11 +2327,11 @@ const updateDeckPerformance = (state) => {
   const detail = document.createElement("p");
   detail.className = "deck-performance-winrate-detail";
   if (state.rankedGames > 0) {
-    detail.textContent = `${NUMBER_FORMAT.format(state.winCount)} victoire${
-      state.winCount > 1 ? "s" : ""
-    } · ${NUMBER_FORMAT.format(state.lossCount)} autre${
-      state.lossCount > 1 ? "s" : ""
-    }`;
+    detail.textContent = `${NUMBER_FORMAT.format(
+      state.rankedGames
+    )} partie${state.rankedGames > 1 ? "s" : ""} classée${
+      state.rankedGames > 1 ? "s" : ""
+    } analysée${state.rankedGames > 1 ? "s" : ""}.`;
   } else {
     detail.textContent = "Aucune partie classée disponible pour calculer un winrate.";
   }
@@ -2311,23 +2357,21 @@ const updateDeckPerformance = (state) => {
   summaryMeta.textContent = metaParts.join(" · ");
   summaryCard.appendChild(summaryMeta);
 
-  overview.appendChild(summaryCard);
-
-  const positionsCard = document.createElement("article");
-  positionsCard.className = "deck-performance-card deck-stats-card deck-performance-card-positions";
-  const positionsTitle = document.createElement("h3");
-  positionsTitle.className = "deck-performance-card-title";
-  positionsTitle.textContent = "Positions finales";
-  positionsCard.appendChild(positionsTitle);
+  const positionsSection = document.createElement("div");
+  positionsSection.className = "deck-performance-positions-summary";
 
   if (!Array.isArray(state.positions) || state.positions.length === 0) {
     const emptyPositions = document.createElement("p");
     emptyPositions.className = "deck-performance-card-empty";
     emptyPositions.textContent = "Aucune position disponible.";
-    positionsCard.appendChild(emptyPositions);
+    positionsSection.appendChild(emptyPositions);
   } else {
     const positionsList = document.createElement("ul");
     positionsList.className = "deck-performance-positions-list";
+    positionsList.setAttribute(
+      "aria-label",
+      "Répartition des positions finales observées."
+    );
     state.positions.forEach((position) => {
       const listItem = document.createElement("li");
       listItem.className = "deck-performance-position";
@@ -2372,8 +2416,10 @@ const updateDeckPerformance = (state) => {
 
       positionsList.appendChild(listItem);
     });
-    positionsCard.appendChild(positionsList);
+    positionsSection.appendChild(positionsList);
   }
+
+  summaryCard.appendChild(positionsSection);
 
   if (state.unrankedGames > 0) {
     const footnote = document.createElement("p");
@@ -2381,10 +2427,161 @@ const updateDeckPerformance = (state) => {
     footnote.textContent = `${NUMBER_FORMAT.format(
       state.unrankedGames
     )} partie${state.unrankedGames > 1 ? "s" : ""} sans classement.`;
-    positionsCard.appendChild(footnote);
+    summaryCard.appendChild(footnote);
   }
 
-  overview.appendChild(positionsCard);
+  overview.appendChild(summaryCard);
+
+  const safeStartingPositions = Array.isArray(state.startingPositions)
+    ? state.startingPositions
+        .map((entry) => ({
+          position: Number.isFinite(entry?.position)
+            ? entry.position
+            : Number.parseInt(entry?.position ?? "", 10),
+          count: Number.isFinite(entry?.count)
+            ? entry.count
+            : Number.parseInt(entry?.count ?? "", 10),
+        }))
+        .filter(
+          (entry) =>
+            Number.isFinite(entry.position) &&
+            entry.position > 0 &&
+            Number.isFinite(entry.count) &&
+            entry.count > 0
+        )
+    : [];
+
+  const turnOrderCard = document.createElement("article");
+  turnOrderCard.className = "deck-performance-card deck-stats-card deck-performance-card-turn-order";
+  const turnOrderTitle = document.createElement("h3");
+  turnOrderTitle.className = "deck-performance-card-title";
+  turnOrderTitle.textContent = "Positions de départ";
+  turnOrderCard.appendChild(turnOrderTitle);
+
+  const turnOrderTotal = safeStartingPositions.reduce(
+    (sum, entry) => sum + Math.max(0, entry.count),
+    0
+  );
+
+  if (turnOrderTotal <= 0) {
+    const emptyTurnOrder = document.createElement("p");
+    emptyTurnOrder.className = "deck-performance-card-empty";
+    emptyTurnOrder.textContent = "Aucune donnée sur les positions de départ.";
+    turnOrderCard.appendChild(emptyTurnOrder);
+  } else {
+    const normalizedPositions = safeStartingPositions.map((entry, index) => ({
+      position: entry.position,
+      count: entry.count,
+      ratio: entry.count / turnOrderTotal,
+      color: TURN_ORDER_COLOR_PALETTE[index % TURN_ORDER_COLOR_PALETTE.length],
+    }));
+
+    const turnOrderBody = document.createElement("div");
+    turnOrderBody.className = "deck-turn-order-body";
+
+    const ring = document.createElement("div");
+    ring.className = "deck-turn-order-ring";
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.classList.add("deck-turn-order-ring-svg");
+    svg.setAttribute("viewBox", "0 0 120 120");
+    svg.setAttribute("role", "img");
+    svg.setAttribute(
+      "aria-label",
+      "Répartition des positions de départ."
+    );
+
+    const radius = 48;
+    const center = 60;
+    const circumference = 2 * Math.PI * radius;
+
+    const baseCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    baseCircle.classList.add("deck-turn-order-ring-base");
+    baseCircle.setAttribute("cx", String(center));
+    baseCircle.setAttribute("cy", String(center));
+    baseCircle.setAttribute("r", String(radius));
+    baseCircle.setAttribute("fill", "transparent");
+    baseCircle.setAttribute("stroke-width", "12");
+    svg.appendChild(baseCircle);
+
+    let offset = 0;
+    normalizedPositions.forEach((entry) => {
+      const segmentLength = entry.ratio * circumference;
+      if (!(segmentLength > 0)) {
+        return;
+      }
+      const segment = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      segment.classList.add("deck-turn-order-ring-segment");
+      segment.setAttribute("cx", String(center));
+      segment.setAttribute("cy", String(center));
+      segment.setAttribute("r", String(radius));
+      segment.setAttribute("fill", "transparent");
+      segment.setAttribute("stroke-width", "12");
+      segment.setAttribute("stroke", entry.color);
+      segment.setAttribute(
+        "stroke-dasharray",
+        `${segmentLength.toFixed(2)} ${circumference.toFixed(2)}`
+      );
+      segment.setAttribute("stroke-dashoffset", `${(-offset).toFixed(2)}`);
+      const percentageLabel = (entry.ratio * 100).toLocaleString("fr-FR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      });
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = `Position ${entry.position} : ${NUMBER_FORMAT.format(entry.count)} partie${
+        entry.count > 1 ? "s" : ""
+      } (${percentageLabel}%)`;
+      segment.appendChild(title);
+      svg.appendChild(segment);
+      offset += segmentLength;
+    });
+
+    ring.appendChild(svg);
+
+    const ringCenter = document.createElement("div");
+    ringCenter.className = "deck-turn-order-ring-center";
+    const centerValue = document.createElement("strong");
+    centerValue.textContent = NUMBER_FORMAT.format(turnOrderTotal);
+    const centerLabel = document.createElement("span");
+    centerLabel.textContent = `partie${turnOrderTotal > 1 ? "s" : ""}`;
+    ringCenter.append(centerValue, centerLabel);
+    ring.appendChild(ringCenter);
+
+    turnOrderBody.appendChild(ring);
+
+    const legend = document.createElement("ul");
+    legend.className = "deck-turn-order-legend";
+
+    normalizedPositions.forEach((entry) => {
+      const legendItem = document.createElement("li");
+      legendItem.className = "deck-turn-order-legend-item";
+
+      const swatch = document.createElement("span");
+      swatch.className = "deck-turn-order-legend-swatch";
+      swatch.style.setProperty("--deck-turn-order-swatch-color", entry.color);
+      legendItem.appendChild(swatch);
+
+      const label = document.createElement("span");
+      label.className = "deck-turn-order-legend-label";
+      label.textContent = `#${entry.position}`;
+      legendItem.appendChild(label);
+
+      const value = document.createElement("span");
+      value.className = "deck-turn-order-legend-value";
+      value.textContent = `${(entry.ratio * 100).toLocaleString("fr-FR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      })}% · ${NUMBER_FORMAT.format(entry.count)}`;
+      legendItem.appendChild(value);
+
+      legend.appendChild(legendItem);
+    });
+
+    turnOrderBody.appendChild(legend);
+    turnOrderCard.appendChild(turnOrderBody);
+  }
+
+  overview.appendChild(turnOrderCard);
   content.appendChild(overview);
 
   const historyCard = document.createElement("article");
@@ -3048,25 +3245,51 @@ const createRadarChartComponent = (categories, { maxValue = 5 } = {}) => {
   });
 
   const update = (values) => {
-    if (!Array.isArray(values) || values.length !== categories.length) {
-      return;
-    }
-    const coordinates = values.map((rawValue, index) => {
+    const normalizedValues = Array.isArray(values) ? values : [];
+    let hasValue = false;
+    const coordinates = categories.map((category, index) => {
+      const rawValue = normalizedValues[index];
       const numeric = Number(rawValue);
-      const clamped = Number.isFinite(numeric) ? Math.min(Math.max(numeric, 0), maxValue) : 0;
+      const isValid = Number.isFinite(numeric);
+      const clamped = isValid ? Math.min(Math.max(numeric, 0), maxValue) : 0;
+      if (isValid && clamped > 0) {
+        hasValue = true;
+      }
       const angle = (Math.PI * 2 * index) / categories.length - Math.PI / 2;
       const distance = (clamped / maxValue) * radius;
       const x = Math.cos(angle) * distance;
       const y = Math.sin(angle) * distance;
-      points[index].setAttribute("cx", x.toFixed(2));
-      points[index].setAttribute("cy", y.toFixed(2));
+      const point = points[index];
+      if (point) {
+        point.setAttribute("cx", x.toFixed(2));
+        point.setAttribute("cy", y.toFixed(2));
+        point.style.display = isValid && clamped > 0 ? "" : "none";
+      }
       const axisLabel = axisLabels[index];
       if (axisLabel) {
-        axisLabel.value.textContent = String(clamped);
+        axisLabel.value.textContent =
+          isValid && clamped > 0 ? String(clamped) : "—";
       }
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     });
-    shape.setAttribute("points", coordinates.join(" "));
+    if (hasValue) {
+      shape.setAttribute("points", coordinates.join(" "));
+      shape.style.display = "";
+    } else {
+      shape.setAttribute("points", "");
+      shape.style.display = "none";
+      points.forEach((point) => {
+        if (point) {
+          point.setAttribute("cx", "0");
+          point.setAttribute("cy", "0");
+          point.style.display = "none";
+        }
+      });
+      axisLabels.forEach((axis) => {
+        axis.value.textContent = "—";
+      });
+    }
+    svg.classList.toggle("is-empty", !hasValue);
   };
 
   return { element: svg, update };
@@ -3104,31 +3327,6 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   summaryLayout.className = "deck-rating-summary-layout deck-rating-summary-layout-profile";
   card.appendChild(summaryLayout);
 
-  const ratingList = document.createElement("dl");
-  ratingList.className = "deck-rating-summary";
-  summaryLayout.appendChild(ratingList);
-
-  const ratingValueEls = new Map();
-  DECK_RATING_CATEGORIES.forEach((category) => {
-    const item = document.createElement("div");
-    item.className = "deck-rating-summary-item";
-    if (category.description) {
-      item.title = category.description;
-    }
-
-    const label = document.createElement("dt");
-    label.className = "deck-rating-summary-label";
-    label.textContent = category.label;
-
-    const value = document.createElement("dd");
-    value.className = "deck-rating-summary-value";
-    value.textContent = "-";
-
-    item.append(label, value);
-    ratingList.appendChild(item);
-    ratingValueEls.set(category.key, value);
-  });
-
   const radarContainer = document.createElement("div");
   radarContainer.className = "deck-radar-container deck-radar-container-inline";
   summaryLayout.appendChild(radarContainer);
@@ -3137,6 +3335,12 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   if (radar) {
     radarContainer.appendChild(radar.element);
   }
+
+  const radarEmptyHint = document.createElement("p");
+  radarEmptyHint.className = "deck-rating-footnote deck-rating-empty-hint";
+  radarEmptyHint.textContent = "Aucune évaluation définie pour le moment.";
+  radarEmptyHint.hidden = true;
+  summaryLayout.appendChild(radarEmptyHint);
 
   const infoSection = document.createElement("div");
   infoSection.className = "deck-personal-info deck-personal-info-grid";
@@ -3188,17 +3392,17 @@ const buildEvaluationCard = ({ deckId, deckName, stats, deck }) => {
   );
 
   const renderRatings = () => {
-    const values = DECK_RATING_CATEGORIES.map((category) => {
-      const value = resolveDeckRatingValue(currentPersonalization, category.key);
-      const valueEl = ratingValueEls.get(category.key);
-      if (valueEl) {
-        valueEl.textContent = String(value);
-      }
-      return value;
-    });
+    const values = DECK_RATING_CATEGORIES.map((category) =>
+      resolveDeckRatingValue(currentPersonalization, category.key)
+    );
+    const hasRatings = values.some((value) => Number.isFinite(value) && value > 0);
     if (radar) {
       radar.update(values);
     }
+    if (radarEmptyHint) {
+      radarEmptyHint.hidden = hasRatings;
+    }
+    radarContainer.classList.toggle("is-empty", !hasRatings);
   };
 
   const renderMeta = () => {

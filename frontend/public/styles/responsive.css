@@ -89,17 +89,24 @@
     }
 
     .deck-rating-field {
-      grid-template-columns: 1fr;
       gap: 0.45rem;
     }
 
-    .deck-rating-value {
-      justify-content: flex-start;
-      text-align: left;
+    .deck-rating-control {
+      grid-template-columns: 1fr;
     }
 
-    .deck-rating-value-input {
-      max-width: 4rem;
+    .deck-turn-order-body {
+      grid-template-columns: 1fr;
+    }
+
+    .deck-turn-order-ring {
+      width: min(160px, 70vw);
+      justify-self: center;
+    }
+
+    .deck-turn-order-legend {
+      justify-items: start;
     }
 
     .dashboard-main {
