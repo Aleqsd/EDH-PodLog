@@ -102,6 +102,10 @@
     const statusEl = document.getElementById("gameStatus");
     const historyEmpty = document.getElementById("gameHistoryEmpty");
     const historyList = document.getElementById("gameHistoryList");
+    const lifeTrackerOverlay = document.getElementById("lifeTrackerOverlay");
+    const lifeTrackerGrid = document.getElementById("lifeTrackerGrid");
+    const lifeTrackerClose = document.getElementById("lifeTrackerClose");
+    const lifeTrackerReset = document.getElementById("lifeTrackerReset");
 
     if (
       !toggleBtn ||
@@ -119,7 +123,11 @@
       !cancelResultButton ||
       !statusEl ||
       !historyEmpty ||
-      !historyList
+      !historyList ||
+      !lifeTrackerOverlay ||
+      !lifeTrackerGrid ||
+      !lifeTrackerClose ||
+      !lifeTrackerReset
     ) {
       return;
     }
@@ -325,8 +333,354 @@
     };
 
     let players = [];
-    let latestConfirmedPlayers = null;
-    let availablePlayers = [];
+   let latestConfirmedPlayers = null;
+   let availablePlayers = [];
+    const LIFE_TRACKER_LONG_PRESS_DELAY = 400;
+    let lifeTrackerState = null;
+
+    const getCurrentRoster = () =>
+      players.map((player, index) => ({
+        id: player.id || `player-${index}`,
+        name: normalizeString(player.name) || `Joueur ${index + 1}`,
+      }));
+
+    const computeRosterSignature = (roster) =>
+      roster.map((entry) => `${entry.id}:${entry.name}`).join("|");
+
+    const createLifeTrackerState = (roster) => ({
+      players: roster.map((entry) => ({
+        ...entry,
+        life: 40,
+        commanderDamage: roster
+          .filter((source) => source.id !== entry.id)
+          .map((source) => ({
+            sourceId: source.id,
+            sourceName: source.name,
+            amount: 0,
+          })),
+      })),
+    });
+
+    const updateStartGameButton = () => {
+      if (!startGameButton) {
+        return;
+      }
+      if (!lifeTrackerState) {
+        startGameButton.textContent = "Démarrer la partie";
+        return;
+      }
+      if (lifeTrackerOverlay.hidden) {
+        startGameButton.textContent = "Ouvrir le suivi de vie";
+      } else {
+        startGameButton.textContent = "Suivi de vie en cours";
+      }
+    };
+
+    function hideLifeTracker({ focusTrigger = false } = {}) {
+      if (lifeTrackerOverlay.hidden) {
+        updateStartGameButton();
+        return;
+      }
+      lifeTrackerOverlay.hidden = true;
+      lifeTrackerOverlay.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("life-tracker-open");
+      updateStartGameButton();
+      if (focusTrigger) {
+        runSoon(() => {
+          startGameButton.focus();
+        });
+      }
+    }
+
+    function discardLifeTrackerState() {
+      lifeTrackerState = null;
+      hideLifeTracker();
+      updateStartGameButton();
+    }
+
+    function adjustLifeTotal(playerId, delta) {
+      if (!lifeTrackerState) {
+        return;
+      }
+      const player = lifeTrackerState.players.find((entry) => entry.id === playerId);
+      if (!player) {
+        return;
+      }
+      const nextValue = Number.isFinite(player.life) ? player.life + delta : 40 + delta;
+      player.life = Math.max(-999, Math.min(999, nextValue));
+      renderLifeTracker();
+    }
+
+    function adjustCommanderDamage(targetId, sourceId, delta) {
+      if (!lifeTrackerState) {
+        return;
+      }
+      const player = lifeTrackerState.players.find((entry) => entry.id === targetId);
+      if (!player) {
+        return;
+      }
+      const track = player.commanderDamage.find((entry) => entry.sourceId === sourceId);
+      if (!track) {
+        return;
+      }
+      const nextValue = track.amount + delta;
+      track.amount = Math.max(0, Math.min(999, nextValue));
+      renderLifeTracker();
+    }
+
+    function setupLifeButton(button, playerId, step) {
+      if (!button) {
+        return;
+      }
+      let longPressTimer = null;
+      let longPressTriggered = false;
+      let keyboardActivation = false;
+
+      const clearTimer = () => {
+        if (longPressTimer !== null) {
+          window.clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      };
+
+      button.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) {
+          return;
+        }
+        if (event.pointerType === "touch") {
+          event.preventDefault();
+        }
+        keyboardActivation = false;
+        longPressTriggered = false;
+        clearTimer();
+        if (typeof button.setPointerCapture === "function" && event.pointerId != null) {
+          try {
+            button.setPointerCapture(event.pointerId);
+          } catch (error) {
+            // Ignorer les erreurs de capture de pointeur non prises en charge.
+          }
+        }
+        longPressTimer = window.setTimeout(() => {
+          longPressTriggered = true;
+          adjustLifeTotal(playerId, step * 10);
+        }, LIFE_TRACKER_LONG_PRESS_DELAY);
+      });
+
+      const handlePointerEnd = (event) => {
+        if (
+          typeof button.releasePointerCapture === "function" &&
+          event.pointerId != null &&
+          button.hasPointerCapture?.(event.pointerId)
+        ) {
+          try {
+            button.releasePointerCapture(event.pointerId);
+          } catch (error) {
+            // Ignorer si la capture n'est plus active.
+          }
+        }
+        clearTimer();
+      };
+
+      button.addEventListener("pointerup", handlePointerEnd);
+      button.addEventListener("pointerleave", handlePointerEnd);
+      button.addEventListener("pointercancel", handlePointerEnd);
+
+      button.addEventListener("click", (event) => {
+        if (longPressTriggered || keyboardActivation) {
+          longPressTriggered = false;
+          keyboardActivation = false;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        adjustLifeTotal(playerId, step);
+      });
+
+      button.addEventListener("keydown", (event) => {
+        if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
+          event.preventDefault();
+          keyboardActivation = true;
+          adjustLifeTotal(playerId, step);
+        }
+      });
+
+      button.addEventListener("keyup", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          keyboardActivation = false;
+        }
+      });
+    }
+
+    function renderLifeTracker() {
+      if (!lifeTrackerState || !lifeTrackerGrid) {
+        return;
+      }
+      lifeTrackerGrid.innerHTML = "";
+      lifeTrackerGrid.dataset.playerCount = String(lifeTrackerState.players.length);
+
+      lifeTrackerState.players.forEach((player) => {
+        const card = document.createElement("article");
+        card.className = "life-tracker-card";
+        card.dataset.playerId = player.id;
+        card.setAttribute("role", "gridcell");
+
+        const nameEl = document.createElement("h3");
+        nameEl.className = "life-tracker-player";
+        nameEl.textContent = player.name;
+        card.appendChild(nameEl);
+
+        const lifeWrapper = document.createElement("div");
+        lifeWrapper.className = "life-tracker-life";
+
+        const decreaseBtn = document.createElement("button");
+        decreaseBtn.type = "button";
+        decreaseBtn.className = "life-tracker-life-button is-decrement";
+        decreaseBtn.textContent = "-";
+        decreaseBtn.title = "Appui long : -10 points";
+        decreaseBtn.setAttribute("aria-label", `Retirer 1 point de vie à ${player.name}`);
+        setupLifeButton(decreaseBtn, player.id, -1);
+
+        const lifeValue = document.createElement("output");
+        lifeValue.className = "life-tracker-life-value";
+        lifeValue.textContent = String(player.life);
+        lifeValue.setAttribute("role", "status");
+        lifeValue.setAttribute("aria-live", "polite");
+        lifeValue.setAttribute("aria-label", `${player.name} : ${player.life} points de vie`);
+
+        const increaseBtn = document.createElement("button");
+        increaseBtn.type = "button";
+        increaseBtn.className = "life-tracker-life-button is-increment";
+        increaseBtn.textContent = "+";
+        increaseBtn.title = "Appui long : +10 points";
+        increaseBtn.setAttribute("aria-label", `Ajouter 1 point de vie à ${player.name}`);
+        setupLifeButton(increaseBtn, player.id, 1);
+
+        lifeWrapper.append(decreaseBtn, lifeValue, increaseBtn);
+        card.appendChild(lifeWrapper);
+
+        if (player.commanderDamage.length > 0) {
+          const commanderSection = document.createElement("div");
+          commanderSection.className = "life-tracker-commander";
+
+          const commanderTitle = document.createElement("p");
+          commanderTitle.className = "life-tracker-commander-title";
+          commanderTitle.textContent = "Dégâts de commandant reçus";
+          commanderSection.appendChild(commanderTitle);
+
+          const commanderList = document.createElement("ul");
+          commanderList.className = "life-tracker-commander-list";
+          commanderList.setAttribute(
+            "aria-label",
+            `Dégâts de commandant reçus par ${player.name}`
+          );
+
+          player.commanderDamage.forEach((entry) => {
+            const listItem = document.createElement("li");
+            listItem.className = "life-tracker-commander-entry";
+            listItem.dataset.sourceId = entry.sourceId;
+            const lethal = entry.amount >= 21;
+            if (lethal) {
+              listItem.classList.add("is-lethal");
+            }
+
+            const sourceLabel = document.createElement("span");
+            sourceLabel.className = "life-tracker-commander-source";
+            sourceLabel.textContent = entry.sourceName;
+
+            const controls = document.createElement("div");
+            controls.className = "life-tracker-commander-controls";
+
+            const minusBtn = document.createElement("button");
+            minusBtn.type = "button";
+            minusBtn.className = "life-tracker-commander-button is-decrement";
+            minusBtn.textContent = "-";
+            minusBtn.setAttribute(
+              "aria-label",
+              `Retirer 1 point de dégâts de commandant infligé par ${entry.sourceName}`
+            );
+            minusBtn.addEventListener("click", () => {
+              adjustCommanderDamage(player.id, entry.sourceId, -1);
+            });
+
+            const value = document.createElement("span");
+            value.className = "life-tracker-commander-value";
+            value.textContent = String(entry.amount);
+            value.setAttribute(
+              "aria-label",
+              `${entry.amount} dégâts infligés par ${entry.sourceName}`
+            );
+            if (lethal) {
+              value.setAttribute("data-lethal", "true");
+            } else {
+              value.removeAttribute("data-lethal");
+            }
+
+            const plusBtn = document.createElement("button");
+            plusBtn.type = "button";
+            plusBtn.className = "life-tracker-commander-button is-increment";
+            plusBtn.textContent = "+";
+            plusBtn.setAttribute(
+              "aria-label",
+              `Ajouter 1 point de dégâts de commandant infligé par ${entry.sourceName}`
+            );
+            plusBtn.addEventListener("click", () => {
+              adjustCommanderDamage(player.id, entry.sourceId, 1);
+            });
+
+            const lethalBadge = document.createElement("span");
+            lethalBadge.className = "life-tracker-commander-lethal";
+            lethalBadge.textContent = "21+ létal";
+            lethalBadge.hidden = !lethal;
+
+            controls.append(minusBtn, value, plusBtn);
+            listItem.append(sourceLabel, controls, lethalBadge);
+            commanderList.appendChild(listItem);
+          });
+
+          commanderSection.appendChild(commanderList);
+          card.appendChild(commanderSection);
+        }
+
+        lifeTrackerGrid.appendChild(card);
+      });
+
+      updateStartGameButton();
+    }
+
+    const showLifeTracker = () => {
+      if (!lifeTrackerState) {
+        return;
+      }
+      lifeTrackerOverlay.hidden = false;
+      lifeTrackerOverlay.setAttribute("aria-hidden", "false");
+      document.body.classList.add("life-tracker-open");
+      renderLifeTracker();
+      updateStartGameButton();
+      runSoon(() => {
+        lifeTrackerClose.focus();
+      });
+    };
+
+    const resetLifeTracker = () => {
+      if (!lifeTrackerState) {
+        return;
+      }
+      lifeTrackerState.players.forEach((player) => {
+        player.life = 40;
+        player.commanderDamage.forEach((entry) => {
+          entry.amount = 0;
+        });
+      });
+      renderLifeTracker();
+      setStatus("Le suivi de vie a été réinitialisé.", "success");
+    };
+
+    const handleLifeTrackerKeydown = (event) => {
+      if (event.key === "Escape" && lifeTrackerState && !lifeTrackerOverlay.hidden) {
+        event.preventDefault();
+        hideLifeTracker({ focusTrigger: true });
+      }
+    };
 
     const createInitialPlayers = () =>
       DEFAULT_PLAYER_NAMES.map((name, index) => ({
@@ -729,6 +1083,22 @@
       });
     };
 
+    lifeTrackerClose.addEventListener("click", () => {
+      hideLifeTracker({ focusTrigger: true });
+    });
+
+    lifeTrackerReset.addEventListener("click", () => {
+      resetLifeTracker();
+    });
+
+    lifeTrackerOverlay.addEventListener("click", (event) => {
+      if (event.target === lifeTrackerOverlay) {
+        hideLifeTracker({ focusTrigger: true });
+      }
+    });
+
+    document.addEventListener("keydown", handleLifeTrackerKeydown, { capture: true });
+
     const setOwner = (playerId) => {
       players = players.map((player) => {
         if (player.id === playerId) {
@@ -776,6 +1146,7 @@
     const resetWorkflow = ({ preserveStatus = false } = {}) => {
       players = createInitialPlayers();
       latestConfirmedPlayers = null;
+      discardLifeTrackerState();
       setupForm.hidden = false;
       resultForm.hidden = true;
       resultForm.reset();
@@ -1119,7 +1490,24 @@
     });
 
     startGameButton.addEventListener("click", () => {
-      setStatus("La fonctionnalité de suivi en direct arrive bientôt.", "error");
+      const roster = getCurrentRoster();
+      const signature = computeRosterSignature(roster);
+
+      if (lifeTrackerState && lifeTrackerState.signature === signature) {
+        showLifeTracker();
+        return;
+      }
+
+      if (!validatePlayers()) {
+        return;
+      }
+
+      lifeTrackerState = {
+        ...createLifeTrackerState(roster),
+        signature,
+      };
+      setStatus("Suivi de vie Commander activé.", "success");
+      showLifeTracker();
     });
 
     cancelResultButton.addEventListener("click", () => {

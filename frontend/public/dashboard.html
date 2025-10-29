@@ -111,8 +111,8 @@
                   Ajouter un joueur
                 </button>
                 <div class="game-setup-actions-primary">
-                  <button class="secondary-action" type="button" id="startGameButton" disabled>
-                    Démarrer la partie (bientôt)
+                  <button class="secondary-action" type="button" id="startGameButton">
+                    Démarrer la partie
                   </button>
                   <button class="primary-action" type="button" id="saveResultButton">
                     Enregistrer le résultat
@@ -192,15 +192,43 @@
               </p>
             </div>
           </div>
-          <div class="history-empty" id="gameHistoryEmpty">
-            Aucune partie enregistrée pour le moment.
-          </div>
-          <ol class="game-history-list" id="gameHistoryList"></ol>
-        </section>
+      <div class="history-empty" id="gameHistoryEmpty">
+        Aucune partie enregistrée pour le moment.
       </div>
-      <datalist id="knownPlaygroups"></datalist>
-      <datalist id="knownPlayers"></datalist>
-    </main>
+      <ol class="game-history-list" id="gameHistoryList"></ol>
+    </section>
+  </div>
+  <datalist id="knownPlaygroups"></datalist>
+  <datalist id="knownPlayers"></datalist>
+  <section class="life-tracker-overlay" id="lifeTrackerOverlay" hidden aria-hidden="true">
+    <div
+      class="life-tracker-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lifeTrackerTitle"
+    >
+      <header class="life-tracker-header">
+        <div class="life-tracker-heading">
+          <p class="life-tracker-subtitle">Suivi Commander en temps réel</p>
+          <h2 class="life-tracker-title" id="lifeTrackerTitle">Suivi des points de vie</h2>
+        </div>
+        <div class="life-tracker-actions">
+          <button class="life-tracker-action secondary-action" type="button" id="lifeTrackerReset">
+            Réinitialiser
+          </button>
+          <button class="life-tracker-action primary-action" type="button" id="lifeTrackerClose">
+            Quitter
+          </button>
+        </div>
+      </header>
+      <p class="life-tracker-instructions" id="lifeTrackerInstructions">
+        Chaque joueur commence à 40 points de vie. Appuyez longuement sur +/− pour ajuster de 10 et
+        enregistrez les dégâts de commandant subis en un geste.
+      </p>
+      <div class="life-tracker-grid" id="lifeTrackerGrid" role="grid" aria-describedby="lifeTrackerInstructions"></div>
+    </div>
+  </section>
+</main>
     <script
       src="https://accounts.google.com/gsi/client"
       async
