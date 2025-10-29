@@ -167,6 +167,59 @@ let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;
 let deckStatusEl = null;
 let deckBulkDeleteBtn = null;
+
+const DECK_COLOR_CODES = ["W", "U", "B", "R", "G", "C"];
+const DECK_COLOR_CODE_SET = new Set(DECK_COLOR_CODES);
+const BRACKET_NONE_KEY = "none";
+const DECK_RATING_SORT_MAP = {
+  "rating-stability": "stability",
+  "rating-acceleration": "acceleration",
+  "rating-interaction": "interaction",
+  "rating-resilience": "resilience",
+  "rating-finish": "finish",
+  "rating-construction": "construction",
+};
+const DECK_SORT_KEYS = new Set([
+  "updated-desc",
+  "updated-asc",
+  "created-desc",
+  "created-asc",
+  "alpha-asc",
+  "alpha-desc",
+  "color-identity",
+  ...Object.keys(DECK_RATING_SORT_MAP),
+]);
+const BRACKET_KEYWORD_ENTRIES = [
+  ["exhibition", "1"],
+  ["core", "2"],
+  ["focus", "3"],
+  ["optimize", "4"],
+  ["optimizee", "4"],
+  ["optimise", "4"],
+  ["optimisee", "4"],
+  ["optimisees", "4"],
+  ["optimisé", "4"],
+  ["optimisée", "4"],
+  ["optimized", "4"],
+  ["optimisé", "4"],
+  ["optimisée", "4"],
+  ["competitive", "5"],
+  ["competitif", "5"],
+  ["compétitif", "5"],
+  ["compet", "5"],
+];
+
+const deckCollectionState = {
+  displayMode: "standard",
+  sort: "updated-desc",
+  searchRaw: "",
+  search: "",
+  colors: new Set(),
+  brackets: new Set(),
+};
+
+const deckComputedMetaCache = new WeakMap();
+
 let deckSelectionModal = null;
 let deckSelectionListEl = null;
 let deckSelectionForm = null;
@@ -1697,6 +1750,742 @@ const summariseManaCost = (manaCost) => {
   }));
 };
 
+const normalizeText = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  try {
+    return String(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  } catch (error) {
+    return String(value).toLowerCase();
+  }
+};
+
+const parseDeckTimestamp = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    if (value > 1e12) {
+      return value;
+    }
+    if (value > 1e9) {
+      return Math.round(value * 1000);
+    }
+    if (value > 1e5) {
+      return Math.round(value * 1000);
+    }
+    return null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const numeric = Number(trimmed);
+    if (!Number.isNaN(numeric)) {
+      return parseDeckTimestamp(numeric);
+    }
+    const date = new Date(trimmed);
+    const time = date.getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  if (typeof value === "object" && value !== null && typeof value.$date !== "undefined") {
+    return parseDeckTimestamp(value.$date);
+  }
+  return null;
+};
+
+const getDeckUpdatedTimestamp = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return 0;
+  }
+  const candidates = [
+    deck.updatedAt,
+    deck.updated_at,
+    deck.modifiedAt,
+    deck.modified_at,
+    deck.raw?.updatedAt,
+    deck.raw?.updated_at,
+    deck.raw?.updatedAtUtc,
+    deck.raw?.updated_at_utc,
+    deck.raw?.updatedOn,
+    deck.raw?.updated_on,
+    deck.raw?.modifiedOn,
+    deck.raw?.modified_on,
+    deck.raw?.lastUpdated,
+    deck.raw?.last_updated,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseDeckTimestamp(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  const fallback = parseDeckTimestamp(deck.createdAt ?? deck.created_at ?? deck.raw?.createdAt);
+  return fallback ?? 0;
+};
+
+const getDeckCreationTimestamp = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return 0;
+  }
+  const candidates = [
+    deck.createdAt,
+    deck.created_at,
+    deck.raw?.createdAt,
+    deck.raw?.created_at,
+    deck.raw?.createdAtUtc,
+    deck.raw?.created_at_utc,
+    deck.raw?.createdOn,
+    deck.raw?.created_on,
+    deck.raw?.dateCreated,
+    deck.raw?.date_created,
+    deck.raw?.publishedAt,
+    deck.raw?.published_at,
+    deck.raw?.metadata?.created_at,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseDeckTimestamp(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return getDeckUpdatedTimestamp(deck);
+};
+
+const buildDeckColorSortKey = (colors) => {
+  if (!Array.isArray(colors) || colors.length === 0) {
+    return "Z";
+  }
+  const indices = colors
+    .map((color) => DECK_COLOR_CODES.indexOf(color))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b);
+  if (indices.length === 0) {
+    return "Z";
+  }
+  return `${indices.length}-${indices.join("")}`;
+};
+
+const resolveDeckColorIdentity = (deck) => {
+  const colors = new Set();
+  let sawExplicitColorless = false;
+
+  const addColorToken = (token) => {
+    if (token === null || token === undefined) {
+      return;
+    }
+    const str = String(token).trim().toUpperCase();
+    if (!str) {
+      return;
+    }
+    for (const char of str) {
+      if (DECK_COLOR_CODE_SET.has(char)) {
+        colors.add(char);
+      }
+    }
+  };
+
+  const processColorSource = (value) => {
+    if (value === null || value === undefined) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        sawExplicitColorless = true;
+      }
+      value.forEach(processColorSource);
+      return;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
+      }
+      const matches = trimmed.match(/[WUBRGC]/gi);
+      if (matches && matches.length > 0) {
+        matches.forEach(addColorToken);
+        return;
+      }
+      const normalized = normalizeText(trimmed);
+      if (
+        normalized.includes("colorless") ||
+        normalized.includes("incolore") ||
+        normalized.includes("sans couleur")
+      ) {
+        sawExplicitColorless = true;
+      }
+      return;
+    }
+    if (typeof value === "object") {
+      const nestedCandidates = [
+        value.colorIdentity,
+        value.color_identity,
+        value.colour_identity,
+        value.colors,
+        value.identity,
+        value.primaryColors,
+        value.primary_colors,
+        value.card?.colorIdentity,
+        value.card?.color_identity,
+        value.card?.colour_identity,
+        value.card?.colors,
+      ];
+      nestedCandidates.forEach(processColorSource);
+      if (Array.isArray(value.commanders)) {
+        value.commanders.forEach(processColorSource);
+      }
+      if (Array.isArray(value.cards)) {
+        value.cards.forEach(processColorSource);
+      }
+      if (value.card) {
+        processColorSource(value.card);
+      }
+    }
+  };
+
+  [
+    deck?.colorIdentity,
+    deck?.color_identity,
+    deck?.colour_identity,
+    deck?.colors,
+    deck?.identity,
+    deck?.raw?.colorIdentity,
+    deck?.raw?.color_identity,
+    deck?.raw?.colour_identity,
+    deck?.raw?.colors,
+    deck?.raw?.metadata?.colorIdentity,
+    deck?.raw?.metadata?.color_identity,
+    deck?.raw?.podlog?.colorIdentity,
+    deck?.raw?.podlog?.color_identity,
+    deck?.raw?.profile?.colorIdentity,
+    deck?.raw?.profile?.color_identity,
+    deck?.raw?.commander,
+    deck?.raw?.commanders,
+    deck?.raw?.primaryCommander,
+    deck?.raw?.secondaryCommander,
+  ].forEach(processColorSource);
+
+  if (typeof collectDeckBoards === "function") {
+    try {
+      const boards = collectDeckBoards(deck);
+      boards.forEach((board) => {
+        if (!Array.isArray(board?.cards)) {
+          return;
+        }
+        board.cards.forEach((entry) => {
+          if (entry?.card) {
+            const cardData = entry.card.card ?? entry.card;
+            processColorSource(cardData);
+          }
+        });
+      });
+    } catch (error) {
+      console.warn("Impossible d'extraire les couleurs du deck :", error);
+    }
+  } else if (Array.isArray(deck?.raw?.boards)) {
+    deck.raw.boards.forEach((board) => {
+      if (!Array.isArray(board?.cards)) {
+        return;
+      }
+      board.cards.forEach((entry) => {
+        if (entry?.card) {
+          processColorSource(entry.card);
+        }
+      });
+    });
+  }
+
+  const ordered = Array.from(colors).filter((color) => DECK_COLOR_CODE_SET.has(color));
+  ordered.sort((a, b) => DECK_COLOR_CODES.indexOf(a) - DECK_COLOR_CODES.indexOf(b));
+  if (ordered.length === 0 && sawExplicitColorless) {
+    return ["C"];
+  }
+  return ordered;
+};
+
+const collectDeckCardNames = (deck) => {
+  const names = new Set();
+  const addName = (name) => {
+    if (typeof name !== "string") {
+      return;
+    }
+    const trimmed = name.trim();
+    if (trimmed.length > 0) {
+      names.add(trimmed);
+    }
+  };
+
+  if (typeof collectDeckBoards === "function") {
+    try {
+      const boards = collectDeckBoards(deck);
+      boards.forEach((board) => {
+        if (!Array.isArray(board?.cards)) {
+          return;
+        }
+        board.cards.forEach((entry) => {
+          if (!entry) {
+            return;
+          }
+          if (entry.card) {
+            const cardData = entry.card.card ?? entry.card;
+            addName(cardData?.name);
+          }
+          addName(entry?.card?.name);
+          addName(entry?.name);
+        });
+      });
+    } catch (error) {
+      console.warn("Impossible d'extraire la liste des cartes du deck :", error);
+    }
+  }
+
+  if (names.size === 0 && Array.isArray(deck?.raw?.cards)) {
+    deck.raw.cards.forEach((card) => {
+      if (!card) {
+        return;
+      }
+      addName(card?.name ?? card?.card?.name);
+    });
+  }
+
+  if (
+    names.size === 0 &&
+    deck?.raw?.cardlist &&
+    typeof deck.raw.cardlist === "object" &&
+    !Array.isArray(deck.raw.cardlist)
+  ) {
+    Object.values(deck.raw.cardlist).forEach((entry) => {
+      addName(entry?.name ?? entry?.card?.name);
+    });
+  }
+
+  return Array.from(names);
+};
+
+const collectCommanderNames = (deck) => {
+  const names = new Set();
+  const addName = (name) => {
+    if (typeof name !== "string") {
+      return;
+    }
+    const trimmed = name.trim();
+    if (trimmed.length > 0) {
+      names.add(trimmed);
+    }
+  };
+
+  const processCommanderSource = (value) => {
+    if (!value) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(processCommanderSource);
+      return;
+    }
+    if (typeof value === "string") {
+      addName(value);
+      return;
+    }
+    if (typeof value === "object") {
+      addName(value.name ?? value.cardName ?? value.card?.name);
+      if (Array.isArray(value.cards)) {
+        value.cards.forEach(processCommanderSource);
+      }
+      if (value.card) {
+        addName(value.card?.name);
+      }
+    }
+  };
+
+  [
+    deck?.raw?.commander,
+    deck?.raw?.commanders,
+    deck?.raw?.primaryCommander,
+    deck?.raw?.secondaryCommander,
+    deck?.raw?.podlog?.commander,
+    deck?.raw?.podlog?.commanders,
+    deck?.raw?.profile?.commander,
+  ].forEach(processCommanderSource);
+
+  return Array.from(names);
+};
+
+const computeDeckMeta = (deck) => {
+  const normalizedName = normalizeText(deck?.name ?? "");
+  const normalizedSlug = normalizeText(deck?.slug ?? "");
+  const cardNames = collectDeckCardNames(deck).map((name) => normalizeText(name)).filter(Boolean);
+  const commanderNames = collectCommanderNames(deck)
+    .map((name) => normalizeText(name))
+    .filter(Boolean);
+  const colors = resolveDeckColorIdentity(deck);
+  return {
+    normalizedName,
+    normalizedSlug,
+    cardNames,
+    commanderNames,
+    colors,
+    colorKey: buildDeckColorSortKey(colors),
+  };
+};
+
+const getDeckComputedMeta = (deck) => {
+  if (!deck || typeof deck !== "object") {
+    return computeDeckMeta({});
+  }
+  const cached = deckComputedMetaCache.get(deck);
+  if (cached) {
+    return cached;
+  }
+  const meta = computeDeckMeta(deck);
+  deckComputedMetaCache.set(deck, meta);
+  return meta;
+};
+
+const getDeckRatingValue = (deck, key) => {
+  if (!key || typeof getDeckEvaluation !== "function") {
+    return 0;
+  }
+  const deckId = getDeckIdentifier(deck);
+  if (!deckId) {
+    return 0;
+  }
+  const evaluation = getDeckEvaluation(deckId);
+  if (!evaluation || typeof evaluation !== "object") {
+    return 0;
+  }
+  const value = evaluation[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+};
+
+const normalizeBracketId = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return null;
+  }
+  if (/^[1-5]$/.test(raw)) {
+    return raw;
+  }
+  const digitMatch = raw.match(/[1-5]/);
+  if (digitMatch) {
+    return digitMatch[0];
+  }
+  const normalized = normalizeText(raw);
+  if (!normalized) {
+    return null;
+  }
+  for (const [keyword, id] of BRACKET_KEYWORD_ENTRIES) {
+    if (normalized.includes(keyword)) {
+      return id;
+    }
+  }
+  if (typeof DECK_BRACKET_LEVELS !== "undefined" && Array.isArray(DECK_BRACKET_LEVELS)) {
+    for (const level of DECK_BRACKET_LEVELS) {
+      const labelNormalized = normalizeText(level?.label ?? "");
+      if (!labelNormalized) {
+        continue;
+      }
+      if (labelNormalized.includes(normalized) || normalized.includes(labelNormalized)) {
+        return level.id ?? null;
+      }
+    }
+  }
+  return null;
+};
+
+const resolveDeckBracketGroup = (deck) => {
+  const fallback = { id: BRACKET_NONE_KEY, label: "Sans bracket" };
+  if (!deck || typeof deck !== "object") {
+    return fallback;
+  }
+  let bracketValue = null;
+  const deckId = getDeckIdentifier(deck);
+  if (deckId && typeof getDeckPersonalization === "function") {
+    const personalization = getDeckPersonalization(deckId);
+    if (personalization?.bracket) {
+      bracketValue = personalization.bracket;
+    }
+  }
+  if (!bracketValue && typeof extractDeckBracket === "function") {
+    const extracted = extractDeckBracket(deck);
+    if (extracted?.bracket) {
+      bracketValue = extracted.bracket;
+    }
+  }
+  const normalized = normalizeBracketId(bracketValue);
+  if (!normalized) {
+    return fallback;
+  }
+  let label = null;
+  if (typeof findDeckBracketDefinition === "function") {
+    const definition = findDeckBracketDefinition(normalized);
+    if (definition?.label) {
+      label = definition.label;
+    }
+  }
+  if (!label && typeof DECK_BRACKET_LEVELS !== "undefined" && Array.isArray(DECK_BRACKET_LEVELS)) {
+    const match = DECK_BRACKET_LEVELS.find((level) => level.id === normalized);
+    if (match?.label) {
+      label = match.label;
+    }
+  }
+  if (!label) {
+    label = `Bracket ${normalized}`;
+  }
+  return { id: normalized, label };
+};
+
+const doesDeckMatchSearch = (deck, normalizedQuery) => {
+  if (!normalizedQuery) {
+    return true;
+  }
+  const meta = getDeckComputedMeta(deck);
+  if (meta.normalizedName && meta.normalizedName.includes(normalizedQuery)) {
+    return true;
+  }
+  if (meta.normalizedSlug && meta.normalizedSlug.includes(normalizedQuery)) {
+    return true;
+  }
+  if (meta.commanderNames.some((name) => name.includes(normalizedQuery))) {
+    return true;
+  }
+  if (meta.cardNames.some((name) => name.includes(normalizedQuery))) {
+    return true;
+  }
+  return false;
+};
+
+const doesDeckMatchColorFilters = (deck, selectedColors) => {
+  if (!selectedColors || selectedColors.size === 0) {
+    return true;
+  }
+  const meta = getDeckComputedMeta(deck);
+  if (!Array.isArray(meta.colors) || meta.colors.length === 0) {
+    return false;
+  }
+  const colorSet = new Set(meta.colors);
+  for (const color of selectedColors) {
+    if (!DECK_COLOR_CODE_SET.has(color)) {
+      continue;
+    }
+    if (!colorSet.has(color)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const doesDeckMatchBracketFilters = (deck, selectedBrackets) => {
+  if (!selectedBrackets || selectedBrackets.size === 0) {
+    return true;
+  }
+  const group = resolveDeckBracketGroup(deck);
+  const bracketId = group.id ?? BRACKET_NONE_KEY;
+  if (!bracketId || bracketId === BRACKET_NONE_KEY) {
+    return selectedBrackets.has(BRACKET_NONE_KEY);
+  }
+  return selectedBrackets.has(bracketId);
+};
+
+const compareDeckNames = (a, b) => {
+  const metaA = getDeckComputedMeta(a);
+  const metaB = getDeckComputedMeta(b);
+  const nameA = metaA.normalizedName || normalizeText(a?.name ?? "");
+  const nameB = metaB.normalizedName || normalizeText(b?.name ?? "");
+  const byName = nameA.localeCompare(nameB);
+  if (byName !== 0) {
+    return byName;
+  }
+  return (getDeckIdentifier(a) ?? "").localeCompare(getDeckIdentifier(b) ?? "");
+};
+
+const compareDecks = (a, b, sortKey = "updated-desc") => {
+  switch (sortKey) {
+    case "alpha-asc":
+      return compareDeckNames(a, b);
+    case "alpha-desc":
+      return compareDeckNames(b, a);
+    case "updated-asc": {
+      const delta = getDeckUpdatedTimestamp(a) - getDeckUpdatedTimestamp(b);
+      if (delta !== 0) {
+        return delta;
+      }
+      return compareDeckNames(a, b);
+    }
+    case "updated-desc": {
+      const delta = getDeckUpdatedTimestamp(b) - getDeckUpdatedTimestamp(a);
+      if (delta !== 0) {
+        return delta;
+      }
+      return compareDeckNames(a, b);
+    }
+    case "created-asc": {
+      const delta = getDeckCreationTimestamp(a) - getDeckCreationTimestamp(b);
+      if (delta !== 0) {
+        return delta;
+      }
+      return compareDeckNames(a, b);
+    }
+    case "created-desc": {
+      const delta = getDeckCreationTimestamp(b) - getDeckCreationTimestamp(a);
+      if (delta !== 0) {
+        return delta;
+      }
+      return compareDeckNames(a, b);
+    }
+    case "color-identity": {
+      const metaA = getDeckComputedMeta(a);
+      const metaB = getDeckComputedMeta(b);
+      if (metaA.colorKey === metaB.colorKey) {
+        return compareDeckNames(a, b);
+      }
+      return metaA.colorKey.localeCompare(metaB.colorKey);
+    }
+    default: {
+      const ratingKey = DECK_RATING_SORT_MAP[sortKey];
+      if (!ratingKey) {
+        const delta = getDeckUpdatedTimestamp(b) - getDeckUpdatedTimestamp(a);
+        if (delta !== 0) {
+          return delta;
+        }
+        return compareDeckNames(a, b);
+      }
+      const ratingDelta = getDeckRatingValue(b, ratingKey) - getDeckRatingValue(a, ratingKey);
+      if (ratingDelta !== 0) {
+        return ratingDelta;
+      }
+      return compareDeckNames(a, b);
+    }
+  }
+};
+
+const applyDeckCollectionTransforms = (decks) => {
+  if (!Array.isArray(decks)) {
+    return [];
+  }
+  const normalizedQuery = deckCollectionState.search;
+  const hasSearch = Boolean(normalizedQuery);
+  const hasColorFilters = deckCollectionState.colors.size > 0;
+  const hasBracketFilters = deckCollectionState.brackets.size > 0;
+
+  const filtered = decks.filter((deck) => {
+    if (hasSearch && !doesDeckMatchSearch(deck, normalizedQuery)) {
+      return false;
+    }
+    if (hasColorFilters && !doesDeckMatchColorFilters(deck, deckCollectionState.colors)) {
+      return false;
+    }
+    if (hasBracketFilters && !doesDeckMatchBracketFilters(deck, deckCollectionState.brackets)) {
+      return false;
+    }
+    return true;
+  });
+
+  const sortKey = deckCollectionState.sort;
+  filtered.sort((a, b) => compareDecks(a, b, sortKey));
+  return filtered;
+};
+
+const formatDeckCountLabel = (count) => `${count} deck${count > 1 ? "s" : ""}`;
+
+const getDeckCollectionState = () => ({
+  displayMode: deckCollectionState.displayMode,
+  sort: deckCollectionState.sort,
+  search: deckCollectionState.searchRaw,
+  colorFilters: Array.from(deckCollectionState.colors),
+  bracketFilters: Array.from(deckCollectionState.brackets),
+});
+
+const setDeckCollectionDisplayMode = (mode) => {
+  const normalized = mode === "bracket" ? "bracket" : "standard";
+  if (deckCollectionState.displayMode === normalized) {
+    return deckCollectionState.displayMode;
+  }
+  deckCollectionState.displayMode = normalized;
+  if (deckCollectionEl) {
+    deckCollectionEl.dataset.mode = normalized;
+  }
+  return deckCollectionState.displayMode;
+};
+
+const setDeckCollectionSortMode = (value) => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  const resolved = DECK_SORT_KEYS.has(trimmed) ? trimmed : "updated-desc";
+  deckCollectionState.sort = resolved;
+  return resolved;
+};
+
+const setDeckCollectionSearchQuery = (value) => {
+  const raw = typeof value === "string" ? value : "";
+  deckCollectionState.searchRaw = raw;
+  deckCollectionState.search = normalizeText(raw);
+  return deckCollectionState.search;
+};
+
+const setDeckCollectionColorFilters = (values) => {
+  const next = new Set();
+  if (Array.isArray(values)) {
+    values.forEach((value) => {
+      const normalized = String(value ?? "")
+        .trim()
+        .toUpperCase();
+      if (DECK_COLOR_CODE_SET.has(normalized)) {
+        next.add(normalized);
+      }
+    });
+  }
+  deckCollectionState.colors = next;
+  return next;
+};
+
+const setDeckCollectionBracketFilters = (values) => {
+  const next = new Set();
+  if (Array.isArray(values)) {
+    values.forEach((value) => {
+      const normalized = normalizeText(value);
+      if (!normalized) {
+        return;
+      }
+      if (
+        normalized === "none" ||
+        normalized.includes("sans") ||
+        normalized.includes("aucun")
+      ) {
+        next.add(BRACKET_NONE_KEY);
+        return;
+      }
+      const bracketId = normalizeBracketId(value);
+      if (bracketId) {
+        next.add(bracketId);
+      }
+    });
+  }
+  deckCollectionState.brackets = next;
+  return next;
+};
+
+const resetDeckCollectionFilters = () => {
+  deckCollectionState.colors = new Set();
+  deckCollectionState.brackets = new Set();
+  deckCollectionState.search = "";
+  deckCollectionState.searchRaw = "";
+  return getDeckCollectionState();
+};
+
 const createDeckCardElement = (deck) => {
   const card = document.createElement("article");
   card.className = "deck-card";
@@ -1797,13 +2586,88 @@ const renderDeckCardsInto = (target, decks) => {
   }
 
   target.innerHTML = "";
+  target.dataset.mode = deckCollectionState.displayMode;
+
   if (!Array.isArray(decks) || decks.length === 0) {
     return false;
   }
 
+  if (deckCollectionState.displayMode === "bracket") {
+    const groups = new Map();
+    const labels = new Map();
+
+    decks.forEach((deck) => {
+      const group = resolveDeckBracketGroup(deck);
+      const groupId = group?.id ?? BRACKET_NONE_KEY;
+      const label = group?.label ?? (groupId === BRACKET_NONE_KEY ? "Sans bracket" : `Bracket ${groupId}`);
+      if (!groups.has(groupId)) {
+        groups.set(groupId, []);
+        labels.set(groupId, label);
+      }
+      groups.get(groupId).push(deck);
+    });
+
+    const orderedIds = [];
+    if (typeof DECK_BRACKET_LEVELS !== "undefined" && Array.isArray(DECK_BRACKET_LEVELS)) {
+      DECK_BRACKET_LEVELS.forEach((level) => {
+        if (groups.has(level.id)) {
+          orderedIds.push(level.id);
+        }
+      });
+    }
+
+    groups.forEach((_, id) => {
+      if (id !== BRACKET_NONE_KEY && !orderedIds.includes(id)) {
+        orderedIds.push(id);
+      }
+    });
+
+    if (groups.has(BRACKET_NONE_KEY)) {
+      orderedIds.push(BRACKET_NONE_KEY);
+    }
+
+    orderedIds.forEach((id) => {
+      const groupDecks = groups.get(id);
+      if (!Array.isArray(groupDecks) || groupDecks.length === 0) {
+        return;
+      }
+      const section = document.createElement("section");
+      section.className = "deck-bracket-group";
+      section.dataset.bracket = id ?? BRACKET_NONE_KEY;
+
+      const header = document.createElement("header");
+      header.className = "deck-bracket-header";
+
+      const title = document.createElement("h3");
+      title.className = "deck-bracket-title";
+      title.textContent =
+        labels.get(id) ?? (id === BRACKET_NONE_KEY ? "Sans bracket" : `Bracket ${id}`);
+
+      const count = document.createElement("span");
+      count.className = "deck-bracket-count";
+      count.textContent = formatDeckCountLabel(groupDecks.length);
+
+      header.append(title, count);
+
+      const grid = document.createElement("div");
+      grid.className = "deck-grid";
+      groupDecks.forEach((deck) => {
+        grid.appendChild(createDeckCardElement(deck));
+      });
+
+      section.append(header, grid);
+      target.appendChild(section);
+    });
+
+    return target.children.length > 0;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "deck-grid";
   decks.forEach((deck) => {
-    target.appendChild(createDeckCardElement(deck));
+    grid.appendChild(createDeckCardElement(deck));
   });
+  target.appendChild(grid);
   return true;
 };
 
@@ -1852,13 +2716,32 @@ const refreshDeckCollection = (session) => {
 
   const integration = getMoxfieldIntegration(session);
   const decks = Array.isArray(integration?.decks) ? integration.decks : [];
-  const hasDecks = renderDeckCardsInto(deckCollectionEl, decks);
+  const transformedDecks = applyDeckCollectionTransforms(decks);
+  const hasDecks = renderDeckCardsInto(deckCollectionEl, transformedDecks);
   if (deckCollectionEmptyEl) {
+    const hasAnyDecks = decks.length > 0;
     deckCollectionEmptyEl.classList.toggle("is-visible", !hasDecks);
+    if (!hasDecks) {
+      if (!hasAnyDecks) {
+        deckCollectionEmptyEl.textContent =
+          "Aucun deck importé pour le moment. Lancez une synchronisation pour retrouver vos listes.";
+      } else if (
+        deckCollectionState.search ||
+        deckCollectionState.colors.size > 0 ||
+        deckCollectionState.brackets.size > 0
+      ) {
+        deckCollectionEmptyEl.textContent =
+          "Aucun deck ne correspond à votre recherche ou vos filtres.";
+      } else {
+        deckCollectionEmptyEl.textContent =
+          "Aucun deck disponible pour le moment.";
+      }
+    }
   }
   if (deckBulkDeleteBtn) {
-    deckBulkDeleteBtn.disabled = !hasDecks;
-    deckBulkDeleteBtn.classList.toggle("is-hidden", !hasDecks);
+    const hasAnyDecks = decks.length > 0;
+    deckBulkDeleteBtn.disabled = !hasAnyDecks;
+    deckBulkDeleteBtn.classList.toggle("is-hidden", !hasAnyDecks);
   }
 };
 

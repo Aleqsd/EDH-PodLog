@@ -1553,11 +1553,19 @@
   background: color-mix(in srgb, var(--color-base-090e1a) 90%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 28%, transparent);
   display: grid;
-  gap: 0.6rem;
-  min-width: clamp(220px, 70vw, 320px);
-  flex: 0 0 clamp(220px, 70vw, 320px);
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
+  gap: 0.75rem;
+  min-width: 0;
+  width: 100%;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.deck-card:hover,
+.deck-card:focus-within {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-border-glint) 45%, transparent);
+  background: color-mix(in srgb, var(--color-base-090e1a) 92%, transparent);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--color-base-080c18) 35%, transparent);
 }
 
 .integration-card {
@@ -1697,31 +1705,50 @@
 }
 
 .deck-collection {
-  margin-top: 2.5rem;
-  display: flex;
-  flex-wrap: nowrap;
+  margin-top: var(--space-xl);
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.deck-collection[data-mode="standard"] .deck-grid {
+  display: grid;
   gap: var(--space-md);
-  align-items: stretch;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0 0 var(--space-sm);
-  scroll-snap-type: x proximity;
-  scroll-padding-inline: var(--space-sm);
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
-.deck-collection::-webkit-scrollbar {
-  height: 0.6rem;
+.deck-bracket-group {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 28%, transparent);
+  border-radius: 20px;
+  padding: var(--space-md);
+  display: grid;
+  gap: var(--space-sm);
+  background: color-mix(in srgb, var(--color-base-0c1321) 85%, transparent);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--color-base-080c18) 32%, transparent);
 }
 
-.deck-collection::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-base-6175b3) 25%, transparent);
-  border-radius: 999px;
+.deck-bracket-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
 }
 
-.deck-collection::-webkit-scrollbar-track {
-  background: transparent;
+.deck-bracket-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.deck-bracket-count {
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+}
+
+.deck-bracket-group .deck-grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .deck-collection-empty {
@@ -1775,11 +1802,66 @@
   flex-wrap: wrap;
 }
 
-.decks-actions {
+.deck-quick-actions {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-xs);
   flex-wrap: wrap;
+}
+
+.deck-icon-action {
+  --deck-icon-size: 42px;
+  width: var(--deck-icon-size);
+  height: var(--deck-icon-size);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 40%, transparent);
+  background: color-mix(in srgb, var(--color-base-121c30) 85%, transparent);
+  color: var(--color-text-subtle-strong);
+  display: inline-grid;
+  place-items: center;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease,
+    color 150ms ease, box-shadow 150ms ease;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.deck-icon-action:hover,
+.deck-icon-action:focus-visible {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--color-base-202c48) 65%, transparent);
+  border-color: var(--color-border-soft-strong);
+  color: var(--color-text-primary);
+  outline: none;
+  box-shadow: 0 18px 30px color-mix(in srgb, var(--color-base-080c18) 32%, transparent);
+}
+
+.deck-icon-action:focus-visible {
+  border-color: var(--color-border-brand-focus);
+  box-shadow: 0 0 0 1px var(--color-border-brand-focus);
+}
+
+.deck-icon-action[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.deck-icon-action svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.deck-icon-action-danger {
+  color: var(--color-status-danger);
+  border-color: color-mix(in srgb, var(--color-status-danger) 25%, transparent);
+}
+
+.deck-icon-action-danger:hover,
+.deck-icon-action-danger:focus-visible {
+  background: color-mix(in srgb, var(--color-status-danger-soft) 95%, transparent);
+  color: var(--color-status-danger-strong);
+  border-color: color-mix(in srgb, var(--color-status-danger-strong) 55%, transparent);
 }
 
 .decks-header p {
@@ -1787,6 +1869,207 @@
   margin: 0.75rem 0 0;
   line-height: 1.6;
   max-width: 46ch;
+}
+
+.deck-tools {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.deck-tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.deck-tools-primary {
+  align-items: stretch;
+}
+
+.deck-tools-secondary {
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: var(--space-sm);
+}
+
+.deck-display-toggle {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 35%, transparent);
+  border-radius: 16px;
+  padding: var(--space-2xs);
+  display: inline-flex;
+  gap: var(--space-2xs);
+  background: color-mix(in srgb, var(--color-base-0c1220) 85%, transparent);
+}
+
+.deck-display-toggle legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.deck-toggle-option {
+  position: relative;
+  flex: 1 1 auto;
+}
+
+.deck-toggle-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.deck-toggle-option span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  color: var(--color-text-subtle-strong);
+  transition: background 140ms ease, color 140ms ease;
+  min-width: 120px;
+}
+
+.deck-toggle-option input:checked + span {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-brand-primary) 60%, transparent),
+    color-mix(in srgb, var(--color-brand-secondary) 40%, transparent)
+  );
+  color: var(--color-text-bright);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--color-border-glint) 45%, transparent);
+}
+
+.deck-sort-field,
+.deck-search-field {
+  display: grid;
+  gap: var(--space-3xs);
+  min-width: clamp(220px, 36vw, 320px);
+}
+
+.deck-sort-field span,
+.deck-search-field span,
+.deck-filter-group legend {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--color-base-9ab6ff) 75%, transparent);
+}
+
+.deck-sort-field select,
+.deck-search-field input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 40%, transparent);
+  background: color-mix(in srgb, var(--color-base-121c30) 85%, transparent);
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.deck-sort-field select:focus,
+.deck-search-field input:focus {
+  outline: none;
+  border-color: var(--color-border-brand-focus);
+  box-shadow: 0 0 0 1px var(--color-border-brand-focus);
+}
+
+.deck-reset-button {
+  align-self: end;
+  padding: 0.7rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 30%, transparent);
+  background: color-mix(in srgb, var(--color-base-121a2a) 80%, transparent);
+  color: var(--color-text-subtle-strong);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 130ms ease, border-color 130ms ease, background 130ms ease,
+    color 130ms ease;
+}
+
+.deck-reset-button:hover,
+.deck-reset-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--color-border-soft-strong);
+  background: color-mix(in srgb, var(--color-base-202c48) 70%, transparent);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.deck-reset-button:focus-visible {
+  box-shadow: 0 0 0 1px var(--color-border-brand-focus);
+  border-color: var(--color-border-brand-focus);
+}
+
+.deck-filter-group {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 30%, transparent);
+  border-radius: 18px;
+  padding: var(--space-xs) var(--space-sm);
+  display: grid;
+  gap: var(--space-2xs);
+  background: color-mix(in srgb, var(--color-base-0c1220) 80%, transparent);
+  min-width: clamp(240px, 40vw, 320px);
+}
+
+.deck-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3xs);
+}
+
+.deck-filter-chip {
+  position: relative;
+  display: inline-flex;
+}
+
+.deck-filter-chip input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.deck-filter-chip span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 28%, transparent);
+  background: color-mix(in srgb, var(--color-base-121c30) 80%, transparent);
+  color: var(--color-text-subtle-strong);
+  font-size: 0.85rem;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.deck-filter-chip input:checked + span {
+  background: color-mix(in srgb, var(--color-brand-primary) 70%, transparent);
+  color: var(--color-text-bright);
+  border-color: color-mix(in srgb, var(--color-brand-secondary) 55%, transparent);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--color-border-glint) 32%, transparent);
+}
+
+.deck-filter-chip input:focus-visible + span {
+  outline: none;
+  border-color: var(--color-border-brand-focus);
+  box-shadow: 0 0 0 1px var(--color-border-brand-focus);
+}
+
+.deck-tools-filters {
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .deck-detail-main,

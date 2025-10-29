@@ -47,14 +47,34 @@
       padding: var(--space-xl) var(--space-md);
     }
 
-    .deck-collection {
-      scroll-padding-inline: var(--space-xs);
-      scroll-snap-type: x mandatory;
+    .deck-tools-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-sm);
     }
 
-    .deck-card {
-      min-width: min(85vw, 320px);
-      flex: 0 0 min(85vw, 320px);
+    .deck-tools-secondary {
+      align-items: stretch;
+    }
+
+    .deck-filter-group {
+      min-width: 100%;
+      width: 100%;
+    }
+
+    .deck-collection {
+      margin-top: var(--space-lg);
+      gap: var(--space-md);
+    }
+
+    .deck-collection[data-mode="standard"] .deck-grid,
+    .deck-bracket-group .deck-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .deck-bracket-group {
+      padding: var(--space-sm);
+      gap: var(--space-sm);
     }
 
     .game-history-entry {
