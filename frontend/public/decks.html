@@ -91,22 +91,6 @@
               </span>
               <span class="sr-only">Synchroniser</span>
             </a>
-            <button
-              class="deck-icon-action deck-icon-action-danger is-hidden"
-              type="button"
-              id="deckBulkDelete"
-              disabled
-              aria-label="Supprimer tous les decks"
-            >
-              <span class="deck-icon-action-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                  <path
-                    d="M10 4a2 2 0 0 1 4 0h5a1 1 0 1 1 0 2h-1v12a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V6H5a1 1 0 0 1 0-2h5Zm6 2H8v12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V6Zm-6 2a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Zm4 0a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z"
-                  ></path>
-                </svg>
-              </span>
-              <span class="sr-only">Supprimer tous les decks</span>
-            </button>
           </div>
         </header>
         <section class="deck-tools" aria-label="Options d'affichage des decks">
@@ -114,13 +98,7 @@
             <fieldset class="deck-display-toggle">
               <legend>Mode d'affichage</legend>
               <label class="deck-toggle-option">
-                <input
-                  type="radio"
-                  name="deckDisplayMode"
-                  value="standard"
-                  id="deckDisplayStandard"
-                  checked
-                />
+                <input type="radio" name="deckDisplayMode" value="standard" id="deckDisplayStandard" />
                 <span>Standard</span>
               </label>
               <label class="deck-toggle-option">
@@ -129,6 +107,7 @@
                   name="deckDisplayMode"
                   value="bracket"
                   id="deckDisplayBracket"
+                  checked
                 />
                 <span>Bracket</span>
               </label>
@@ -228,8 +207,21 @@
             </fieldset>
           </div>
         </section>
+        <div class="deck-bulk-actions is-hidden">
+          <button
+            class="deck-bulk-delete-button is-hidden"
+            type="button"
+            id="deckBulkDelete"
+            disabled
+          >
+            Supprimer tous les decks importés
+          </button>
+          <p class="deck-bulk-note">
+            Cette action supprime définitivement toutes les listes importées pour ce compte.
+          </p>
+        </div>
         <p class="deck-status" id="deckStatus" role="status"></p>
-        <div class="deck-collection" id="deckCollection"></div>
+        <div class="deck-collection" id="deckCollection" data-mode="bracket"></div>
         <p class="deck-collection-empty" id="deckCollectionEmpty">
           Aucun deck importé pour le moment. Lancez une synchronisation pour retrouver vos
           listes.

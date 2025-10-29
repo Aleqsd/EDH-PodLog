@@ -223,3 +223,159 @@ test("createDeckSnapshot serialises decks with sanitised boards for fast renderi
   assert.equal(snapshot.deck.raw.description, "An interactive control list.");
   assert.equal(snapshot.deck.raw.synced_at, "2024-04-02T09:00:00Z");
 });
+
+test("collectDeckBoards normalises board dictionaries from Moxfield", () => {
+  const { collectDeckBoards } = loadInternals();
+  const deck = {
+    raw: {
+      boards: {
+        commanders: {
+          count: 2,
+          cards: {
+            "card-1": {
+              quantity: 1,
+              card: {
+                name: "Brago, King Eternal",
+                color_identity: ["W", "U"],
+              },
+            },
+            "card-2": {
+              quantity: 1,
+              card: {
+                name: "Thrasios, Triton Hero",
+                color_identity: ["G", "U"],
+              },
+            },
+          },
+        },
+        mainboard: {
+          cards: {
+            "card-3": {
+              quantity: 3,
+              card: {
+                name: "Sol Ring",
+                color_identity: [],
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const boards = collectDeckBoards(deck);
+  assert.equal(Array.isArray(boards), true);
+  assert.equal(boards.length, 2);
+  const commanderBoard = boards.find((board) => board.name === "commanders");
+  assert.ok(commanderBoard, "expected commanders board to be normalised");
+  assert.equal(commanderBoard.count, 2);
+  assert.equal(commanderBoard.cards.length, 2);
+  assert.equal(commanderBoard.cards[0].card.name, "Brago, King Eternal");
+  assert.equal(commanderBoard.cards[1].quantity, 1);
+});
+
+test("resolveDeckColorIdentity prioritises commander colour identity", () => {
+  const { resolveDeckColorIdentity } = loadInternals();
+  const deck = {
+    raw: {
+      colors: ["R", "G"],
+      boards: {
+        commanders: {
+          cards: {
+            lead: {
+              quantity: 1,
+              card: {
+                name: "Atraxa, Praetors' Voice",
+                color_identity: ["W", "U", "B", "G"],
+              },
+            },
+          },
+        },
+        mainboard: {
+          cards: {
+            splash: {
+              quantity: 1,
+              card: {
+                name: "Mountain",
+                color_identity: ["R"],
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const colors = resolveDeckColorIdentity(deck);
+  assert.equal(colors.length, 4);
+  assert.equal(colors.join(","), "W,U,B,G");
+});
+
+test("resolveDeckColorIdentity returns colourless when commanders lack colours", () => {
+  const { resolveDeckColorIdentity } = loadInternals();
+  const deck = {
+    raw: {
+      boards: {
+        commanders: {
+          cards: {
+            lead: {
+              quantity: 1,
+              card: {
+                name: "Kozilek, the Great Distortion",
+                color_identity: [],
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const colors = resolveDeckColorIdentity(deck);
+  assert.equal(colors.length, 1);
+  assert.equal(colors[0], "C");
+});
+
+test("doesDeckMatchSearch matches card names inside deck boards", () => {
+  const { doesDeckMatchSearch, normalizeText } = loadInternals();
+  const manaCryptDeck = {
+    name: "Artifacts",
+    raw: {
+      boards: {
+        mainboard: {
+          cards: {
+            accel: {
+              quantity: 1,
+              card: {
+                name: "Mana Crypt",
+                color_identity: [],
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+  const rampDeck = {
+    name: "Ramp Up",
+    raw: {
+      boards: {
+        mainboard: {
+          cards: {
+            accel: {
+              quantity: 1,
+              card: {
+                name: "Cultivate",
+                color_identity: ["G"],
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const query = normalizeText("crypt");
+  assert.equal(doesDeckMatchSearch(manaCryptDeck, query), true);
+  assert.equal(doesDeckMatchSearch(rampDeck, query), false);
+});

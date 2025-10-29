@@ -2,6 +2,7 @@ const STORAGE_KEY = "edhPodlogSession";
 const LAST_DECK_STORAGE_KEY = "edhPodlogLastDeckSelection";
 const LAST_CARD_STORAGE_KEY = "edhPodlogLastCardSelection";
 const DECK_EVALUATIONS_STORAGE_KEY = "edhPodlogDeckEvaluations";
+const DECK_LAYOUT_STORAGE_KEY = "edhPodlogDeckDisplayMode";
 const CONFIG = window.EDH_PODLOG_CONFIG ?? {};
 const GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_SCOPES = "openid email profile";
@@ -167,6 +168,7 @@ let deckCollectionEl = null;
 let deckCollectionEmptyEl = null;
 let deckStatusEl = null;
 let deckBulkDeleteBtn = null;
+let deckBulkDeleteContainer = null;
 
 const DECK_COLOR_CODES = ["W", "U", "B", "R", "G", "C"];
 const DECK_COLOR_CODE_SET = new Set(DECK_COLOR_CODES);
@@ -209,8 +211,34 @@ const BRACKET_KEYWORD_ENTRIES = [
   ["compet", "5"],
 ];
 
+const resolveStoredDeckDisplayMode = () => {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+  try {
+    const stored = localStorage.getItem(DECK_LAYOUT_STORAGE_KEY);
+    if (stored === "bracket" || stored === "standard") {
+      return stored;
+    }
+  } catch (error) {
+    console.warn("Impossible de lire le mode d'affichage des decks sauvegardé :", error);
+  }
+  return null;
+};
+
+const persistDeckDisplayMode = (mode) => {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  try {
+    localStorage.setItem(DECK_LAYOUT_STORAGE_KEY, mode);
+  } catch (error) {
+    console.warn("Impossible d'enregistrer le mode d'affichage des decks :", error);
+  }
+};
+
 const deckCollectionState = {
-  displayMode: "standard",
+  displayMode: resolveStoredDeckDisplayMode() ?? "bracket",
   sort: "updated-desc",
   searchRaw: "",
   search: "",
@@ -2263,11 +2291,27 @@ const buildDeckColorSortKey = (colors) => {
   return `${indices.length}-${indices.join("")}`;
 };
 
+const isCommanderBoardName = (name) => {
+  const normalized = normalizeText(name);
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.includes("commander") ||
+    normalized.includes("commandant") ||
+    normalized.includes("companion") ||
+    normalized.includes("compagnon") ||
+    normalized.includes("partner")
+  );
+};
+
 const resolveDeckColorIdentity = (deck) => {
   const colors = new Set();
-  let sawExplicitColorless = false;
+  const commanderColors = new Set();
+  let sawAnyColorless = false;
+  let sawCommanderColorless = false;
 
-  const addColorToken = (token) => {
+  const addColorToken = (token, isCommander) => {
     if (token === null || token === undefined) {
       return;
     }
@@ -2276,21 +2320,32 @@ const resolveDeckColorIdentity = (deck) => {
       return;
     }
     for (const char of str) {
-      if (DECK_COLOR_CODE_SET.has(char)) {
-        colors.add(char);
+      if (!DECK_COLOR_CODE_SET.has(char)) {
+        continue;
+      }
+      colors.add(char);
+      if (isCommander) {
+        commanderColors.add(char);
       }
     }
   };
 
-  const processColorSource = (value) => {
+  const markColorless = (isCommander) => {
+    sawAnyColorless = true;
+    if (isCommander) {
+      sawCommanderColorless = true;
+    }
+  };
+
+  const processColorSource = (value, { isCommander = false } = {}) => {
     if (value === null || value === undefined) {
       return;
     }
     if (Array.isArray(value)) {
       if (value.length === 0) {
-        sawExplicitColorless = true;
+        markColorless(isCommander);
       }
-      value.forEach(processColorSource);
+      value.forEach((entry) => processColorSource(entry, { isCommander }));
       return;
     }
     if (typeof value === "string") {
@@ -2300,7 +2355,7 @@ const resolveDeckColorIdentity = (deck) => {
       }
       const matches = trimmed.match(/[WUBRGC]/gi);
       if (matches && matches.length > 0) {
-        matches.forEach(addColorToken);
+        matches.forEach((match) => addColorToken(match, isCommander));
         return;
       }
       const normalized = normalizeText(trimmed);
@@ -2309,7 +2364,7 @@ const resolveDeckColorIdentity = (deck) => {
         normalized.includes("incolore") ||
         normalized.includes("sans couleur")
       ) {
-        sawExplicitColorless = true;
+        markColorless(isCommander);
       }
       return;
     }
@@ -2327,77 +2382,115 @@ const resolveDeckColorIdentity = (deck) => {
         value.card?.colour_identity,
         value.card?.colors,
       ];
-      nestedCandidates.forEach(processColorSource);
+      nestedCandidates.forEach((candidate) => processColorSource(candidate, { isCommander }));
+
       if (Array.isArray(value.commanders)) {
-        value.commanders.forEach(processColorSource);
+        value.commanders.forEach((entry) => processColorSource(entry, { isCommander: true }));
+      }
+      if (value.commander) {
+        processColorSource(value.commander, { isCommander: true });
       }
       if (Array.isArray(value.cards)) {
-        value.cards.forEach(processColorSource);
+        value.cards.forEach((entry) => processColorSource(entry, { isCommander }));
       }
       if (value.card) {
-        processColorSource(value.card);
+        processColorSource(value.card, { isCommander });
       }
     }
   };
 
-  [
-    deck?.colorIdentity,
-    deck?.color_identity,
-    deck?.colour_identity,
-    deck?.colors,
-    deck?.identity,
-    deck?.raw?.colorIdentity,
-    deck?.raw?.color_identity,
-    deck?.raw?.colour_identity,
-    deck?.raw?.colors,
-    deck?.raw?.metadata?.colorIdentity,
-    deck?.raw?.metadata?.color_identity,
-    deck?.raw?.podlog?.colorIdentity,
-    deck?.raw?.podlog?.color_identity,
-    deck?.raw?.profile?.colorIdentity,
-    deck?.raw?.profile?.color_identity,
-    deck?.raw?.commander,
-    deck?.raw?.commanders,
-    deck?.raw?.primaryCommander,
-    deck?.raw?.secondaryCommander,
-  ].forEach(processColorSource);
+  const processSources = (sources, isCommander = false) => {
+    sources.forEach((source) => processColorSource(source, { isCommander }));
+  };
+
+  processSources(
+    [
+      deck?.raw?.commander,
+      deck?.raw?.commanders,
+      deck?.raw?.primaryCommander,
+      deck?.raw?.secondaryCommander,
+      deck?.raw?.podlog?.commander,
+      deck?.raw?.podlog?.commanders,
+      deck?.raw?.profile?.commander,
+      deck?.raw?.profile?.commanders,
+    ],
+    true,
+  );
+
+  processSources(
+    [
+      deck?.colorIdentity,
+      deck?.color_identity,
+      deck?.colour_identity,
+      deck?.colors,
+      deck?.identity,
+      deck?.raw?.colorIdentity,
+      deck?.raw?.color_identity,
+      deck?.raw?.colour_identity,
+      deck?.raw?.colors,
+      deck?.raw?.metadata?.colorIdentity,
+      deck?.raw?.metadata?.color_identity,
+      deck?.raw?.podlog?.colorIdentity,
+      deck?.raw?.podlog?.color_identity,
+      deck?.raw?.profile?.colorIdentity,
+      deck?.raw?.profile?.color_identity,
+    ],
+  );
+
+  const processBoards = (boards) => {
+    if (!Array.isArray(boards)) {
+      return;
+    }
+    boards.forEach((board) => {
+      if (!board) {
+        return;
+      }
+      const isCommanderBoard = isCommanderBoardName(board?.name);
+      const entries = Array.isArray(board?.cards)
+        ? board.cards
+        : board?.cards && typeof board.cards === "object"
+        ? Object.values(board.cards)
+        : [];
+      entries.forEach((entry) => {
+        const cardData = entry?.card ?? entry;
+        processColorSource(cardData, { isCommander: isCommanderBoard });
+      });
+    });
+  };
 
   if (typeof collectDeckBoards === "function") {
     try {
       const boards = collectDeckBoards(deck);
-      boards.forEach((board) => {
-        if (!Array.isArray(board?.cards)) {
-          return;
-        }
-        board.cards.forEach((entry) => {
-          if (entry?.card) {
-            const cardData = entry.card.card ?? entry.card;
-            processColorSource(cardData);
-          }
-        });
-      });
+      processBoards(boards);
     } catch (error) {
       console.warn("Impossible d'extraire les couleurs du deck :", error);
     }
   } else if (Array.isArray(deck?.raw?.boards)) {
-    deck.raw.boards.forEach((board) => {
-      if (!Array.isArray(board?.cards)) {
-        return;
-      }
-      board.cards.forEach((entry) => {
-        if (entry?.card) {
-          processColorSource(entry.card);
-        }
-      });
-    });
+    processBoards(deck.raw.boards);
   }
 
-  const ordered = Array.from(colors).filter((color) => DECK_COLOR_CODE_SET.has(color));
-  ordered.sort((a, b) => DECK_COLOR_CODES.indexOf(a) - DECK_COLOR_CODES.indexOf(b));
-  if (ordered.length === 0 && sawExplicitColorless) {
+  const toOrderedArray = (set) => {
+    const ordered = Array.from(set).filter((color) => DECK_COLOR_CODE_SET.has(color));
+    ordered.sort((a, b) => DECK_COLOR_CODES.indexOf(a) - DECK_COLOR_CODES.indexOf(b));
+    return ordered;
+  };
+
+  const commanderOrdered = toOrderedArray(commanderColors);
+  if (commanderOrdered.length > 0) {
+    return commanderOrdered;
+  }
+  if (sawCommanderColorless) {
     return ["C"];
   }
-  return ordered;
+
+  const generalOrdered = toOrderedArray(colors);
+  if (generalOrdered.length > 0) {
+    return generalOrdered;
+  }
+  if (sawAnyColorless) {
+    return ["C"];
+  }
+  return [];
 };
 
 const collectDeckCardNames = (deck) => {
@@ -2503,6 +2596,36 @@ const collectCommanderNames = (deck) => {
     deck?.raw?.podlog?.commanders,
     deck?.raw?.profile?.commander,
   ].forEach(processCommanderSource);
+
+  const processCommanderBoard = (boards) => {
+    if (!Array.isArray(boards)) {
+      return;
+    }
+    boards.forEach((board) => {
+      if (!board || !isCommanderBoardName(board?.name) || !Array.isArray(board?.cards)) {
+        return;
+      }
+      board.cards.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+        const cardData = entry.card?.card ?? entry.card ?? entry;
+        processCommanderSource(cardData);
+      });
+    });
+  };
+
+  if (typeof collectDeckBoards === "function") {
+    try {
+      processCommanderBoard(collectDeckBoards(deck));
+    } catch (error) {
+      console.warn("Impossible d'extraire les commandants du deck :", error);
+    }
+  } else if (Array.isArray(deck?.raw?.boards)) {
+    processCommanderBoard(deck.raw.boards);
+  } else if (deck?.raw?.boards && typeof deck.raw.boards === "object") {
+    processCommanderBoard(Object.values(deck.raw.boards));
+  }
 
   return Array.from(names);
 };
@@ -2804,6 +2927,7 @@ const setDeckCollectionDisplayMode = (mode) => {
   if (deckCollectionEl) {
     deckCollectionEl.dataset.mode = normalized;
   }
+  persistDeckDisplayMode(normalized);
   return deckCollectionState.displayMode;
 };
 
@@ -3127,6 +3251,9 @@ const refreshDeckCollection = (session) => {
     const hasAnyDecks = decks.length > 0;
     deckBulkDeleteBtn.disabled = !hasAnyDecks;
     deckBulkDeleteBtn.classList.toggle("is-hidden", !hasAnyDecks);
+    if (deckBulkDeleteContainer) {
+      deckBulkDeleteContainer.classList.toggle("is-hidden", !hasAnyDecks);
+    }
   }
 };
 

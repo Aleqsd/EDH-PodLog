@@ -567,32 +567,84 @@ const syncMoxfieldDecks = async (handle, signal) => {
   }
 };
 
-const collectDeckBoards = (deck) =>
-  Array.isArray(deck?.raw?.boards)
-    ? deck.raw.boards
-        .map((board) => ({
-          name: board.name || "",
-          count: board.count || 0,
-          cards: Array.isArray(board?.cards)
-            ? board.cards
-                .map((entry) => {
-                  if (!entry || typeof entry !== "object" || !entry.card) {
-                    return null;
-                  }
-                  const card = entry.card;
-                  return {
-                    card,
-                    quantity:
-                      typeof entry.quantity === "number" && Number.isFinite(entry.quantity)
-                        ? entry.quantity
-                        : 0,
-                  };
-                })
-                .filter(Boolean)
-            : [],
-        }))
-        .filter(Boolean)
-    : [];
+const collectDeckBoards = (deck) => {
+  const normalizeCardEntry = (entry) => {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+    const sourceCard = entry.card ?? entry;
+    const card =
+      sourceCard && typeof sourceCard === "object"
+        ? typeof sourceCard.card === "object"
+          ? sourceCard.card
+          : sourceCard
+        : null;
+    if (!card || typeof card !== "object") {
+      return null;
+    }
+    const quantityCandidates = [
+      entry.quantity,
+      sourceCard.quantity,
+      entry.count,
+      sourceCard.count,
+    ];
+    let quantity = 0;
+    for (const candidate of quantityCandidates) {
+      if (typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0) {
+        quantity = candidate;
+        break;
+      }
+    }
+    return { card, quantity };
+  };
+
+  const buildBoard = (name, boardData) => {
+    if (!boardData || typeof boardData !== "object") {
+      return null;
+    }
+
+    const resolvedName =
+      typeof boardData.name === "string" && boardData.name.trim().length > 0
+        ? boardData.name
+        : typeof name === "string"
+        ? name
+        : "";
+
+    const rawCards = Array.isArray(boardData.cards)
+      ? boardData.cards
+      : boardData.cards && typeof boardData.cards === "object"
+      ? Object.values(boardData.cards)
+      : [];
+
+    const cards = rawCards.map(normalizeCardEntry).filter(Boolean);
+    if (cards.length === 0) {
+      return null;
+    }
+
+    const inferredCount = cards.reduce((sum, entry) => sum + (entry.quantity || 0), 0);
+    const count =
+      typeof boardData.count === "number" && Number.isFinite(boardData.count)
+        ? boardData.count
+        : inferredCount;
+
+    return {
+      name: resolvedName || "",
+      count,
+      cards,
+    };
+  };
+
+  const boardsSource = deck?.raw?.boards ?? deck?.boards ?? null;
+  if (Array.isArray(boardsSource)) {
+    return boardsSource.map((board) => buildBoard(board?.name, board)).filter(Boolean);
+  }
+  if (boardsSource && typeof boardsSource === "object") {
+    return Object.entries(boardsSource)
+      .map(([boardName, boardData]) => buildBoard(boardName, boardData))
+      .filter(Boolean);
+  }
+  return [];
+};
 
 const collectDeckCards = (deck) => {
   const boards = collectDeckBoards(deck);
@@ -4130,6 +4182,13 @@ if (typeof window !== "undefined") {
     sanitizeCardData,
     getPrimaryCardIdentifier,
     createDeckSnapshot,
+    collectDeckBoards,
+    resolveDeckColorIdentity,
+    doesDeckMatchSearch,
+    setDeckCollectionSearchQuery,
+    setDeckCollectionDisplayMode,
+    getDeckCollectionState,
+    normalizeText,
   };
 }
 

@@ -9,6 +9,27 @@
     deckCollectionEmptyEl = document.getElementById("deckCollectionEmpty");
     deckStatusEl = document.getElementById("deckStatus");
     deckBulkDeleteBtn = document.getElementById("deckBulkDelete");
+    deckBulkDeleteContainer = null;
+    if (deckBulkDeleteBtn) {
+      if (typeof deckBulkDeleteBtn.closest === "function") {
+        deckBulkDeleteContainer =
+          deckBulkDeleteBtn.closest(".deck-bulk-actions") ??
+          deckBulkDeleteBtn.parentElement ??
+          null;
+      } else {
+        let current = deckBulkDeleteBtn.parentElement ?? deckBulkDeleteBtn.parentNode ?? null;
+        while (current) {
+          const hasMatch =
+            typeof current.classList?.contains === "function" &&
+            current.classList.contains("deck-bulk-actions");
+          if (hasMatch) {
+            deckBulkDeleteContainer = current;
+            break;
+          }
+          current = current.parentElement ?? current.parentNode ?? null;
+        }
+      }
+    }
     const deckDisplayStandard = document.getElementById("deckDisplayStandard");
     const deckDisplayBracket = document.getElementById("deckDisplayBracket");
     const deckSortSelect = document.getElementById("deckSortSelect");

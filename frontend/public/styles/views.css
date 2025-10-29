@@ -2422,6 +2422,55 @@ body.life-tracker-open {
   transform: translateY(-1px);
 }
 
+.deck-bulk-actions {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-status-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--color-status-danger-soft) 55%, transparent);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.deck-bulk-delete-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--color-status-danger) 55%, transparent);
+  background: color-mix(in srgb, var(--color-status-danger-soft) 85%, transparent);
+  color: var(--color-status-danger-strong);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.deck-bulk-delete-button:hover,
+.deck-bulk-delete-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-status-danger) 75%, transparent);
+  box-shadow: 0 14px 24px color-mix(in srgb, var(--color-status-danger-soft) 45%, transparent);
+  outline: none;
+}
+
+.deck-bulk-delete-button:focus-visible {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-status-danger) 65%, transparent),
+    0 16px 26px color-mix(in srgb, var(--color-status-danger-soft) 48%, transparent);
+}
+
+.deck-bulk-delete-button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.deck-bulk-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-status-danger-mid);
+}
+
 .deck-collection {
   margin-top: var(--space-xl);
   display: grid;

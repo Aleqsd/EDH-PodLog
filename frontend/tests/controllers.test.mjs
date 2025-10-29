@@ -595,6 +595,10 @@ test("dashboard controller initialises pod composition with four default players
   const status = createElement("p", { id: "gameStatus" });
   const historyEmpty = createElement("div", { id: "gameHistoryEmpty" });
   const historyList = createElement("ol", { id: "gameHistoryList" });
+  const lifeTrackerOverlay = createElement("div", { id: "lifeTrackerOverlay" });
+  const lifeTrackerGrid = createElement("div", { id: "lifeTrackerGrid" });
+  const lifeTrackerClose = createElement("button", { id: "lifeTrackerClose" });
+  const lifeTrackerReset = createElement("button", { id: "lifeTrackerReset" });
 
   const elementsById = {
     gameSetupToggle: toggleBtn,
@@ -614,6 +618,10 @@ test("dashboard controller initialises pod composition with four default players
     gameStatus: status,
     gameHistoryEmpty: historyEmpty,
     gameHistoryList: historyList,
+    lifeTrackerOverlay,
+    lifeTrackerGrid,
+    lifeTrackerClose,
+    lifeTrackerReset,
   };
 
   await setupControllerRuntime({
@@ -657,6 +665,10 @@ test("dashboard controller records additional players into the known list after 
   const status = createElement("p", { id: "gameStatus" });
   const historyEmpty = createElement("div", { id: "gameHistoryEmpty" });
   const historyList = createElement("ol", { id: "gameHistoryList" });
+  const lifeTrackerOverlay = createElement("div", { id: "lifeTrackerOverlay" });
+  const lifeTrackerGrid = createElement("div", { id: "lifeTrackerGrid" });
+  const lifeTrackerClose = createElement("button", { id: "lifeTrackerClose" });
+  const lifeTrackerReset = createElement("button", { id: "lifeTrackerReset" });
 
   const elementsById = {
     gameSetupToggle: toggleBtn,
@@ -676,6 +688,10 @@ test("dashboard controller records additional players into the known list after 
     gameStatus: status,
     gameHistoryEmpty: historyEmpty,
     gameHistoryList: historyList,
+    lifeTrackerOverlay,
+    lifeTrackerGrid,
+    lifeTrackerClose,
+    lifeTrackerReset,
   };
 
   await setupControllerRuntime({
