@@ -98,3 +98,129 @@ def test_record_game_creates_playgroup_when_missing(api_client: TestClient) -> N
     assert len(groups) == 1
     assert groups[0]["name"] == "Nouveau Groupe"
     assert groups[0]["game_count"] == 1
+
+
+def test_playgroup_detail_includes_stats_and_members(api_client: TestClient) -> None:
+    owner = "stats-owner"
+    create_group = api_client.post(
+        f"/profiles/{owner}/playgroups",
+        json={"name": "Stats Group"},
+    )
+    assert create_group.status_code == 201
+    playgroup_id = create_group.json()["id"]
+
+    game_payload = {
+        "playgroup": {"id": playgroup_id, "name": "Stats Group"},
+        "players": [
+            {"id": "alice", "name": "Alice"},
+            {"id": "bob", "name": "Bob"},
+            {"id": "carol", "name": "Carol"},
+            {"id": "dave", "name": "Dave"},
+        ],
+        "rankings": [
+            {"player_id": "alice", "rank": 1},
+            {"player_id": "bob", "rank": 2},
+            {"player_id": "carol", "rank": 3},
+            {"player_id": "dave", "rank": 4},
+        ],
+    }
+    record_one = api_client.post(f"/profiles/{owner}/games", json=game_payload)
+    assert record_one.status_code == 201
+
+    game_payload["rankings"] = [
+        {"player_id": "bob", "rank": 1},
+        {"player_id": "alice", "rank": 2},
+        {"player_id": "carol", "rank": 3},
+        {"player_id": "dave", "rank": 4},
+    ]
+    record_two = api_client.post(f"/profiles/{owner}/games", json=game_payload)
+    assert record_two.status_code == 201
+
+    update_members = api_client.put(
+        f"/profiles/{owner}/playgroups/{playgroup_id}",
+        json={
+            "members": [
+                {"playerType": "user", "googleSub": "friend-1", "name": "Friend One"},
+                {"playerType": "guest", "playerId": "guest-1", "name": "Guest Ally"},
+            ]
+        },
+    )
+    assert update_members.status_code == 200
+
+    detail_response = api_client.get(f"/profiles/{owner}/playgroups/{playgroup_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["stats"]["total_games"] == 2
+    assert len(detail["members"]) == 2
+    wins_by_player = {entry["name"]: entry["wins"] for entry in detail["stats"]["player_performance"]}
+    assert wins_by_player["Alice"] == 1
+    assert wins_by_player["Bob"] == 1
+
+
+def test_linking_tracked_player_updates_games(api_client: TestClient) -> None:
+    owner = "player-owner"
+    target = "linked-user"
+
+    # Ensure owner profile exists for completeness
+    owner_profile = api_client.put(
+        f"/profiles/{owner}",
+        json={"display_name": "Owner Player"},
+    )
+    assert owner_profile.status_code == 200
+
+    create_player = api_client.post(
+        f"/profiles/{owner}/players",
+        json={"name": "Guest Player"},
+    )
+    assert create_player.status_code == 201
+    player_id = create_player.json()["id"]
+
+    game_payload = {
+        "playgroup": {"name": "Link Group"},
+        "players": [
+            {"id": player_id, "name": "Guest Player", "deck_id": "deck-guest", "deck_name": "Guest Deck"},
+            {"id": "owner-slot", "name": "Owner Player", "is_owner": True},
+        ],
+        "rankings": [
+            {"player_id": player_id, "rank": 1},
+            {"player_id": "owner-slot", "rank": 2},
+        ],
+    }
+    record_game = api_client.post(f"/profiles/{owner}/games", json=game_payload)
+    assert record_game.status_code == 201
+
+    target_profile = api_client.put(
+        f"/profiles/{target}",
+        json={
+            "display_name": "Linked User",
+            "is_public": True,
+            "moxfield_decks": [
+                {"public_id": "deck-xyz", "name": "Linked Deck", "format": "edh"}
+            ],
+        },
+    )
+    assert target_profile.status_code == 200
+
+    link_response = api_client.post(
+        f"/profiles/{owner}/players/{player_id}/link",
+        json={"google_sub": target},
+    )
+    assert link_response.status_code == 200
+    linked_player = link_response.json()
+    assert linked_player["google_sub"] == target
+    assert linked_player["playerType"] == "user"
+
+    games_after_link = api_client.get(f"/profiles/{owner}/games")
+    assert games_after_link.status_code == 200
+    game_body = games_after_link.json()["games"][0]
+    updated_guest = next(player for player in game_body["players"] if player["id"] == player_id)
+    assert updated_guest["googleSub"] == target
+    assert updated_guest["playerType"] == "user"
+
+    available_response = api_client.get(f"/profiles/{owner}/players/available")
+    assert available_response.status_code == 200
+    available_players = available_response.json()["players"]
+    linked_entry = next(player for player in available_players if player["id"] == player_id)
+    assert linked_entry["playerType"] == "user"
+    assert linked_entry["google_sub"] == target
+    assert linked_entry["decks"][0]["public_id"] == "deck-xyz"

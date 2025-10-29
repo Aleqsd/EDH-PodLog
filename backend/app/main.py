@@ -13,13 +13,17 @@ from .repositories import (
     ensure_deck_personalization_indexes,
     ensure_moxfield_cache_indexes,
     ensure_play_data_indexes,
+    ensure_player_indexes,
+    ensure_follow_indexes,
 )
 from .routers import (
     cache_router,
     games_router,
     meta_router,
+    players_router,
     playgroups_router,
     profiles_router,
+    social_router,
     users_router,
 )
 
@@ -45,6 +49,14 @@ def create_app() -> FastAPI:
             await ensure_deck_personalization_indexes(database)
         except Exception:  # pragma: no cover - defensive logging
             logger.exception("Failed to ensure personalization indexes during startup.")
+        try:
+            await ensure_player_indexes(database)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to ensure player indexes during startup.")
+        try:
+            await ensure_follow_indexes(database)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to ensure follow indexes during startup.")
         try:
             yield
         finally:
@@ -75,6 +87,8 @@ def create_app() -> FastAPI:
     app.include_router(playgroups_router)
     app.include_router(games_router)
     app.include_router(profiles_router)
+    app.include_router(players_router)
+    app.include_router(social_router)
     app.include_router(users_router)
     app.include_router(cache_router)
 

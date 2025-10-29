@@ -154,6 +154,12 @@
                 </div>
               </div>
               <div class="player-fields">
+                <label class="player-field player-source-field">
+                  <span>Joueur suivi</span>
+                  <select class="player-source-select">
+                    <option value="">Saisie libre</option>
+                  </select>
+                </label>
                 <label class="player-field">
                   <span>Nom du joueur</span>
                   <input class="player-name-input" type="text" required />
@@ -162,6 +168,10 @@
                   <label class="player-field player-deck-manual" hidden>
                     <span>Deck joué</span>
                     <input class="player-deck-input" type="text" />
+                  </label>
+                  <label class="player-field player-linked-deck" hidden>
+                    <span>Deck suivi</span>
+                    <select class="player-linked-deck-select"></select>
                   </label>
                   <label class="player-field player-deck-select" hidden>
                     <span>Deck du propriétaire</span>

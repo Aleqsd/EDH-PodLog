@@ -4,7 +4,9 @@ from .cache import router as cache_router
 from .games import router as games_router
 from .meta import router as meta_router
 from .playgroups import router as playgroups_router
+from .players import router as players_router
 from .profiles import router as profiles_router
+from .social import router as social_router
 from .users import router as users_router
 
 __all__ = [
@@ -12,6 +14,8 @@ __all__ = [
     "games_router",
     "playgroups_router",
     "meta_router",
+    "players_router",
     "profiles_router",
+    "social_router",
     "users_router",
 ]

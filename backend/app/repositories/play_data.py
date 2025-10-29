@@ -75,7 +75,13 @@ class PlaygroupRepository:
         )
         return clean
 
-    async def upsert(self, owner_sub: str, name: str) -> dict[str, Any]:
+    async def upsert(
+        self,
+        owner_sub: str,
+        name: str,
+        *,
+        members: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Create or update a playgroup with the given name for an owner."""
         safe_name = self._normalize_name(name)
         slug = self._slugify(safe_name)
@@ -88,6 +94,8 @@ class PlaygroupRepository:
                 "slug": slug,
                 "updated_at": now,
             }
+            if members is not None:
+                updates["members"] = members
             await self._collection.update_one(
                 self.id_filter(owner_sub, document["id"]),
                 {"$set": updates},
@@ -106,6 +114,7 @@ class PlaygroupRepository:
             "updated_at": now,
             "last_used_at": now,
             "game_count": 0,
+            "members": members or [],
         }
         await self._collection.update_one(
             self.id_filter(owner_sub, playgroup_id),
@@ -155,6 +164,10 @@ class PlaygroupRepository:
             upsert=True,
         )
         return document
+
+    async def delete(self, owner_sub: str, playgroup_id: str) -> bool:
+        result = await self._collection.delete_one(self.id_filter(owner_sub, playgroup_id))
+        return getattr(result, "deleted_count", 0) > 0
 
     async def ensure_indexes(self) -> None:
         logger.info("Ensuring Mongo indexes for playgroups collection.")
@@ -217,6 +230,50 @@ class GameRepository:
                 IndexModel([("playgroup_id", ASCENDING)], name="games_playgroup_lookup"),
             ]
         )
+
+    async def update_player_identity(
+        self,
+        owner_sub: str,
+        player_id: str,
+        *,
+        google_sub: str | None = None,
+        player_type: str | None = None,
+        name: str | None = None,
+    ) -> int:
+        """Update stored games when a player's identity changes."""
+        cursor = self._collection.find(self.owner_filter(owner_sub))
+        documents = await cursor.to_list(length=None)
+        updated = 0
+        now = _now()
+
+        for document in documents:
+            players = document.get("players", [])
+            changed = False
+            for entry in players:
+                if entry.get("id") != player_id:
+                    continue
+                if google_sub is not None:
+                    entry["google_sub"] = google_sub
+                    entry["linked_google_sub"] = google_sub
+                if player_type is not None:
+                    entry["player_type"] = player_type
+                if name is not None:
+                    entry["name"] = name
+                changed = True
+
+            if not changed:
+                continue
+
+            document["players"] = players
+            document["updated_at"] = now
+            await self._collection.update_one(
+                self.id_filter(owner_sub, document["id"]),
+                {"$set": document},
+                upsert=True,
+            )
+            updated += 1
+
+        return updated
 
 
 async def ensure_play_data_indexes(database: AsyncIOMotorDatabase) -> None:

@@ -54,6 +54,7 @@
     const avatarUploadBtn = document.getElementById("profileAvatarUploadButton");
     const avatarClearBtn = document.getElementById("profileAvatarClearButton");
     const avatarInput = document.getElementById("profileAvatarInput");
+    const publicToggle = document.getElementById("profileIsPublic");
 
     if (!context.session) {
       Array.from(formEl.elements).forEach((element) => {
@@ -72,6 +73,8 @@
       savedPicture: context.session.picture || "",
       identityPicture: context.session.identityPicture || "",
       editedPicture: undefined,
+      isPublic: Boolean(context.session?.profileIsPublic),
+      initialIsPublic: Boolean(context.session?.profileIsPublic),
     };
 
     const hasCustomSavedAvatar = () =>
@@ -110,6 +113,9 @@
       if (bioInput) {
         bioInput.value = state.description;
         updateCharCount(bioInput, bioCounter);
+      }
+      if (publicToggle) {
+        publicToggle.checked = Boolean(state.isPublic);
       }
       refreshAvatarPreview();
     };
@@ -191,6 +197,12 @@
       });
     }
 
+    if (publicToggle) {
+      publicToggle.addEventListener("change", () => {
+        state.isPublic = Boolean(publicToggle.checked);
+      });
+    }
+
     formEl.addEventListener("submit", async (event) => {
       event.preventDefault();
 
@@ -232,6 +244,10 @@
         payload.description = trimmedDescription.length > 0 ? currentDescription : null;
       }
 
+      if (typeof state.isPublic === "boolean" && state.isPublic !== state.initialIsPublic) {
+        payload.is_public = state.isPublic;
+      }
+
       if (state.editedPicture !== undefined) {
         payload.picture =
           typeof state.editedPicture === "string" ? state.editedPicture : null;
@@ -262,18 +278,13 @@
         state.savedPicture = merged.picture || "";
         state.identityPicture = merged.identityPicture || state.identityPicture || "";
         state.editedPicture = undefined;
+        state.isPublic = Boolean(merged.profileIsPublic);
+        state.initialIsPublic = state.isPublic;
 
-        if (displayNameInput) {
-          displayNameInput.value = state.displayName;
-        }
-        if (bioInput) {
-          bioInput.value = state.description;
-          updateCharCount(bioInput, bioCounter);
-        }
         if (avatarInput) {
           avatarInput.value = "";
         }
-        refreshAvatarPreview();
+        refreshFormFields();
 
         if (typeof updateProfileBadge === "function") {
           updateProfileBadge(merged);

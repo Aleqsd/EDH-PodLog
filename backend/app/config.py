@@ -20,6 +20,8 @@ class Settings:
     mongo_playgroups_collection: str
     mongo_deck_personalizations_collection: str
     mongo_games_collection: str
+    mongo_players_collection: str
+    mongo_follows_collection: str
     cors_allow_origins: tuple[str, ...]
 
     @classmethod
@@ -41,6 +43,8 @@ class Settings:
                 "MONGO_DECK_PERSONALIZATIONS_COLLECTION", "deck_personalizations"
             ),
             mongo_games_collection=os.getenv("MONGO_GAMES_COLLECTION", "games"),
+            mongo_players_collection=os.getenv("MONGO_PLAYERS_COLLECTION", "players"),
+            mongo_follows_collection=os.getenv("MONGO_FOLLOWS_COLLECTION", "follows"),
             cors_allow_origins=_load_cors_origins(),
         )
 

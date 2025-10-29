@@ -973,11 +973,68 @@ const buildPlaygroupsEndpoint = (googleSub) => {
   );
 };
 
+const buildPlaygroupDetailEndpoint = (googleSub, playgroupId) => {
+  if (!googleSub || !playgroupId) {
+    return null;
+  }
+  return buildBackendUrl(
+    `/profiles/${encodeURIComponent(googleSub)}/playgroups/${encodeURIComponent(playgroupId)}`
+  );
+};
+
+const buildPlayersEndpoint = (googleSub) => {
+  if (!googleSub) {
+    return null;
+  }
+  return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}/players`);
+};
+
+const buildAvailablePlayersEndpoint = (googleSub) => {
+  const base = buildPlayersEndpoint(googleSub);
+  if (!base) {
+    return null;
+  }
+  return `${base}/available`;
+};
+
+const buildTrackedPlayerEndpoint = (googleSub, playerId) => {
+  if (!googleSub || !playerId) {
+    return null;
+  }
+  return buildBackendUrl(
+    `/profiles/${encodeURIComponent(googleSub)}/players/${encodeURIComponent(playerId)}`
+  );
+};
+
+const buildTrackedPlayerLinkEndpoint = (googleSub, playerId) => {
+  const base = buildTrackedPlayerEndpoint(googleSub, playerId);
+  if (!base) {
+    return null;
+  }
+  return `${base}/link`;
+};
+
 const buildGamesEndpoint = (googleSub) => {
   if (!googleSub) {
     return null;
   }
   return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}/games`);
+};
+
+const buildSocialSearchEndpoint = () => buildBackendUrl("/social/users/search");
+
+const buildPublicProfileEndpoint = (googleSub) => {
+  if (!googleSub) {
+    return null;
+  }
+  return buildBackendUrl(`/social/users/${encodeURIComponent(googleSub)}`);
+};
+
+const buildFollowEndpoint = (followerSub) => {
+  if (!followerSub) {
+    return null;
+  }
+  return buildBackendUrl(`/social/users/${encodeURIComponent(followerSub)}/follow`);
 };
 
 const buildDeckPersonalizationsEndpoint = (googleSub) => {
@@ -1079,6 +1136,29 @@ const fetchUserPlaygroups = async (googleSub) => {
   }
 };
 
+const fetchUserPlaygroupDetail = async (googleSub, playgroupId) => {
+  const endpoint = buildPlaygroupDetailEndpoint(googleSub, playgroupId);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de récupérer le groupe (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de récupération du détail du groupe :", error);
+    throw error;
+  }
+};
+
 const upsertUserPlaygroup = async (googleSub, name) => {
   const endpoint = buildPlaygroupsEndpoint(googleSub);
   if (!endpoint) {
@@ -1101,6 +1181,57 @@ const upsertUserPlaygroup = async (googleSub, name) => {
     return response.json();
   } catch (error) {
     console.warn("Échec de l'enregistrement du groupe :", error);
+    throw error;
+  }
+};
+
+const updateUserPlaygroup = async (googleSub, playgroupId, payload) => {
+  const endpoint = buildPlaygroupDetailEndpoint(googleSub, playgroupId);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    if (response.status === 404) {
+      throw new Error("Groupe introuvable");
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de mettre à jour le groupe (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de la mise à jour du groupe :", error);
+    throw error;
+  }
+};
+
+const deleteUserPlaygroup = async (googleSub, playgroupId) => {
+  const endpoint = buildPlaygroupDetailEndpoint(googleSub, playgroupId);
+  if (!endpoint) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "DELETE",
+    });
+    if (response.status === 404) {
+      throw new Error("Groupe introuvable");
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de supprimer le groupe (${response.status}).`);
+    }
+    return true;
+  } catch (error) {
+    console.warn("Échec de la suppression du groupe :", error);
     throw error;
   }
 };
@@ -1161,6 +1292,256 @@ const recordUserGame = async (googleSub, payload) => {
     return response.json();
   } catch (error) {
     console.warn("Échec de l'enregistrement de la partie :", error);
+    throw error;
+  }
+};
+
+const fetchAvailablePlayers = async (googleSub) => {
+  const endpoint = buildAvailablePlayersEndpoint(googleSub);
+  if (!endpoint) {
+    return { players: [] };
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible de récupérer les joueurs (${response.status}).`);
+    }
+    const payload = await response.json();
+    return {
+      players: Array.isArray(payload?.players) ? payload.players : [],
+    };
+  } catch (error) {
+    console.warn("Échec de récupération des joueurs disponibles :", error);
+    throw error;
+  }
+};
+
+const fetchTrackedPlayers = async (googleSub) => {
+  const endpoint = buildPlayersEndpoint(googleSub);
+  if (!endpoint) {
+    return { players: [] };
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible de récupérer les joueurs suivis (${response.status}).`);
+    }
+    const payload = await response.json();
+    return {
+      players: Array.isArray(payload?.players) ? payload.players : [],
+    };
+  } catch (error) {
+    console.warn("Échec de récupération des joueurs suivis :", error);
+    throw error;
+  }
+};
+
+const createTrackedPlayer = async (googleSub, name) => {
+  const endpoint = buildPlayersEndpoint(googleSub);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) {
+      throw new Error(`Création du joueur impossible (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de création d'un joueur suivi :", error);
+    throw error;
+  }
+};
+
+const updateTrackedPlayer = async (googleSub, playerId, payload) => {
+  const endpoint = buildTrackedPlayerEndpoint(googleSub, playerId);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    if (response.status === 404) {
+      throw new Error("Joueur introuvable");
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de mettre à jour le joueur (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de mise à jour du joueur suivi :", error);
+    throw error;
+  }
+};
+
+const deleteTrackedPlayer = async (googleSub, playerId) => {
+  const endpoint = buildTrackedPlayerEndpoint(googleSub, playerId);
+  if (!endpoint) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "DELETE",
+    });
+    if (response.status === 404) {
+      throw new Error("Joueur introuvable");
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de supprimer le joueur (${response.status}).`);
+    }
+    return true;
+  } catch (error) {
+    console.warn("Échec de suppression du joueur suivi :", error);
+    throw error;
+  }
+};
+
+const linkTrackedPlayer = async (googleSub, playerId, targetSub) => {
+  const endpoint = buildTrackedPlayerLinkEndpoint(googleSub, playerId);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ google_sub: targetSub }),
+    });
+    if (response.status === 404) {
+      throw new Error("Joueur introuvable");
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de lier le joueur (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec du rattachement du joueur :", error);
+    throw error;
+  }
+};
+
+const searchPublicUsers = async ({ query, viewer }) => {
+  const endpoint = buildSocialSearchEndpoint();
+  if (!endpoint) {
+    return [];
+  }
+
+  const params = new URLSearchParams();
+  if (query) {
+    params.set("q", query);
+  }
+  if (viewer) {
+    params.set("viewer", viewer);
+  }
+
+  const url = params.toString() ? `${endpoint}?${params}` : endpoint;
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Recherche impossible (${response.status}).`);
+    }
+    const payload = await response.json();
+    return Array.isArray(payload?.results) ? payload.results : [];
+  } catch (error) {
+    console.warn("Échec de la recherche d'utilisateurs :", error);
+    throw error;
+  }
+};
+
+const fetchPublicUserProfile = async (googleSub) => {
+  const endpoint = buildPublicProfileEndpoint(googleSub);
+  if (!endpoint) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de récupérer le profil public (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    console.warn("Échec de chargement du profil public :", error);
+    throw error;
+  }
+};
+
+const followUserAccount = async (followerSub, targetSub) => {
+  const endpoint = buildFollowEndpoint(followerSub);
+  if (!endpoint || !targetSub) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ target_sub: targetSub }),
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible de suivre cet utilisateur (${response.status}).`);
+    }
+    return true;
+  } catch (error) {
+    console.warn("Échec du suivi d'utilisateur :", error);
+    throw error;
+  }
+};
+
+const unfollowUserAccount = async (followerSub, targetSub) => {
+  const endpoint = buildFollowEndpoint(followerSub);
+  if (!endpoint || !targetSub) {
+    return false;
+  }
+
+  const url = `${endpoint}/${encodeURIComponent(targetSub)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      throw new Error(`Impossible de se désabonner (${response.status}).`);
+    }
+    return true;
+  } catch (error) {
+    console.warn("Échec de la désinscription d'un suivi :", error);
     throw error;
   }
 };
@@ -1306,6 +1687,10 @@ const applyProfileToSession = (session, profile) => {
       typeof rawDescription === "string" && rawDescription.length > 0
         ? rawDescription
         : "";
+  }
+
+  if (Object.prototype.hasOwnProperty.call(profile, "is_public")) {
+    next.profileIsPublic = Boolean(profile.is_public);
   }
 
   const existingIntegration = getMoxfieldIntegration(next) || {};

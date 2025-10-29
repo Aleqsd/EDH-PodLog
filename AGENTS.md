@@ -32,6 +32,7 @@
 - Product vision notes live in `docs/edh-podlog-trashdraft.md`.
 - Frontend runtime config is generated via `frontend/scripts/generate-config.mjs`.
 - Frontend runtime splits into `frontend/public/js/app-core.js` & `app-features.js` for shared utilities, `app-init.js` for the router, and per-page controllers under `frontend/public/js/controllers/`.
+- Social graph & guest player data live behind the new `backend/app/repositories/{players,follows}.py` repositories with services in `services/players.py` and `services/social.py`. The dashboard controller now pulls `/profiles/{sub}/players/available` to prefill participant pickers, and the revamped `groupes.js` handles playgroup detail, membership, search and linking flows.
 - Shared styles layer through `frontend/public/styles.css` (`tokens → utilities → base → components → views`):
   - Design tokens live in `frontend/public/styles/tokens.css` (colors, spacing, radii, shadows, gradients, base swatches).
   - Utility helpers sit in `frontend/public/styles/utilities.css`.

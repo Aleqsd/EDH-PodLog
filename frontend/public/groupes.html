@@ -75,15 +75,112 @@
           </p>
         </div>
         <div class="groupes-actions">
-          <a class="primary-action" href="dashboard.html">Enregistrer une partie</a>
+          <button class="primary-action" type="button" id="createPlaygroupButton">
+            Créer un groupe
+          </button>
+          <a class="secondary-action" href="dashboard.html">Enregistrer une partie</a>
         </div>
       </section>
 
-      <section class="groupes-list">
-        <div class="groupes-empty" id="groupsEmpty">
-          Aucun groupe n'a encore été enregistré. Créez-en un depuis le tableau de bord lors de la composition d'une table.
+      <section class="groupes-layout">
+        <div class="groupes-sidebar">
+          <div class="groupes-empty" id="groupsEmpty">
+            Aucun groupe n'a encore été enregistré. Créez-en un depuis le tableau de bord lors de la composition d'une table.
+          </div>
+          <ul class="group-card-list" id="groupsList"></ul>
         </div>
-        <ul class="group-card-list" id="groupsList"></ul>
+        <div class="group-detail-panel" id="groupDetailPanel" hidden>
+          <div class="group-detail-header">
+            <div>
+              <h2 id="groupDetailTitle">Sélectionnez un groupe</h2>
+              <p id="groupDetailMeta" class="group-detail-meta"></p>
+            </div>
+            <div class="group-detail-actions">
+              <button class="secondary-action" type="button" id="groupDeleteButton">
+                Supprimer le groupe
+              </button>
+            </div>
+          </div>
+          <div class="group-detail-body">
+            <section class="group-detail-section">
+              <h3>Paramètres</h3>
+              <label class="group-detail-field">
+                <span>Nom du groupe</span>
+                <input type="text" id="groupDetailNameInput" />
+              </label>
+              <div class="group-detail-buttons">
+                <button class="secondary-action" type="button" id="groupRenameButton">
+                  Enregistrer le nom
+                </button>
+              </div>
+              <p class="group-detail-status" id="groupDetailStatus" role="status"></p>
+            </section>
+
+            <section class="group-detail-section">
+              <h3>Membres</h3>
+              <ul class="group-members-list" id="groupMembersList"></ul>
+              <div class="group-member-add">
+                <label>
+                  <span>Ajouter un membre suivi ou invité</span>
+                  <select id="groupMemberAddSelect">
+                    <option value="">Sélectionner un joueur</option>
+                  </select>
+                </label>
+                <button class="secondary-action" type="button" id="groupMemberAddButton">
+                  Ajouter
+                </button>
+              </div>
+            </section>
+
+            <section class="group-detail-section">
+              <h3>Statistiques</h3>
+              <div class="group-stats" id="groupStatsContainer"></div>
+            </section>
+
+            <section class="group-detail-section">
+              <h3>Historique récent</h3>
+              <ul class="group-recent-games" id="groupRecentGames"></ul>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="group-search-panel">
+        <div class="group-search-head">
+          <h2>Explorer la communauté</h2>
+          <p>
+            Recherchez des joueuses et joueurs, consultez leurs profils publics et suivez-les pour les inviter rapidement dans vos groupes.
+          </p>
+        </div>
+        <form class="group-search-form" id="userSearchForm" novalidate>
+          <label class="group-search-field">
+            <span>Rechercher un joueur</span>
+            <input
+              type="search"
+              id="userSearchInput"
+              placeholder="Nom, pseudo ou adresse e-mail"
+              autocomplete="off"
+            />
+          </label>
+          <button class="secondary-action" type="submit">Rechercher</button>
+        </form>
+        <div class="group-search-results" id="userSearchResults"></div>
+        <div class="group-public-profile" id="publicProfilePreview" hidden></div>
+      </section>
+
+      <section class="group-tracked-panel">
+        <h2>Joueurs invités</h2>
+        <p>
+          Créez des fiches pour les personnes sans compte EDH PodLog afin de les enregistrer facilement dans vos parties. Vous pourrez les lier à leur compte plus tard.
+        </p>
+        <form class="tracked-player-form" id="trackedPlayerForm" novalidate>
+          <label class="tracked-player-field">
+            <span>Nom du joueur</span>
+            <input type="text" id="trackedPlayerNameInput" required placeholder="Invité (ex: Alex)" />
+          </label>
+          <button class="secondary-action" type="submit">Créer un joueur invité</button>
+        </form>
+        <div class="tracked-players" id="trackedPlayersList"></div>
       </section>
     </main>
 

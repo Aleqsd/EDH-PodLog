@@ -180,6 +180,12 @@
     }
   }
 
+  @media (max-width: 960px) {
+    .groupes-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
   @media (min-width: 960px) {
     .deck-rating-layout:not(.deck-rating-layout-modal) {
       display: flex;

@@ -61,12 +61,18 @@ async def upsert_user_profile(
     if existing:
         base_document = _strip_profile_storage_fields(existing)
     else:
-        base_document = {"google_sub": google_sub, "created_at": now, "moxfield_decks": []}
+        base_document = {
+            "google_sub": google_sub,
+            "created_at": now,
+            "moxfield_decks": [],
+            "is_public": False,
+        }
 
     merged = {**base_document, **update_fields}
     merged["google_sub"] = google_sub
     merged.setdefault("created_at", now)
     merged.setdefault("moxfield_decks", [])
+    merged.setdefault("is_public", False)
     merged["updated_at"] = now
 
     await profiles.update_one(

@@ -637,6 +637,14 @@
   gap: var(--space-3xs);
 }
 
+.player-source-field {
+  grid-column: 1 / -1;
+}
+
+.player-linked-deck {
+  grid-column: 1 / -1;
+}
+
 .player-field span {
   font-size: 0.8rem;
   letter-spacing: 0.06em;
@@ -647,6 +655,8 @@
 .player-name-input,
 .player-deck-input,
 .player-deck-select-input,
+.player-source-select,
+.player-linked-deck-select,
 .game-result-select {
   width: 100%;
   padding: 0.85rem 1rem;
@@ -661,6 +671,8 @@
 .player-name-input:focus,
 .player-deck-input:focus,
 .player-deck-select-input:focus,
+.player-source-select:focus,
+.player-linked-deck-select:focus,
 .game-result-select:focus {
   outline: none;
   border-color: var(--color-border-brand-focus);
@@ -909,7 +921,14 @@
   gap: var(--space-md);
 }
 
-.groupes-list {
+.groupes-layout {
+  display: grid;
+  gap: var(--space-xl);
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  align-items: start;
+}
+
+.groupes-sidebar {
   display: grid;
   gap: var(--space-lg);
 }
@@ -929,6 +948,13 @@
   background: color-mix(in srgb, var(--color-base-131d2c) 80%, transparent);
   display: grid;
   gap: var(--space-md);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.group-card.is-selected {
+  border-color: var(--color-border-brand);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-border-brand) 65%, transparent),
+    0 22px 36px rgba(10, 18, 31, 0.45);
 }
 
 .group-card-head {
@@ -937,11 +963,18 @@
   gap: var(--space-sm);
   justify-content: space-between;
   align-items: baseline;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
 }
 
 .group-card-head h2 {
   margin: 0;
-  font-size: clamp(1.2rem, 2.2vw, 1.6rem);
+  font-size: clamp(1.2rem, 2.1vw, 1.6rem);
   color: var(--color-text-primary);
 }
 
@@ -963,18 +996,318 @@
   align-items: center;
 }
 
+.group-detail-panel {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 26%, transparent);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-lg);
+  background: color-mix(in srgb, var(--color-base-121c30) 88%, transparent);
+}
+
+.group-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.group-detail-meta {
+  margin-top: var(--space-2xs);
+  font-size: 0.9rem;
+  color: var(--color-text-subtle);
+}
+
+.group-detail-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.group-detail-body {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.group-detail-section {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 20%, transparent);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  background: color-mix(in srgb, var(--color-base-101726) 88%, transparent);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.group-detail-field {
+  display: grid;
+  gap: var(--space-3xs);
+}
+
+.group-detail-field span {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-base-9ab6ff) 75%, transparent);
+}
+
+#groupDetailNameInput {
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 35%, transparent);
+  background: color-mix(in srgb, var(--color-base-121c30) 85%, transparent);
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+}
+
+.group-detail-buttons {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.group-detail-status {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+}
+
+.group-detail-status.is-error {
+  color: var(--color-status-danger);
+}
+
+.group-detail-status.is-success {
+  color: var(--color-brand-soft);
+}
+
+.group-members-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.group-member-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm);
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 20%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-base-0f1524) 85%, transparent);
+}
+
+.group-member-name {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.group-member-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+}
+
+.group-member-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-subtle);
+}
+
+.group-member-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.group-member-add select {
+  min-width: clamp(220px, 30vw, 320px);
+}
+
+.group-stat-total {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.group-stat-table {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.group-stat-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 90px;
+  gap: var(--space-xs);
+  font-size: 0.9rem;
+  color: var(--color-text-subtle-strong);
+}
+
+.group-stat-row-head {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--color-base-9ab6ff) 75%, transparent);
+}
+
 .group-recent-games {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--space-4xs);
+  gap: var(--space-3xs);
   font-size: 0.9rem;
   color: var(--color-text-subtle);
 }
 
-.group-recent-games li strong {
-  color: var(--color-text-contrast);
+.group-recent-item {
+  color: var(--color-text-subtle);
+}
+
+.group-search-panel,
+.group-tracked-panel {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 24%, transparent);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-lg);
+  background: color-mix(in srgb, var(--color-base-121c30) 88%, transparent);
+}
+
+.group-search-form,
+.tracked-player-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: flex-end;
+}
+
+.group-search-field,
+.tracked-player-field {
+  display: grid;
+  gap: var(--space-3xs);
+  flex: 1 1 260px;
+}
+
+.group-search-field span,
+.tracked-player-field span {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--color-base-9ab6ff) 75%, transparent);
+}
+
+.group-search-results,
+.tracked-players {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.group-search-field input,
+.tracked-player-field input,
+.group-member-add select {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 35%, transparent);
+  background: color-mix(in srgb, var(--color-base-121c30) 85%, transparent);
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+}
+
+.group-search-field input:focus,
+.tracked-player-field input:focus,
+.group-member-add select:focus {
+  outline: none;
+  border-color: var(--color-border-brand-focus);
+  box-shadow: 0 0 0 1px var(--color-border-brand-focus);
+}
+
+.group-search-card,
+.tracked-player-card {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 20%, transparent);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  background: color-mix(in srgb, var(--color-base-0f1524) 85%, transparent);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.group-search-card-head,
+.tracked-player-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.group-search-description {
+  margin: 0;
+  color: var(--color-text-subtle);
+}
+
+.group-search-actions,
+.tracked-player-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.group-search-empty,
+.group-recent-empty,
+.tracked-player-empty {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 0.9rem;
+}
+
+.group-public-profile {
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 18%, transparent);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  background: color-mix(in srgb, var(--color-base-101726) 85%, transparent);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.group-public-deck-list,
+.group-public-games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2xs);
+  font-size: 0.9rem;
+  color: var(--color-text-subtle);
+}
+
+.tracked-player-badge {
+  background: color-mix(in srgb, var(--color-brand-primary) 35%, transparent);
+  color: var(--color-text-soft);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+.danger-action {
+  padding: 0.6rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-status-danger) 60%, transparent);
+  background: color-mix(in srgb, var(--color-status-danger) 35%, transparent);
+  color: var(--color-status-danger);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.danger-action:hover {
+  background: color-mix(in srgb, var(--color-status-danger) 45%, transparent);
+}
+
+.tracked-player-actions .danger-action {
+  background: color-mix(in srgb, var(--color-status-danger) 25%, transparent);
 }
 
 .empty-state {
@@ -1303,6 +1636,65 @@
   color: var(--color-text-primary);
   font-size: 0.95rem;
   transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.profile-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-base-6175b3) 35%, transparent);
+  background: color-mix(in srgb, var(--color-base-121c30) 88%, transparent);
+}
+
+.profile-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.profile-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.profile-switch-indicator {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-base-6175b3) 35%, transparent);
+  transition: background 150ms ease;
+}
+
+.profile-switch-indicator::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-text-soft);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 150ms ease;
+}
+
+.profile-switch input:checked + .profile-switch-indicator {
+  background: var(--gradient-brand-button);
+}
+
+.profile-switch input:checked + .profile-switch-indicator::after {
+  transform: translateX(22px);
+}
+
+.profile-switch-label {
+  font-size: 0.9rem;
+  color: var(--color-text-subtle);
+  line-height: 1.4;
 }
 
 .profile-input:focus {

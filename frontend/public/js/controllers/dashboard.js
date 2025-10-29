@@ -310,12 +310,27 @@
       }
     };
 
+    const loadAvailablePlayers = async () => {
+      if (!googleSub) {
+        availablePlayers = [];
+        return;
+      }
+      try {
+        const payload = await fetchAvailablePlayers(googleSub);
+        availablePlayers = Array.isArray(payload?.players) ? payload.players : [];
+      } catch (error) {
+        console.warn("Impossible de charger les joueurs suivis :", error);
+        availablePlayers = [];
+      }
+    };
+
     let players = [];
     let latestConfirmedPlayers = null;
+    let availablePlayers = [];
 
     const createInitialPlayers = () =>
       DEFAULT_PLAYER_NAMES.map((name, index) => ({
-        id: createIdentifier("player"),
+        id: index === 0 && googleSub ? `user:${googleSub}` : createIdentifier("player"),
         name: index === 0 ? ownerDisplayName : name,
         deckName: "",
         deckId: "",
@@ -324,6 +339,12 @@
         deckMode: index === 0 && deckOptions.length > 0 ? "library" : "manual",
         isOwner: index === 0,
         isDefault: true,
+        sourceId: index === 0 && googleSub ? `user:${googleSub}` : null,
+        sourceType: index === 0 && googleSub ? "user" : null,
+        googleSub: index === 0 && googleSub ? googleSub : null,
+        linkedGoogleSub: index === 0 && googleSub ? googleSub : null,
+        availableDecks: [],
+        selectedDeckId: "",
       }));
 
     const createAdditionalPlayer = () => ({
@@ -336,6 +357,12 @@
       deckMode: "manual",
       isOwner: false,
       isDefault: false,
+      sourceId: null,
+      sourceType: null,
+      googleSub: null,
+      linkedGoogleSub: null,
+      availableDecks: [],
+      selectedDeckId: "",
     });
 
     const ensureOwnerExists = () => {
@@ -346,6 +373,13 @@
         players[0].isOwner = true;
         players[0].name = ownerDisplayName;
         players[0].deckMode = deckOptions.length > 0 ? players[0].deckMode : "manual";
+        if (googleSub) {
+          players[0].sourceId = `user:${googleSub}`;
+          players[0].sourceType = "user";
+          players[0].googleSub = googleSub;
+          players[0].linkedGoogleSub = googleSub;
+          players[0].id = `user:${googleSub}`;
+        }
       }
     };
 
@@ -353,6 +387,68 @@
       players.forEach((player, index) => {
         player.index = index + 1;
       });
+    };
+
+    const resetPlayerSource = (player) => {
+      player.sourceId = null;
+      player.sourceType = null;
+      player.googleSub = null;
+      player.linkedGoogleSub = null;
+      player.availableDecks = [];
+      player.selectedDeckId = "";
+      if (!player.isOwner) {
+        player.deckMode = "manual";
+      }
+      if (!player.isOwner) {
+        player.id = createIdentifier("player");
+      }
+    };
+
+    const applyPlayerSource = (player, sourceId) => {
+      if (!sourceId) {
+        resetPlayerSource(player);
+        return;
+      }
+      const summary = availablePlayers.find((entry) => entry?.id === sourceId);
+      if (!summary) {
+        resetPlayerSource(player);
+        return;
+      }
+
+      player.sourceId = summary.id;
+      player.sourceType = summary.player_type || null;
+      player.googleSub = summary.google_sub || null;
+      player.linkedGoogleSub = summary.linked_google_sub || summary.google_sub || null;
+      player.availableDecks = Array.isArray(summary.decks) ? summary.decks.slice() : [];
+      player.selectedDeckId = "";
+
+      if (summary.name) {
+        player.name = summary.name;
+      }
+
+      if (summary.id) {
+        player.id = summary.id;
+      }
+
+      if (player.googleSub && player.googleSub === googleSub) {
+        player.isOwner = true;
+      }
+
+      if (player.availableDecks.length > 0) {
+        const primaryDeck = player.availableDecks[0];
+        player.deckMode = "linked";
+        player.deckId = primaryDeck.public_id || primaryDeck.id || "";
+        player.deckSlug = primaryDeck.slug || primaryDeck.public_id || player.deckId || "";
+        player.deckFormat = primaryDeck.format || "";
+        player.deckName = primaryDeck.name || "";
+        player.selectedDeckId = player.deckId || player.deckSlug || "";
+      } else if (!player.isOwner) {
+        player.deckMode = "manual";
+        player.deckId = "";
+        player.deckName = "";
+        player.deckFormat = "";
+        player.deckSlug = "";
+      }
     };
 
     const createDeckSelect = (player, deckSelect) => {
@@ -411,6 +507,58 @@
       });
     };
 
+    const populateLinkedDeckSelect = (player, selectEl) => {
+      if (!selectEl) {
+        return;
+      }
+      selectEl.innerHTML = "";
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Sélectionner un deck";
+      selectEl.appendChild(placeholder);
+
+      (Array.isArray(player.availableDecks) ? player.availableDecks : []).forEach((deck) => {
+        const option = document.createElement("option");
+        const deckId = deck.public_id || deck.id || deck.slug || "";
+        option.value = deckId;
+        option.textContent = deck.name
+          ? `${deck.name}${deck.format ? ` · ${deck.format.toUpperCase()}` : ""}`
+          : deck.format
+          ? deck.format.toUpperCase()
+          : "Deck suivi";
+        option.dataset.slug = deck.slug || "";
+        option.dataset.format = deck.format || "";
+        option.dataset.name = deck.name || "";
+        selectEl.appendChild(option);
+      });
+
+      selectEl.value = player.selectedDeckId || "";
+
+      selectEl.addEventListener("change", (event) => {
+        const deckId = event.target.value;
+        if (!deckId) {
+          player.deckMode = "manual";
+          player.deckId = "";
+          player.deckSlug = "";
+          player.deckFormat = "";
+          player.deckName = "";
+          player.selectedDeckId = "";
+          renderPlayers();
+          return;
+        }
+
+        const option = event.target.selectedOptions[0];
+        player.deckMode = "linked";
+        player.deckId = deckId;
+        player.deckSlug = option?.dataset?.slug || deckId;
+        player.deckFormat = option?.dataset?.format || "";
+        player.deckName = option?.dataset?.name || option?.textContent || "";
+        player.selectedDeckId = deckId;
+        renderPlayers();
+      });
+    };
+
     const renderPlayers = () => {
       playersListEl.innerHTML = "";
       ensureOwnerExists();
@@ -455,12 +603,53 @@
           nameInput.addEventListener("input", (event) => {
             player.name = event.target.value;
           });
+          nameInput.disabled = Boolean(player.sourceId && player.sourceType === "user");
+        }
+
+        const sourceSelect = row.querySelector(".player-source-select");
+        if (sourceSelect) {
+          sourceSelect.innerHTML = "";
+          const manualOption = document.createElement("option");
+          manualOption.value = "";
+          manualOption.textContent = "Saisie libre";
+          sourceSelect.appendChild(manualOption);
+
+          const sortedSources = availablePlayers
+            .slice()
+            .sort((a, b) => {
+              const labelA = normalizeString(a?.name || a?.google_sub || "a");
+              const labelB = normalizeString(b?.name || b?.google_sub || "b");
+              return labelA.localeCompare(labelB, "fr", { sensitivity: "base" });
+            });
+
+          sortedSources.forEach((entry) => {
+            if (!entry?.id) {
+              return;
+            }
+            const option = document.createElement("option");
+            option.value = entry.id;
+            option.textContent = entry.name || entry.google_sub || "Joueur suivi";
+            option.dataset.type = entry.player_type || "";
+            option.dataset.googleSub = entry.google_sub || "";
+            sourceSelect.appendChild(option);
+          });
+
+          sourceSelect.value = player.sourceId && sortedSources.some((entry) => entry.id === player.sourceId)
+            ? player.sourceId
+            : "";
+
+          sourceSelect.addEventListener("change", (event) => {
+            applyPlayerSource(player, event.target.value);
+            renderPlayers();
+          });
         }
 
         const manualDeckLabel = row.querySelector(".player-deck-manual");
         const manualDeckInput = row.querySelector(".player-deck-input");
         const selectDeckLabel = row.querySelector(".player-deck-select");
         const deckSelect = row.querySelector(".player-deck-select-input");
+        const linkedDeckLabel = row.querySelector(".player-linked-deck");
+        const linkedDeckSelect = row.querySelector(".player-linked-deck-select");
 
         if (player.isOwner && deckOptions.length > 0 && deckSelect && selectDeckLabel) {
           selectDeckLabel.hidden = false;
@@ -472,9 +661,22 @@
           }
         }
 
+        if (linkedDeckLabel && linkedDeckSelect) {
+          const hasLinkedDecks = Array.isArray(player.availableDecks) && player.availableDecks.length > 0;
+          linkedDeckLabel.hidden = !hasLinkedDecks;
+          if (hasLinkedDecks) {
+            populateLinkedDeckSelect(player, linkedDeckSelect);
+          } else {
+            linkedDeckSelect.innerHTML = "";
+          }
+        }
+
         if (manualDeckLabel && manualDeckInput) {
-          const hideManual = player.isOwner && deckOptions.length > 0 && player.deckMode !== "manual";
-          manualDeckLabel.hidden = hideManual;
+          const hideForOwner = player.isOwner && deckOptions.length > 0 && player.deckMode !== "manual";
+          const hideForLinked = Array.isArray(player.availableDecks)
+            && player.availableDecks.length > 0
+            && player.deckMode === "linked";
+          manualDeckLabel.hidden = hideForOwner || hideForLinked;
           manualDeckInput.value = player.deckName ?? "";
           manualDeckInput.placeholder = "Nom du deck (optionnel)";
           manualDeckInput.addEventListener("input", (event) => {
@@ -484,6 +686,13 @@
               player.deckId = "";
               player.deckSlug = "";
               player.deckFormat = "";
+            }
+            if (!player.isOwner) {
+              player.deckMode = "manual";
+              player.deckId = "";
+              player.deckSlug = "";
+              player.deckFormat = "";
+              player.selectedDeckId = "";
             }
           });
         }
@@ -528,6 +737,11 @@
             isOwner: true,
             name: ownerDisplayName,
             deckMode: deckOptions.length > 0 ? player.deckMode : "manual",
+            sourceType: googleSub ? "user" : player.sourceType,
+            sourceId: googleSub ? `user:${googleSub}` : player.sourceId,
+            googleSub: googleSub || player.googleSub,
+            linkedGoogleSub: googleSub || player.linkedGoogleSub,
+            id: googleSub ? `user:${googleSub}` : player.id,
           };
         }
         return { ...player, isOwner: false };
@@ -829,11 +1043,23 @@
           id: player.id,
           name: player.name,
           is_owner: Boolean(player.isOwner),
-          deck_id: player.deckMode === "library" ? player.deckId || null : null,
+          deck_id:
+            player.deckMode === "library" || player.deckMode === "linked"
+              ? player.deckId || null
+              : null,
           deck_name: player.deckName || null,
-          deck_format: player.deckMode === "library" ? player.deckFormat || null : null,
-          deck_slug: player.deckMode === "library" ? player.deckSlug || player.deckId || null : null,
+          deck_format:
+            player.deckMode === "library" || player.deckMode === "linked"
+              ? player.deckFormat || null
+              : null,
+          deck_slug:
+            player.deckMode === "library" || player.deckMode === "linked"
+              ? player.deckSlug || player.deckId || null
+              : null,
           order: index,
+          player_type: player.sourceType || (player.isOwner ? "user" : "guest"),
+          google_sub: player.googleSub || null,
+          linked_google_sub: player.linkedGoogleSub || null,
         })),
         rankings: rankings.map((ranking) => ({
           player_id: ranking.playerId,
@@ -909,6 +1135,7 @@
     });
 
     await loadPlaygroups();
+    await loadAvailablePlayers();
     resetWorkflow({ preserveStatus: true });
     await loadGameHistory();
   });
