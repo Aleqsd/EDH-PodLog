@@ -16,6 +16,9 @@ __pycache__/
 # Node tooling
 node_modules/
 
+# Netlify artifacts
+.netlify/
+
 # Pytest cache
 .pytest_cache/
 
@@ -24,3 +27,7 @@ db/data/
 !db/data/.gitkeep
 db/mongod.log
 db/mongod.pid
+
+# Logs
+*.log
+*.log.*
