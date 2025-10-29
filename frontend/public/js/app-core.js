@@ -92,16 +92,10 @@ const mountAppRevisionBadge = () => {
 
   const header = document.createElement("span");
   header.className = "app-revision-header";
-  if (APP_REVISION_MESSAGE) {
-    header.title = APP_REVISION_MESSAGE;
-  }
 
   const messageSpan = document.createElement("span");
   messageSpan.className = "app-revision-message";
   messageSpan.textContent = previewMessage;
-  if (APP_REVISION_MESSAGE) {
-    messageSpan.title = APP_REVISION_MESSAGE;
-  }
 
   const revisionSpan = document.createElement("span");
   revisionSpan.className = "app-revision-value";
@@ -112,6 +106,12 @@ const mountAppRevisionBadge = () => {
 
   if (APP_REVISION_MESSAGE) {
     badge.dataset.revisionMessage = APP_REVISION_MESSAGE;
+    const tooltip = document.createElement("div");
+    tooltip.className = "app-revision-tooltip";
+    tooltip.textContent = APP_REVISION_MESSAGE;
+    tooltip.id = "appRevisionTooltip";
+    badge.setAttribute("aria-describedby", tooltip.id);
+    badge.append(tooltip);
   }
 
   if (REVISION_DATE) {
