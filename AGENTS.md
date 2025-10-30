@@ -39,6 +39,7 @@
   - Global resets in `frontend/public/styles/base.css`; component primitives in `frontend/public/styles/components.css`; page/view rules in `frontend/public/styles/views.css` with responsive overrides co-located in `frontend/public/styles/responsive.css`.
 - Identity assets now ship as `frontend/public/favicon.ico` and `frontend/public/apple-touch-icon.png`; additional logos stay under `frontend/public/assets/`.
 - Backend API surface and persistence logic sit under `backend/app/` (Moxfield proxy, Mongo upserts, cache endpoints).
+- End-to-end regression coverage lives under `backend/tests/e2e/`; run `make backend-test` or `pytest backend/tests/e2e` to exercise the full platform flow.
 - Local Mongo data persists in `db/data/` (ignored except for `.gitkeep`).
 
 ## Open Questions
