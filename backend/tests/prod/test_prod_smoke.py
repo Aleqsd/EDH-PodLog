@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -129,3 +130,62 @@ async def test_mongo_ping_succeeds() -> None:
     finally:
         client.close()
     assert result.get("ok") == 1.0
+
+
+@pytest.mark.prod
+def test_frontend_runtime_config_is_populated() -> None:
+    """Ensure the runtime config script is served with real production values."""
+    base_url = _require_env("PROD_FRONTEND_BASE_URL").rstrip("/")
+    api_base = _require_env("PROD_API_BASE_URL").rstrip("/")
+    with httpx.Client(timeout=5.0) as client:
+        response = client.get(f"{base_url}/config.js")
+    assert response.status_code == 200
+    body = response.text.strip()
+    prefix = "window.EDH_PODLOG_CONFIG"
+    assert body.startswith(prefix), "Runtime config script missing expected prefix."
+    raw_json = body[len(prefix) :].lstrip(" =").rstrip(";")
+    config = json.loads(raw_json)
+    client_id = config.get("GOOGLE_CLIENT_ID", "")
+    assert client_id and client_id != "REMPLACEZ_MOI_PAR_VOTRE_CLIENT_ID"
+    configured_api = config.get("API_BASE_URL", "").rstrip("/")
+    assert configured_api == api_base
+
+
+@pytest.mark.prod
+def test_api_cors_allows_frontend_origin() -> None:
+    """Confirm the API advertises CORS support for the production frontend."""
+    api_base = _require_env("PROD_API_BASE_URL").rstrip("/")
+    frontend_origin = _require_env("PROD_FRONTEND_BASE_URL").rstrip("/")
+    headers = {
+        "Origin": frontend_origin,
+        "Access-Control-Request-Method": "GET",
+    }
+    with httpx.Client(timeout=5.0) as client:
+        response = client.options(f"{api_base}/health", headers=headers)
+    assert response.status_code in {200, 204}
+    allowed_origin = response.headers.get("access-control-allow-origin")
+    assert allowed_origin in {"*", frontend_origin}
+    if allowed_origin != "*":
+        allow_credentials = response.headers.get("access-control-allow-credentials", "false")
+        assert allow_credentials.lower() == "true"
+
+
+@pytest.mark.prod
+@pytest.mark.anyio
+async def test_mongo_reports_tls_and_replica_configuration() -> None:
+    """Verify the Mongo URI enforces TLS and exposes replica metadata."""
+    mongo_uri = _require_env("PROD_MONGO_URI")
+    normalized = mongo_uri.lower()
+    if mongo_uri.startswith("mongodb://"):
+        assert "ssl=true" in normalized or "tls=true" in normalized, "Mongo URI must enable TLS."
+    else:
+        assert mongo_uri.startswith("mongodb+srv://"), "Mongo URI should use SRV with implicit TLS."
+
+    client = AsyncIOMotorClient(mongo_uri, serverSelectionTimeoutMS=3000)
+    try:
+        hello = await client.admin.command({"hello": 1})
+    finally:
+        client.close()
+    replica_set = hello.get("setName")
+    if not replica_set:
+        pytest.skip("Mongo cluster did not report a replica set name.")
