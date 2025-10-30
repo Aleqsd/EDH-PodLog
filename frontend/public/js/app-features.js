@@ -1515,6 +1515,7 @@ const COLOR_DISTRIBUTION_META = {
   C: { label: "Incolore", token: "--color-mana-colorless" },
 };
 const CARD_NAME_COLLATOR = new Intl.Collator("fr", { sensitivity: "base" });
+const NUMBER_FORMAT = new Intl.NumberFormat("fr-FR");
 
 const MANA_SYMBOL_BASE_URL = "https://svgs.scryfall.io/card-symbols";
 const MANA_SYMBOL_PATHS = {
