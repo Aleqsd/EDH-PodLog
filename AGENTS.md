@@ -40,7 +40,7 @@
 - Identity assets now ship as `frontend/public/favicon.ico` and `frontend/public/apple-touch-icon.png`; additional logos stay under `frontend/public/assets/`.
 - Backend API surface and persistence logic sit under `backend/app/` (Moxfield proxy, Mongo upserts, cache endpoints).
 - End-to-end regression coverage lives under `backend/tests/e2e/`; run `make backend-test` or `pytest backend/tests/e2e` to exercise the full platform flow.
-- Production smoke checks reside in `backend/tests/prod/`; export `PROD_FRONTEND_BASE_URL`, `PROD_API_BASE_URL`, and `PROD_MONGO_URI`, then run `make backend-test-prod` from the VPS to hit Nginx, FastAPI, and Mongo.
+- Production smoke checks reside in `backend/tests/prod/`; stash `PROD_FRONTEND_BASE_URL`, `PROD_API_BASE_URL`, and `PROD_MONGO_URI` in `.env.local`/`.env.prod` (or export them) and run `make backend-test-prod` from the VPS to hit Nginx, FastAPI, and Mongo—the tests now auto-load those env files.
 - Local Mongo data persists in `db/data/` (ignored except for `.gitkeep`).
 
 ## Open Questions

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import sys
@@ -18,6 +19,32 @@ for path in (ROOT, WORKSPACE_ROOT):
 from app.dependencies import get_mongo_database, get_moxfield_client  # noqa: E402
 from app.main import create_app  # noqa: E402
 from backend.tests.utils import StubDatabase, StubMoxfieldClient
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register custom CLI flags for backend test suite."""
+    parser.addoption(
+        "--prod-smoke",
+        action="store_true",
+        default=False,
+        help=(
+            "Run tests marked with @pytest.mark.prod against production infrastructure. "
+            "Also enabled when RUN_PROD_SMOKE is set to a truthy value."
+        ),
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip production smoke tests unless explicitly enabled."""
+    if config.getoption("--prod-smoke"):
+        return
+    env_flag = os.getenv("RUN_PROD_SMOKE", "").strip()
+    if env_flag.lower() in {"1", "true", "yes", "on"}:
+        return
+    skip_prod = pytest.mark.skip(reason="Production smoke tests disabled; pass --prod-smoke to enable.")
+    for item in items:
+        if "prod" in item.keywords:
+            item.add_marker(skip_prod)
 
 
 @pytest.fixture()

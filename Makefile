@@ -4,8 +4,6 @@ export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
 include $(ENV_FILES)
 endif
 
-RUN_PROD_SMOKE ?= 0
-
 PYTHON ?= python
 
 FRONTEND_DIR := frontend
@@ -106,7 +104,7 @@ backend-test-prod: backend-install
 	[ -f $(CURDIR)/.env ] && . $(CURDIR)/.env; \
 	[ -f $(CURDIR)/.env.local ] && . $(CURDIR)/.env.local; \
 	set +a; \
-	$(BACKEND_PYTEST) -m prod $(BACKEND_DIR)/tests
+	$(BACKEND_PYTEST) --prod-smoke -m prod $(BACKEND_DIR)/tests
 
 backend-openapi: backend-install
 	@set -a; \
@@ -293,6 +291,3 @@ doctor: check-tools check-env
 deps: backend-deps
 
 test: front-test backend-test backend-test-e2e db-test
-ifneq ($(RUN_PROD_SMOKE),0)
-	@$(MAKE) backend-test-prod
-endif
