@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Literal, Sequence
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from pymongo import ASCENDING, IndexModel
@@ -11,6 +11,8 @@ from ..config import get_settings
 from ..logging_utils import get_logger
 
 logger = get_logger("repositories.moxfield_cache")
+
+DeckCollectionName = Literal["decks", "deck_summaries"]
 
 
 class MoxfieldCacheRepository:
@@ -59,11 +61,16 @@ class MoxfieldCacheRepository:
 
         await self.users.replace_one(self.user_filter(username), doc, upsert=True)
 
-    async def replace_decks(
-        self, username: str, documents: Iterable[dict[str, Any]]
+    async def replace_documents(
+        self,
+        username: str,
+        documents: Iterable[dict[str, Any]],
+        *,
+        collection: DeckCollectionName,
     ) -> None:
-        """Replace or upsert deck documents for a user."""
+        """Replace or upsert deck-oriented documents for a user."""
         canonical = self.canonical_username(username)
+        target_collection = self._resolve_collection(collection)
         for document in documents:
             public_id = document.get("public_id")
             if not isinstance(public_id, str):
@@ -71,23 +78,21 @@ class MoxfieldCacheRepository:
             doc = dict(document)
             doc["user_name"] = username
             doc["user_key"] = canonical
-            await self.decks.replace_one(self.deck_filter(username, public_id), doc, upsert=True)
+            await target_collection.replace_one(
+                self.deck_filter(username, public_id), doc, upsert=True
+            )
+
+    async def replace_decks(
+        self, username: str, documents: Iterable[dict[str, Any]]
+    ) -> None:
+        """Backward compatibility wrapper for deck upserts."""
+        await self.replace_documents(username, documents, collection="decks")
 
     async def replace_deck_summaries(
         self, username: str, documents: Iterable[dict[str, Any]]
     ) -> None:
-        """Replace or upsert deck summary documents for a user."""
-        canonical = self.canonical_username(username)
-        for document in documents:
-            public_id = document.get("public_id")
-            if not isinstance(public_id, str):
-                raise ValueError("Deck summary documents must include a 'public_id' string.")
-            doc = dict(document)
-            doc["user_name"] = username
-            doc["user_key"] = canonical
-            await self.deck_summaries.replace_one(
-                self.deck_filter(username, public_id), doc, upsert=True
-            )
+        """Backward compatibility wrapper for deck summary upserts."""
+        await self.replace_documents(username, documents, collection="deck_summaries")
 
     async def fetch_user(self, username: str) -> dict[str, Any] | None:
         """Return the cached user document, if present."""
@@ -155,6 +160,14 @@ class MoxfieldCacheRepository:
         if not indexes:
             return
         await collection.create_indexes(indexes)
+
+    def _resolve_collection(self, name: DeckCollectionName) -> AsyncIOMotorCollection:
+        """Return the Mongo collection backing the provided identifier."""
+        if name == "decks":
+            return self.decks
+        if name == "deck_summaries":
+            return self.deck_summaries
+        raise ValueError(f"Unknown collection name: {name}")
 
 
 async def ensure_moxfield_cache_indexes(database: AsyncIOMotorDatabase) -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator, Literal
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -26,9 +26,7 @@ async def upsert_user_decks(
     """Persist the latest deck snapshot for a user."""
     repository = MoxfieldCacheRepository(database)
     synced_at = datetime.now(timezone.utc)
-    user_doc = payload.user.model_dump(mode="python")
-    user_doc["synced_at"] = synced_at
-    user_doc["total_decks"] = payload.total_decks
+    user_doc = _prepare_user_document(payload.user, payload.total_decks, synced_at)
 
     logger.info(
         "Mongo write: upserting %d deck(s) for user '%s'",
@@ -38,13 +36,12 @@ async def upsert_user_decks(
 
     await repository.replace_user(user_doc)
 
-    deck_documents = []
-    for deck in payload.decks:
-        deck_doc = deck.model_dump(mode="python")
-        deck_doc["user_name"] = payload.user.user_name
-        deck_doc["synced_at"] = synced_at
-        deck_documents.append(deck_doc)
-    await repository.replace_decks(payload.user.user_name, deck_documents)
+    deck_documents = _prepare_deck_documents(payload, synced_at, kind="full")
+    await repository.replace_documents(
+        payload.user.user_name,
+        deck_documents,
+        collection=_collection_for_kind("full"),
+    )
 
 
 async def upsert_user_deck_summaries(
@@ -53,9 +50,7 @@ async def upsert_user_deck_summaries(
     """Persist the lighter deck summary snapshot for a user."""
     repository = MoxfieldCacheRepository(database)
     synced_at = datetime.now(timezone.utc)
-    user_doc = payload.user.model_dump(mode="python")
-    user_doc["synced_at"] = synced_at
-    user_doc["total_decks"] = payload.total_decks
+    user_doc = _prepare_user_document(payload.user, payload.total_decks, synced_at)
 
     logger.info(
         "Mongo write: upserting %d deck summary document(s) for user '%s'",
@@ -65,13 +60,12 @@ async def upsert_user_deck_summaries(
 
     await repository.replace_user(user_doc)
 
-    summary_documents = []
-    for deck in payload.decks:
-        deck_doc = deck.model_dump(mode="python")
-        deck_doc["user_name"] = payload.user.user_name
-        deck_doc["synced_at"] = synced_at
-        summary_documents.append(deck_doc)
-    await repository.replace_deck_summaries(payload.user.user_name, summary_documents)
+    summary_documents = _prepare_deck_documents(payload, synced_at, kind="summary")
+    await repository.replace_documents(
+        payload.user.user_name,
+        summary_documents,
+        collection=_collection_for_kind("summary"),
+    )
 
 
 async def fetch_user_decks(
@@ -186,3 +180,36 @@ def _strip_user_storage_fields(document: dict[str, Any]) -> dict[str, Any]:
     clean_doc.pop("total_decks", None)
     clean_doc.pop("user_key", None)
     return clean_doc
+
+
+DeckCollection = Literal["decks", "deck_summaries"]
+
+
+def _prepare_user_document(
+    user: UserSummary, total_decks: int, synced_at: datetime
+) -> dict[str, Any]:
+    """Normalize user payload before persistence."""
+    user_doc = user.model_dump(mode="python")
+    user_doc["synced_at"] = synced_at
+    user_doc["total_decks"] = total_decks
+    return user_doc
+
+
+def _prepare_deck_documents(
+    payload: UserDecksResponse | UserDeckSummariesResponse,
+    synced_at: datetime,
+    *,
+    kind: Literal["full", "summary"],
+) -> Iterator[dict[str, Any]]:
+    """Yield deck or summary documents with shared metadata applied."""
+    username = payload.user.user_name
+    for deck in payload.decks:
+        deck_doc = deck.model_dump(mode="python")
+        deck_doc["user_name"] = username
+        deck_doc["synced_at"] = synced_at
+        yield deck_doc
+
+
+def _collection_for_kind(kind: Literal["full", "summary"]) -> DeckCollection:
+    """Translate the document kind into the backing collection name."""
+    return "decks" if kind == "full" else "deck_summaries"
