@@ -20,6 +20,16 @@ let landingSignInButton = null;
 let landingFootnoteTextEl = null;
 let defaultSignInLabel = "";
 let defaultFootnoteText = "";
+let moxfieldForm = null;
+let moxfieldHandleInput = null;
+let moxfieldSaveButton = null;
+let moxfieldSyncButton = null;
+let moxfieldStatusEl = null;
+let moxfieldDeckSummaryEl = null;
+let moxfieldDeckSummaryText = null;
+let moxfieldDeckSummaryAction = null;
+let moxfieldMetaEl = null;
+let defaultSyncLabel = "";
 
 const renderMoxfieldPanel = (session, { preserveStatus = false } = {}) => {
   if (!moxfieldHandleInput || !moxfieldSyncButton) {

@@ -117,6 +117,22 @@ const bootstrapCurrentSession = () => {
 
 let currentSession = bootstrapCurrentSession();
 
+// Shared DOM references initialised by page controllers
+let deckCollectionEl = null;
+let deckCollectionEmptyEl = null;
+let deckStatusEl = null;
+let deckBulkDeleteBtn = null;
+let deckBulkDeleteContainer = null;
+let deckSelectionModal = null;
+let deckSelectionListEl = null;
+let deckSelectionForm = null;
+let deckSelectionConfirmBtn = null;
+let deckSelectionCancelBtn = null;
+let deckSelectionCloseBtn = null;
+let deckSelectionSelectAllBtn = null;
+let deckSelectionClearBtn = null;
+let pendingDeckSelection = null;
+
 const getSession = () => {
   const store = resolveSessionStore();
   if (store?.getCurrent) {
