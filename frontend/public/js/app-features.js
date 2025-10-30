@@ -4152,9 +4152,7 @@ const ensureDeckDetails = async (deckId, { handle, preferLive = false } = {}) =>
         continue;
       }
 
-      const matched = payload.decks.find(
-        (candidate) => getDeckIdentifier(candidate) === deckId
-      );
+      const matched = payload.decks.find((candidate) => deckMatchesIdentifier(candidate, deckId));
 
       if (!matched) {
         continue;
@@ -4203,6 +4201,8 @@ if (typeof window !== "undefined") {
     getPrimaryCardIdentifier,
     createDeckSnapshot,
     collectDeckBoards,
+    collectDeckIdentifierCandidates,
+    deckMatchesIdentifier,
     resolveDeckColorIdentity,
     doesDeckMatchSearch,
     setDeckCollectionSearchQuery,

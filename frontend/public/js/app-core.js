@@ -982,13 +982,55 @@ const showDeckStatus = (message, variant = "neutral") => {
 const getDeckIdentifier = (deck) =>
   deck?.publicId ?? deck?.public_id ?? deck?.slug ?? deck?.id ?? deck?.deckId ?? null;
 
+const normalizeDeckIdentifierValue = (value) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const collectDeckIdentifierCandidates = (deck) => {
+  const candidates = [];
+  const addCandidate = (value) => {
+    const normalized = normalizeDeckIdentifierValue(value);
+    if (normalized && !candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  if (!deck || typeof deck !== "object") {
+    return candidates;
+  }
+
+  addCandidate(deck.publicId);
+  addCandidate(deck.public_id);
+  addCandidate(deck.slug);
+  addCandidate(deck.id);
+  addCandidate(deck.deckId);
+  addCandidate(deck?.raw?.public_id);
+  addCandidate(deck?.raw?.publicId);
+  addCandidate(deck?.raw?.slug);
+  addCandidate(deck?.raw?.id);
+  addCandidate(deck?.raw?.deckId);
+
+  return candidates;
+};
+
+const deckMatchesIdentifier = (deck, identifier) => {
+  const normalized = normalizeDeckIdentifierValue(identifier);
+  if (!normalized) {
+    return false;
+  }
+  return collectDeckIdentifierCandidates(deck).includes(normalized);
+};
+
 const findDeckInIntegration = (integration, deckId) => {
   if (!integration || !deckId) {
     return null;
   }
   return (
-    integration.decks?.find((storedDeck) => getDeckIdentifier(storedDeck) === deckId) ??
-    null
+    integration.decks?.find((storedDeck) => deckMatchesIdentifier(storedDeck, deckId)) ?? null
   );
 };
 
@@ -1007,7 +1049,7 @@ const replaceDeckInIntegration = (integration, updatedDeck) => {
   }
 
   const decks = Array.isArray(integration.decks) ? [...integration.decks] : [];
-  const index = decks.findIndex((existing) => getDeckIdentifier(existing) === targetId);
+  const index = decks.findIndex((existing) => deckMatchesIdentifier(existing, targetId));
   if (index === -1) {
     decks.push(updatedDeck);
   } else {

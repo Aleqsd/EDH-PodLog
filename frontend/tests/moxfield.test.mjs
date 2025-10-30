@@ -177,6 +177,39 @@ test("normalizeMoxfieldDeck extracts metadata from backend payloads", () => {
   assert.equal(normalized.updatedAt, "2023-10-01T12:00:00Z");
 });
 
+test("deckMatchesIdentifier recognises legacy and public deck identifiers", () => {
+  const { normalizeMoxfieldDeck, deckMatchesIdentifier, collectDeckIdentifierCandidates } =
+    loadInternals();
+
+  const normalized = normalizeMoxfieldDeck({
+    id: "gx7GDX",
+    public_id: "0YHeeVfUOUGT0EuM48643A",
+    public_url: "https://www.moxfield.com/decks/0YHeeVfUOUGT0EuM48643A",
+    boards: [
+      {
+        name: "mainboard",
+        cards: [
+          { quantity: 1, card: { name: "Sample Card" } },
+        ],
+      },
+    ],
+  });
+
+  const candidates = collectDeckIdentifierCandidates(normalized);
+  assert.ok(
+    candidates.includes("0YHeeVfUOUGT0EuM48643A"),
+    "expected public identifier to be present in candidate list",
+  );
+  assert.ok(
+    candidates.includes("gx7GDX"),
+    "expected legacy short identifier to be present in candidate list",
+  );
+
+  assert.equal(deckMatchesIdentifier(normalized, "0YHeeVfUOUGT0EuM48643A"), true);
+  assert.equal(deckMatchesIdentifier(normalized, "gx7GDX"), true);
+  assert.equal(deckMatchesIdentifier(normalized, "missingDeck"), false);
+});
+
 test("createCardSnapshot preserves core card data for fast detail rendering", () => {
   const { createCardSnapshot } = loadInternals();
   const deck = { publicId: "deck-123", name: "Esper Control", format: "Commander" };
