@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, AsyncIterator, Callable
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from app import main as app_main
 from app.dependencies import get_mongo_database, get_moxfield_client
 from app.main import create_app
+from app.moxfield import MoxfieldError, MoxfieldNotFoundError
 from backend.tests.utils import StubDatabase, StubMoxfieldClient
 
 pytestmark = pytest.mark.anyio
@@ -135,16 +137,18 @@ MOXFIELD_DECK_SUMMARIES = [
 ]
 
 
-@pytest.fixture()
-async def e2e_context() -> dict[str, Any]:
-    """Provide an AsyncClient wired to the FastAPI app with stubbed dependencies."""
-    app = create_app()
-    stub_db = StubDatabase()
-    stub_moxfield = StubMoxfieldClient(
+def _build_default_stub_moxfield() -> StubMoxfieldClient:
+    return StubMoxfieldClient(
         payload=MOXFIELD_DETAILS_PAYLOAD,
         summary_payload=MOXFIELD_SUMMARY_PAYLOAD,
         deck_summaries=MOXFIELD_DECK_SUMMARIES,
     )
+
+
+@asynccontextmanager
+async def _stubbed_app_context(stub_moxfield: StubMoxfieldClient) -> AsyncIterator[dict[str, Any]]:
+    app = create_app()
+    stub_db = StubDatabase()
     app.dependency_overrides[get_mongo_database] = lambda: stub_db
     app.dependency_overrides[get_moxfield_client] = lambda: stub_moxfield
 
@@ -154,12 +158,20 @@ async def e2e_context() -> dict[str, Any]:
     app_main.close_mongo_client = lambda: None  # type: ignore[assignment]
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield {"client": client, "stub_db": stub_db}
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            yield {"client": client, "stub_db": stub_db}
+    finally:
+        app.dependency_overrides.clear()
+        app_main.get_mongo_database = original_get_db  # type: ignore[assignment]
+        app_main.close_mongo_client = original_close  # type: ignore[assignment]
 
-    app.dependency_overrides.clear()
-    app_main.get_mongo_database = original_get_db  # type: ignore[assignment]
-    app_main.close_mongo_client = original_close  # type: ignore[assignment]
+
+@pytest.fixture()
+async def e2e_context() -> dict[str, Any]:
+    """Provide an AsyncClient wired to the FastAPI app with stubbed dependencies."""
+    async with _stubbed_app_context(_build_default_stub_moxfield()) as context:
+        yield context
 
 
 async def _upsert_profile(
@@ -597,3 +609,205 @@ async def test_public_profile_privacy_flow(e2e_context: dict[str, object]) -> No
     )
     assert private_search.status_code == 200
     assert private_search.json()["results"] == []
+
+
+async def test_deck_personalization_missing_returns_404(e2e_context: dict[str, object]) -> None:
+    """Fetching a non-existent deck personalization should raise a 404."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "deckless-owner"
+    await _upsert_profile(client, owner_sub)
+
+    missing_personalization = await client.get(
+        f"/profiles/{owner_sub}/deck-personalizations/missing-deck",
+    )
+    assert missing_personalization.status_code == 404
+
+    listing_response = await client.get(f"/profiles/{owner_sub}/deck-personalizations")
+    assert listing_response.status_code == 200
+    assert listing_response.json()["personalizations"] == []
+
+
+async def test_game_record_validation_errors(e2e_context: dict[str, object]) -> None:
+    """Game recording should surface validation errors before persistence."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "validation-owner"
+    await _upsert_profile(client, owner_sub)
+
+    single_player_payload = {
+        "playgroup": {"name": "Solo Pod"},
+        "players": [
+            {"id": "solo", "name": "Solo Player", "is_owner": True, "googleSub": owner_sub},
+        ],
+        "rankings": [{"player_id": "solo", "rank": 1}],
+    }
+    single_player_response = await client.post(
+        f"/profiles/{owner_sub}/games",
+        json=single_player_payload,
+    )
+    assert single_player_response.status_code == 400
+    assert "Au moins deux joueurs" in single_player_response.json()["detail"]
+
+    missing_ranking_payload = {
+        "playgroup": {"name": "Ranking Pod"},
+        "players": [
+            {"id": "p1", "name": "Leader", "is_owner": True, "googleSub": owner_sub},
+            {"id": "p2", "name": "Follower"},
+        ],
+        "rankings": [{"player_id": "p1", "rank": 1}],
+    }
+    missing_ranking_response = await client.post(
+        f"/profiles/{owner_sub}/games",
+        json=missing_ranking_payload,
+    )
+    assert missing_ranking_response.status_code == 400
+    assert "Chaque joueur doit posséder un rang" in missing_ranking_response.json()["detail"]
+
+    missing_playgroup_payload = {
+        "playgroup": {"id": "missing-playgroup", "name": "Ghost Pod"},
+        "players": [
+            {"id": "p3", "name": "Owner", "is_owner": True, "googleSub": owner_sub},
+            {"id": "p4", "name": "Partner"},
+        ],
+        "rankings": [
+            {"player_id": "p3", "rank": 1},
+            {"player_id": "p4", "rank": 2},
+        ],
+    }
+    missing_playgroup_response = await client.post(
+        f"/profiles/{owner_sub}/games",
+        json=missing_playgroup_payload,
+    )
+    assert missing_playgroup_response.status_code == 404
+
+
+async def test_linking_player_updates_game_history(e2e_context: dict[str, object]) -> None:
+    """Linking a tracked player should update stored game entries."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "history-owner"
+    friend_sub = "history-friend"
+
+    await _upsert_profile(
+        client,
+        owner_sub,
+        display_name="History Owner",
+        moxfield_decks=[
+            {
+                "public_id": "history-deck",
+                "name": "Historic Victory",
+                "format": "commander",
+                "url": "https://moxfield.com/decks/history-deck",
+            }
+        ],
+    )
+    await _upsert_profile(
+        client,
+        friend_sub,
+        display_name="History Friend",
+        moxfield_decks=[
+            {
+                "public_id": "friend-deck",
+                "name": "Support Deck",
+                "format": "commander",
+                "url": "https://moxfield.com/decks/friend-deck",
+            }
+        ],
+    )
+
+    create_player = await client.post(
+        f"/profiles/{owner_sub}/players",
+        json={"name": "Guest Historian"},
+    )
+    assert create_player.status_code == 201
+    player_id = create_player.json()["id"]
+
+    recorded_at = datetime.now(timezone.utc).isoformat()
+    record_game_response = await client.post(
+        f"/profiles/{owner_sub}/games",
+        json={
+            "playgroup": {"name": "History Pod"},
+            "players": [
+                {
+                    "id": player_id,
+                    "name": "Guest Historian",
+                    "playerType": "guest",
+                },
+                {
+                    "id": "owner-player",
+                    "name": "History Owner",
+                    "playerType": "user",
+                    "is_owner": True,
+                    "googleSub": owner_sub,
+                    "deck_id": "history-deck",
+                    "deck_name": "Historic Victory",
+                },
+                {
+                    "id": "ally-player",
+                    "name": "Ally",
+                    "playerType": "guest",
+                },
+            ],
+            "rankings": [
+                {"player_id": player_id, "rank": 1},
+                {"player_id": "owner-player", "rank": 2},
+                {"player_id": "ally-player", "rank": 3},
+            ],
+            "recorded_at": recorded_at,
+        },
+    )
+    assert record_game_response.status_code == 201
+
+    games_before_link = await client.get(f"/profiles/{owner_sub}/games")
+    assert games_before_link.status_code == 200
+    first_game_players = games_before_link.json()["games"][0]["players"]
+    guest_entry = next(player for player in first_game_players if player["id"] == player_id)
+    assert guest_entry["playerType"] == "guest"
+    assert (guest_entry.get("googleSub") or guest_entry.get("google_sub")) is None
+
+    link_response = await client.post(
+        f"/profiles/{owner_sub}/players/{player_id}/link",
+        json={"google_sub": friend_sub},
+    )
+    assert link_response.status_code == 200
+    link_payload = link_response.json()
+    assert link_payload["playerType"] == "user"
+    linked_google_sub = link_payload.get("googleSub") or link_payload.get("google_sub")
+    assert linked_google_sub == friend_sub
+
+    games_after_link = await client.get(f"/profiles/{owner_sub}/games")
+    assert games_after_link.status_code == 200
+    updated_players = games_after_link.json()["games"][0]["players"]
+    linked_entry = next(player for player in updated_players if player["id"] == player_id)
+    assert linked_entry["playerType"] == "user"
+    assert (linked_entry.get("googleSub") or linked_entry.get("google_sub")) == friend_sub
+
+
+async def test_moxfield_error_handling() -> None:
+    """Upstream Moxfield failures should preserve response semantics."""
+
+    not_found_stub = StubMoxfieldClient(error=MoxfieldNotFoundError("Utilisateur introuvable."))
+    async with _stubbed_app_context(not_found_stub) as context:
+        client = context["client"]
+        assert isinstance(client, AsyncClient)
+
+        decks_response = await client.get("/users/missing-user/decks")
+        assert decks_response.status_code == 404
+
+        summaries_response = await client.get("/users/missing-user/deck-summaries")
+        assert summaries_response.status_code == 404
+
+    upstream_error_stub = StubMoxfieldClient(error=MoxfieldError("Moxfield indisponible."))
+    async with _stubbed_app_context(upstream_error_stub) as context:
+        client = context["client"]
+        assert isinstance(client, AsyncClient)
+
+        decks_error = await client.get("/users/podcaster/decks")
+        assert decks_error.status_code == 502
+
+        summaries_error = await client.get("/users/podcaster/deck-summaries")
+        assert summaries_error.status_code == 502
