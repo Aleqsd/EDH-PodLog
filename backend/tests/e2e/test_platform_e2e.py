@@ -426,6 +426,17 @@ async def test_full_platform_flow(e2e_context: dict[str, object]) -> None:
     assert following_after_unfollow.status_code == 200
     assert following_after_unfollow.json()["following"] == []
 
+    self_follow_response = await client.post(
+        f"/social/users/{owner_sub}/follow",
+        json={"target_sub": owner_sub},
+    )
+    assert self_follow_response.status_code == 400
+    assert self_follow_response.json()["detail"] == "Vous ne pouvez pas vous suivre vous-même."
+
+    following_after_self_attempt = await client.get(f"/social/users/{owner_sub}/following")
+    assert following_after_self_attempt.status_code == 200
+    assert following_after_self_attempt.json()["following"] == []
+
     delete_deck = await client.delete(f"/users/podcaster/decks/{deck_public_id}")
     assert delete_deck.status_code == 204
 

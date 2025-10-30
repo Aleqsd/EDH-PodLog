@@ -72,6 +72,66 @@ def test_record_game_updates_history_and_playgroup(api_client: TestClient) -> No
     assert playgroups[0]["last_used_at"] is not None
 
 
+def test_list_games_filters_by_playgroup_identifier(api_client: TestClient) -> None:
+    """Listing games with a playgroup filter should return only matching records."""
+    owner = "filter-owner"
+    alpha_response = api_client.post(
+        f"/profiles/{owner}/playgroups",
+        json={"name": "Alpha Pods"},
+    )
+    beta_response = api_client.post(
+        f"/profiles/{owner}/playgroups",
+        json={"name": "Beta Pods"},
+    )
+    assert alpha_response.status_code == 201
+    assert beta_response.status_code == 201
+    alpha_id = alpha_response.json()["id"]
+    beta_id = beta_response.json()["id"]
+
+    alpha_game_payload = {
+        "playgroup": {"id": alpha_id, "name": "Alpha Pods"},
+        "players": [
+            {"id": "alpha-owner", "name": "Alice", "is_owner": True},
+            {"id": "alpha-opponent", "name": "Bob"},
+        ],
+        "rankings": [
+            {"player_id": "alpha-owner", "rank": 1},
+            {"player_id": "alpha-opponent", "rank": 2},
+        ],
+    }
+    beta_game_payload = {
+        "playgroup": {"id": beta_id, "name": "Beta Pods"},
+        "players": [
+            {"id": "beta-owner", "name": "Cara", "is_owner": True},
+            {"id": "beta-opponent", "name": "Dan"},
+        ],
+        "rankings": [
+            {"player_id": "beta-owner", "rank": 1},
+            {"player_id": "beta-opponent", "rank": 2},
+        ],
+    }
+
+    alpha_record = api_client.post(f"/profiles/{owner}/games", json=alpha_game_payload)
+    beta_record = api_client.post(f"/profiles/{owner}/games", json=beta_game_payload)
+    assert alpha_record.status_code == 201
+    assert beta_record.status_code == 201
+
+    filtered_response = api_client.get(
+        f"/profiles/{owner}/games",
+        params={"playgroup_id": alpha_id},
+    )
+    assert filtered_response.status_code == 200
+    filtered_games = filtered_response.json()["games"]
+    assert len(filtered_games) == 1
+    assert filtered_games[0]["playgroup"]["id"] == alpha_id
+    assert filtered_games[0]["playgroup"]["name"] == "Alpha Pods"
+
+    unfiltered_response = api_client.get(f"/profiles/{owner}/games")
+    assert unfiltered_response.status_code == 200
+    playgroup_ids = {game["playgroup"]["id"] for game in unfiltered_response.json()["games"]}
+    assert playgroup_ids == {alpha_id, beta_id}
+
+
 def test_record_game_creates_playgroup_when_missing(api_client: TestClient) -> None:
     """A new playgroup should be created automatically when only a name is provided."""
     payload = {
