@@ -12,13 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.main import app  # pylint: disable=wrong-import-position
 from app.routers import meta_router  # pylint: disable=wrong-import-position
 
 
-def test_health_endpoint_returns_ok() -> None:
-    with TestClient(app) as client:
-        response = client.get("/health")
+def test_health_endpoint_returns_ok(api_client: TestClient) -> None:
+    response = api_client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
