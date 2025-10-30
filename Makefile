@@ -32,7 +32,7 @@ VPS_FRONT_LOG ?= $(VPS_LOG_ROOT)/front.log
 
 .PHONY: front back db deps doctor \
 	front-config front-build front-serve front-preview front-deploy front-clean front-test \
-	backend backend-install backend-run backend-test backend-openapi backend-deps \
+	backend backend-install backend-run backend-test backend-test-e2e backend-openapi backend-deps \
 	db-start db-stop db-status db-clean db-preview db-test \
 	check-env check-tools test vps-deploy log-db log-back log-front
 
@@ -85,6 +85,13 @@ backend-test: backend-install
 	[ -f $(CURDIR)/.env.local ] && . $(CURDIR)/.env.local; \
 	set +a; \
 	$(BACKEND_PYTEST) $(BACKEND_DIR)/tests
+
+backend-test-e2e: backend-install
+	@set -a; \
+	[ -f $(CURDIR)/.env ] && . $(CURDIR)/.env; \
+	[ -f $(CURDIR)/.env.local ] && . $(CURDIR)/.env.local; \
+	set +a; \
+	$(BACKEND_PYTEST) $(BACKEND_DIR)/tests/e2e
 
 backend-openapi: backend-install
 	@set -a; \
@@ -270,4 +277,4 @@ doctor: check-tools check-env
 
 deps: backend-deps
 
-test: front-test backend-test db-test
+test: front-test backend-test backend-test-e2e db-test

@@ -162,6 +162,27 @@ async def e2e_context() -> dict[str, Any]:
     app_main.close_mongo_client = original_close  # type: ignore[assignment]
 
 
+async def _upsert_profile(
+    client: AsyncClient,
+    google_sub: str,
+    *,
+    display_name: str | None = None,
+    is_public: bool = True,
+    **overrides: Any,
+) -> dict[str, Any]:
+    """Create or update a user profile and return the stored payload."""
+    payload: dict[str, Any] = {
+        "display_name": display_name or f"Agent {google_sub}",
+        "email": f"{google_sub}@example.com",
+        "description": f"Profile for {google_sub}",
+        "is_public": is_public,
+    }
+    payload.update(overrides)
+    response = await client.put(f"/profiles/{google_sub}", json=payload)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 async def test_full_platform_flow(e2e_context: dict[str, object]) -> None:
     """Drive a representative user journey across the backend surface."""
     client = e2e_context["client"]
@@ -399,3 +420,180 @@ async def test_full_platform_flow(e2e_context: dict[str, object]) -> None:
     cache_after_delete = await client.get("/cache/users/podcaster/decks")
     assert cache_after_delete.status_code == 200
     assert cache_after_delete.json()["decks"] == []
+
+
+async def test_deck_cache_warmup_flow(e2e_context: dict[str, object]) -> None:
+    """Cache endpoints should report misses until the deck sync runs."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    await _upsert_profile(client, "cache-owner", moxfield_handle="podcaster")
+
+    cold_cache = await client.get("/cache/users/podcaster/decks")
+    assert cold_cache.status_code == 404
+
+    summary_sync = await client.get("/users/podcaster/deck-summaries")
+    assert summary_sync.status_code == 200
+    assert summary_sync.json()["total_decks"] == 1
+
+    cached_summary = await client.get("/cache/users/podcaster/deck-summaries")
+    assert cached_summary.status_code == 200
+    assert cached_summary.json()["decks"][0]["public_id"] == "deck-public-001"
+
+    decks_sync = await client.get("/users/podcaster/decks")
+    assert decks_sync.status_code == 200
+    assert decks_sync.json()["decks"][0]["boards"]
+
+    delete_deck = await client.delete("/users/podcaster/decks/deck-public-001")
+    assert delete_deck.status_code == 204
+
+    cache_after_delete = await client.get("/cache/users/podcaster/decks")
+    assert cache_after_delete.status_code == 200
+    assert cache_after_delete.json()["decks"] == []
+
+
+async def test_playgroup_update_and_delete_flow(e2e_context: dict[str, object]) -> None:
+    """Playgroup metadata updates and deletions should persist."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "playgroup-owner"
+    await _upsert_profile(client, owner_sub)
+    await _upsert_profile(client, "ally-one")
+
+    create_response = await client.post(
+        f"/profiles/{owner_sub}/playgroups",
+        json={
+            "name": "Morning Pod",
+            "members": [
+                {"playerType": "user", "googleSub": owner_sub, "name": "Owner"},
+                {"playerType": "guest", "name": "Guest One"},
+            ],
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    playgroup_id = create_response.json()["id"]
+
+    update_response = await client.put(
+        f"/profiles/{owner_sub}/playgroups/{playgroup_id}",
+        json={
+            "name": "Evening Pod",
+            "members": [
+                {"playerType": "user", "googleSub": owner_sub, "name": "Owner"},
+                {"playerType": "user", "googleSub": "ally-one", "name": "Ally"},
+            ],
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["name"] == "Evening Pod"
+
+    detail_response = await client.get(f"/profiles/{owner_sub}/playgroups/{playgroup_id}")
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["name"] == "Evening Pod"
+    member_types = {member["playerType"] for member in detail_payload["members"]}
+    assert member_types == {"user"}
+
+    delete_response = await client.delete(f"/profiles/{owner_sub}/playgroups/{playgroup_id}")
+    assert delete_response.status_code == 204
+
+    list_after_delete = await client.get(f"/profiles/{owner_sub}/playgroups")
+    assert list_after_delete.status_code == 200
+    assert list_after_delete.json()["playgroups"] == []
+
+
+async def test_guest_player_validation_flow(e2e_context: dict[str, object]) -> None:
+    """Guest player endpoints enforce validation and cleanup."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "player-owner"
+    await _upsert_profile(client, owner_sub)
+
+    create_player = await client.post(
+        f"/profiles/{owner_sub}/players",
+        json={"name": "Table Ally"},
+    )
+    assert create_player.status_code == 201
+    player_id = create_player.json()["id"]
+
+    invalid_update = await client.put(
+        f"/profiles/{owner_sub}/players/{player_id}",
+        json={"name": "   "},
+    )
+    assert invalid_update.status_code == 400
+
+    invalid_link = await client.post(
+        f"/profiles/{owner_sub}/players/{player_id}/link",
+        json={"google_sub": "   "},
+    )
+    assert invalid_link.status_code == 400
+
+    delete_player = await client.delete(f"/profiles/{owner_sub}/players/{player_id}")
+    assert delete_player.status_code == 204
+
+    players_after_delete = await client.get(f"/profiles/{owner_sub}/players")
+    assert players_after_delete.status_code == 200
+    assert players_after_delete.json()["players"] == []
+
+
+async def test_public_profile_privacy_flow(e2e_context: dict[str, object]) -> None:
+    """Search and public profile endpoints should respect privacy settings."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    await _upsert_profile(client, "viewer", display_name="Viewer", is_public=True)
+    await _upsert_profile(
+        client,
+        "public-friend",
+        display_name="Public Friend",
+        is_public=True,
+        description="Join our public pods.",
+    )
+    await _upsert_profile(
+        client,
+        "private-friend",
+        display_name="Private Friend",
+        is_public=False,
+        description="Stealth strategist.",
+    )
+
+    search_results = await client.get(
+        "/social/users/search",
+        params={"q": "Friend", "viewer": "viewer"},
+    )
+    assert search_results.status_code == 200
+    names = [entry["display_name"] for entry in search_results.json()["results"]]
+    assert "Public Friend" in names
+    assert "Private Friend" not in names
+
+    follow_public = await client.post(
+        "/social/users/viewer/follow",
+        json={"target_sub": "public-friend"},
+    )
+    assert follow_public.status_code == 204
+
+    follow_private = await client.post(
+        "/social/users/viewer/follow",
+        json={"target_sub": "private-friend"},
+    )
+    assert follow_private.status_code == 204
+
+    following_list = await client.get("/social/users/viewer/following")
+    assert following_list.status_code == 200
+    following_subs = {entry["google_sub"] for entry in following_list.json()["following"]}
+    assert {"public-friend", "private-friend"}.issubset(following_subs)
+
+    public_profile = await client.get("/social/users/public-friend")
+    assert public_profile.status_code == 200
+    assert public_profile.json()["followers_count"] == 1
+
+    private_profile = await client.get("/social/users/private-friend")
+    assert private_profile.status_code == 404
+
+    private_search = await client.get(
+        "/social/users/search",
+        params={"q": "Private", "viewer": "viewer"},
+    )
+    assert private_search.status_code == 200
+    assert private_search.json()["results"] == []
