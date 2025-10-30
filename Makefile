@@ -1,3 +1,11 @@
+ENV_FILES := $(wildcard .env .env.local)
+ifneq ($(ENV_FILES),)
+export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
+include $(ENV_FILES)
+endif
+
+RUN_PROD_SMOKE ?= 0
+
 PYTHON ?= python
 
 FRONTEND_DIR := frontend
