@@ -16,6 +16,10 @@ const handleDeckSelectionConfirm = async () => {
 };
 
 const auth = window.EDH_PODLOG?.auth ?? {};
+let landingSignInButton = null;
+let landingFootnoteTextEl = null;
+let defaultSignInLabel = "";
+let defaultFootnoteText = "";
 
 const renderMoxfieldPanel = (session, { preserveStatus = false } = {}) => {
   if (!moxfieldHandleInput || !moxfieldSyncButton) {

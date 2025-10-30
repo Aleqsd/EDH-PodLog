@@ -1,6 +1,6 @@
 # Refactor Opportunities
 
-## 1. Split the frontend runtime into focused modules
+## 1. Split the frontend runtime into focused modules [DONE]
 - **Context:** `frontend/public/js/app-core.js`, `frontend/public/js/controllers/shared.js`
 - **Problem:** `app-core.js` carries authentication flows, localStorage/session helpers, formatting helpers, DOM utilities, and controller registration in a single 600+ line IIFE. Other controllers import behaviour implicitly by mutating globals (for example `shared.js` reaches into `googleAccessToken`, `redirectToLanding`, `fetchBackendProfile`).
 - **Refactor:** Extract the major responsibilities into standalone scripts (e.g. `auth.js`, `session-store.js`, `api-client.js`, `ui-badge.js`) that attach explicit namespaces on `window.EDH_PODLOG`. Controllers would consume the published API instead of relying on globals.

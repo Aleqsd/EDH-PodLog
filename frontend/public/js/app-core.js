@@ -79,6 +79,127 @@ if (!sessionStore || typeof sessionStore.load !== "function") {
   window.EDH_PODLOG = window.EDH_PODLOG || {};
   window.EDH_PODLOG.session = sessionStore;
 }
+
+const resolveSessionStore = () => {
+  if (typeof window !== "undefined") {
+    const globalStore = window.EDH_PODLOG?.session;
+    if (globalStore && globalStore !== sessionStore) {
+      sessionStore = globalStore;
+    }
+  }
+  return sessionStore;
+};
+
+const bootstrapCurrentSession = () => {
+  const store = resolveSessionStore();
+  if (store?.getCurrent) {
+    try {
+      const latest = store.getCurrent();
+      if (typeof latest !== "undefined") {
+        return latest;
+      }
+    } catch (error) {
+      console.warn("Impossible de récupérer la session active :", error);
+    }
+  }
+  if (store?.load) {
+    try {
+      const loaded = store.load();
+      if (typeof loaded !== "undefined") {
+        return loaded;
+      }
+    } catch (error) {
+      console.warn("Impossible de charger la session :", error);
+    }
+  }
+  return null;
+};
+
+let currentSession = bootstrapCurrentSession();
+
+const getSession = () => {
+  const store = resolveSessionStore();
+  if (store?.getCurrent) {
+    try {
+      const latest = store.getCurrent();
+      if (typeof latest !== "undefined") {
+        currentSession = latest;
+        return latest;
+      }
+    } catch (error) {
+      console.warn("Impossible de récupérer la session active :", error);
+    }
+  }
+  if (store?.load) {
+    try {
+      const loaded = store.load();
+      if (typeof loaded !== "undefined") {
+        currentSession = loaded;
+        return loaded;
+      }
+    } catch (error) {
+      console.warn("Impossible de charger la session :", error);
+    }
+  }
+  return currentSession ?? null;
+};
+
+const setCurrentSession = (session) => {
+  const store = resolveSessionStore();
+  if (store?.setCurrent) {
+    try {
+      store.setCurrent(session);
+    } catch (error) {
+      console.warn("Impossible de mettre à jour la session active :", error);
+    }
+  } else if (store?.persist) {
+    try {
+      store.persist(session);
+    } catch (error) {
+      console.warn("Impossible de persister la session :", error);
+    }
+  }
+  currentSession = session ?? null;
+  return currentSession;
+};
+
+const persistSession = (session) => {
+  const store = resolveSessionStore();
+  if (store?.persist) {
+    try {
+      const persisted = store.persist(session);
+      currentSession = persisted ?? session ?? null;
+      return persisted ?? session ?? null;
+    } catch (error) {
+      if (error?.code !== "STORAGE_QUOTA") {
+        console.warn("Impossible d'enregistrer la session :", error);
+      }
+      currentSession = session ?? null;
+      return session ?? null;
+    }
+  }
+  return setCurrentSession(session);
+};
+
+const clearSession = () => {
+  const store = resolveSessionStore();
+  if (store?.clear) {
+    try {
+      store.clear();
+    } catch (error) {
+      console.warn("Impossible de nettoyer la session :", error);
+    }
+  }
+  if (store?.setCurrent) {
+    try {
+      store.setCurrent(null);
+    } catch (error) {
+      console.warn("Impossible de réinitialiser la session active :", error);
+    }
+  }
+  currentSession = null;
+};
+
 const deckPersonalizationsApi = sessionStore?.deckPersonalizations ?? {};
 const apiClient = window.EDH_PODLOG?.api ?? {};
 
