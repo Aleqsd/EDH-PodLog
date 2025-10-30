@@ -200,6 +200,63 @@ const clearSession = () => {
   currentSession = null;
 };
 
+const updateSessionData = (mutator) => {
+  const store = resolveSessionStore();
+  const cloneSessionValue = (session) => {
+    if (session === null || session === undefined) {
+      return null;
+    }
+    if (store?.clone && typeof store.clone === "function") {
+      try {
+        return store.clone(session);
+      } catch (error) {
+        console.warn("Impossible de cloner la session :", error);
+      }
+    }
+    if (typeof structuredClone === "function") {
+      try {
+        return structuredClone(session);
+      } catch {
+        // ignore structuredClone failures, fallback to JSON strategy
+      }
+    }
+    try {
+      return JSON.parse(JSON.stringify(session));
+    } catch {
+      if (typeof session === "object" && session !== null) {
+        return { ...session };
+      }
+      return session;
+    }
+  };
+
+  const applyMutator = (session) => {
+    const base = cloneSessionValue(session);
+    if (base === null) {
+      return session ?? null;
+    }
+    const result = typeof mutator === "function" ? mutator(base) : mutator;
+    return result === undefined ? base : result;
+  };
+
+  if (store?.update) {
+    try {
+      const updated = store.update((session) => applyMutator(session));
+      currentSession = updated ?? currentSession ?? null;
+      return updated ?? null;
+    } catch (error) {
+      console.warn("Impossible de mettre à jour la session :", error);
+    }
+  }
+
+  const current = getSession();
+  if (current === null || current === undefined) {
+    return null;
+  }
+  const resolved = applyMutator(current);
+  return persistSession(resolved);
+};
+
 const deckPersonalizationsApi = sessionStore?.deckPersonalizations ?? {};
 const apiClient = window.EDH_PODLOG?.api ?? {};
 
