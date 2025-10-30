@@ -63,6 +63,8 @@
     return typeof value === "string" ? value : "";
   };
 
+  const sessionStore = window.EDH_PODLOG?.session ?? {};
+
   const buildContext = () => {
     const page = getBodyDatasetValue("page").toLowerCase();
     const requireAuth = getBodyDatasetValue("requireAuth").toLowerCase() === "true";
@@ -71,18 +73,27 @@
       page,
       requireAuth,
       get session() {
-        return currentSession;
+        return sessionStore.getCurrent ? sessionStore.getCurrent() : currentSession;
       },
       set session(next) {
+        if (sessionStore.setCurrent) {
+          sessionStore.setCurrent(next);
+        }
         currentSession = next;
       },
       updateSession(updater) {
+        const current = sessionStore.getCurrent ? sessionStore.getCurrent() : currentSession;
+        const draft = sessionStore.clone ? sessionStore.clone(current) : { ...current };
+        let nextValue;
         if (typeof updater === "function") {
-          currentSession = updater(currentSession);
+          nextValue = updater(draft);
         } else {
-          currentSession = updater;
+          nextValue = updater;
         }
-        return currentSession;
+        const resolved = nextValue === undefined ? draft : nextValue;
+        const persisted = sessionStore.persist ? sessionStore.persist(resolved) : resolved;
+        this.session = persisted;
+        return this.session;
       },
     };
   };
@@ -101,6 +112,7 @@
     },
   };
 
+  const auth = window.EDH_PODLOG?.auth ?? {};
   window.EDH_PODLOG = window.EDH_PODLOG || {};
   window.EDH_PODLOG.controllers = api;
   window.EDH_PODLOG.loadCachedDecksForHandle =
@@ -109,11 +121,17 @@
   scheduleServiceWorkerRegistration();
 
   document.addEventListener("DOMContentLoaded", async () => {
-    if (typeof mountAppRevisionBadge === "function") {
-      mountAppRevisionBadge();
+    const ui = window.EDH_PODLOG?.ui ?? {};
+    if (typeof ui.mountRevisionBadge === "function") {
+      ui.mountRevisionBadge();
     }
 
-    currentSession = getSession();
+    const initialSession = (sessionStore.getCurrent ? sessionStore.getCurrent() : null) ??
+      (sessionStore.load ? sessionStore.load() : null);
+    if (sessionStore.setCurrent) {
+      sessionStore.setCurrent(initialSession);
+    }
+    currentSession = initialSession;
     const context = buildContext();
 
     for (const initializer of sharedControllers) {
@@ -127,7 +145,7 @@
       await runMaybeAsync(controllers.get("default"), context);
     }
 
-    if (window.google?.accounts?.oauth2 && !isGoogleLibraryReady) {
+    if (window.google?.accounts?.oauth2 && !(auth.isLibraryReady?.())) {
       initializeGoogleAuth();
     }
   });

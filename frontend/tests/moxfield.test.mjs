@@ -7,7 +7,12 @@ import { dirname, join } from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const scriptNames = ["app-core.js", "app-features.js", "app-init.js"];
+const scriptNames = [
+  "runtime-config.js",
+  "app-core.js",
+  "app-features.js",
+  "app-init.js",
+];
 const appSources = await Promise.all(
   scriptNames.map((name) =>
     readFile(join(__dirname, "../public/js", name), "utf8")
@@ -38,14 +43,67 @@ const loadInternals = () => {
     addEventListener: () => {},
     getElementById: () => null,
     querySelector: () => null,
-    body: { dataset: {} },
+    createElement(tagName) {
+      const element = {
+        tagName: String(tagName ?? "").toUpperCase(),
+        dataset: {},
+        style: {},
+        className: "",
+        id: "",
+        children: [],
+        _textContent: "",
+        classList: {
+          add: () => {},
+          remove: () => {},
+          contains: () => false,
+        },
+        appendChild(child) {
+          this.children.push(child);
+          return child;
+        },
+        append(...nodes) {
+          nodes.forEach((node) => this.appendChild(node));
+        },
+        setAttribute: () => {},
+        removeAttribute: () => {},
+        set textContent(value) {
+          this._textContent = value == null ? "" : String(value);
+        },
+        get textContent() {
+          return this._textContent;
+        },
+      };
+      return element;
+    },
+    body: {
+      dataset: {},
+      appendChild: () => {},
+      classList: {
+        add: () => {},
+        remove: () => {},
+        contains: () => false,
+      },
+    },
   };
 
   const windowStub = {
     EDH_PODLOG_CONFIG: {},
+    EDH_PODLOG: {},
     addEventListener: () => {},
     dispatchEvent: () => {},
-    location: { href: "http://localhost/" },
+    location: {
+      href: "http://localhost/",
+      origin: "http://localhost",
+      hostname: "localhost",
+      pathname: "/",
+      search: "",
+      replace(url) {
+        this.href = url;
+      },
+      assign(url) {
+        this.href = url;
+      },
+    },
   };
 
   const context = {

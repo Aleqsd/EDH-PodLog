@@ -15,6 +15,8 @@ const handleDeckSelectionConfirm = async () => {
   await performDeckSync(handle, selections, { totalDecks, user });
 };
 
+const auth = window.EDH_PODLOG?.auth ?? {};
+
 const renderMoxfieldPanel = (session, { preserveStatus = false } = {}) => {
   if (!moxfieldHandleInput || !moxfieldSyncButton) {
     return;
@@ -90,16 +92,33 @@ const setMoxfieldSyncLoading = (isLoading) => {
 };
 
 const redirectToLanding = () => {
+  if (typeof auth.redirectToLanding === "function") {
+    auth.redirectToLanding();
+    return;
+  }
   window.location.replace("index.html");
 };
 
 const revokeGoogleToken = (token) => {
+  if (typeof auth.revokeToken === "function") {
+    auth.revokeToken(token);
+    return;
+  }
   if (!token) {
     return;
   }
+  const google = window.google?.accounts?.oauth2;
+  if (google?.revoke) {
+    google.revoke(token, () => {});
+  }
+};
 
-  if (window.google?.accounts?.oauth2?.revoke) {
-    window.google.accounts.oauth2.revoke(token, () => {});
+const getGoogleAccessToken = () =>
+  typeof auth.getAccessToken === "function" ? auth.getAccessToken() : null;
+
+const setGoogleAccessToken = (token) => {
+  if (typeof auth.setAccessToken === "function") {
+    auth.setAccessToken(token);
   }
 };
 
@@ -153,7 +172,7 @@ const handleGoogleTokenResponse = async (tokenResponse) => {
     return;
   }
 
-  googleAccessToken = tokenResponse.access_token;
+  setGoogleAccessToken(tokenResponse.access_token);
 
   try {
     const userInfo = await fetchGoogleUserInfo(tokenResponse.access_token);
@@ -182,7 +201,7 @@ const handleGoogleTokenResponse = async (tokenResponse) => {
     }
 
     persistSession(mergedSession);
-    googleAccessToken = mergedSession.accessToken;
+    setGoogleAccessToken(mergedSession.accessToken);
     window.location.href = "dashboard.html";
   } catch (error) {
     console.error("Impossible de terminer la connexion Google :", error);
@@ -198,19 +217,20 @@ const initializeGoogleAuth = () => {
     return;
   }
 
-  if (!isGoogleClientConfigured()) {
+  if (!auth.isClientConfigured || !auth.isClientConfigured()) {
     console.warn("Client Google OAuth manquant. Configurez-le dans config.js.");
     updateSignInButtonState();
     return;
   }
 
-  tokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: GOOGLE_SCOPES,
+  const nextTokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: typeof auth.getClientId === "function" ? auth.getClientId() : GOOGLE_CLIENT_ID,
+    scope: typeof auth.getScopes === "function" ? auth.getScopes() : GOOGLE_SCOPES,
     callback: handleGoogleTokenResponse,
   });
 
-  isGoogleLibraryReady = true;
+  auth.setTokenClient?.(nextTokenClient);
+  auth.setLibraryReady?.(true);
   updateSignInButtonState();
 };
 
@@ -271,12 +291,12 @@ const updateSignInButtonState = () => {
     return;
   }
 
-  if (!isGoogleClientConfigured()) {
+  if (!auth.isClientConfigured || !auth.isClientConfigured()) {
     explainMissingGoogleConfig();
     return;
   }
 
-  if (!isGoogleLibraryReady) {
+  if (!auth.isLibraryReady || !auth.isLibraryReady()) {
     setSignInButtonDisabled(true);
     setSignInButtonLabel("Chargement de Google…");
     setFootnoteText(defaultFootnoteText);

@@ -1,215 +1,107 @@
+const runtimeConfig = window.EDH_PODLOG?.config ?? null;
 const STORAGE_KEY = "edhPodlogSession";
 const LAST_DECK_STORAGE_KEY = "edhPodlogLastDeckSelection";
 const LAST_CARD_STORAGE_KEY = "edhPodlogLastCardSelection";
 const DECK_EVALUATIONS_STORAGE_KEY = "edhPodlogDeckEvaluations";
 const DECK_LAYOUT_STORAGE_KEY = "edhPodlogDeckDisplayMode";
-const CONFIG = window.EDH_PODLOG_CONFIG ?? {};
-const GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID ?? "";
-const GOOGLE_SCOPES = "openid email profile";
-const GOOGLE_CONFIG_PLACEHOLDER = "REMPLACEZ_MOI_PAR_VOTRE_CLIENT_ID";
-const NUMBER_FORMAT = new Intl.NumberFormat("fr-FR");
-const API_BASE_URL = (() => {
-  const base = CONFIG.API_BASE_URL || "http://localhost:4310";
-  return base.endsWith("/") ? base.replace(/\/+$/, "") : base;
-})();
+let sessionStore = window.EDH_PODLOG?.session ?? null;
 
-const APP_REVISION = CONFIG.APP_REVISION ?? "";
-const APP_REVISION_FULL = CONFIG.APP_REVISION_FULL ?? "";
-const APP_REVISION_MESSAGE = (() => {
-  const value = CONFIG.APP_REVISION_MESSAGE;
-  return typeof value === "string" ? value.trim() : "";
-})();
-const APP_REVISION_DATE_RAW = CONFIG.APP_REVISION_DATE ?? "";
-
-const parseRevisionDate = (raw) => {
-  if (!raw || typeof raw !== "string") {
-    return null;
-  }
-  const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const REVISION_DATE = parseRevisionDate(APP_REVISION_DATE_RAW);
-const formatRevisionDate = (date) => {
-  if (!(date instanceof Date)) {
-    return "";
-  }
-  try {
-    const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
-      timeZone: "Europe/Paris",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-    const timeFormatter = new Intl.DateTimeFormat("fr-FR", {
-      timeZone: "Europe/Paris",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-
-    return `${dateFormatter.format(date)} à ${timeFormatter.format(date)}`;
-  } catch (error) {
-    console.warn("EDH PodLog failed to format revision date:", error);
-    return date.toISOString();
-  }
-};
-
-const mountAppRevisionBadge = () => {
-  if (!APP_REVISION || typeof document === "undefined") {
-    return;
-  }
-
-  const body = document.body;
-  if (!body || document.getElementById("appRevisionBadge")) {
-    return;
-  }
-
-  const badge = document.createElement("aside");
-  badge.id = "appRevisionBadge";
-  badge.className = "app-revision-badge";
-  if (APP_REVISION_MESSAGE) {
-    badge.setAttribute("aria-label", `Dernière mise à jour : ${APP_REVISION_MESSAGE} (${APP_REVISION})`);
-  } else {
-    badge.setAttribute("aria-label", `Révision ${APP_REVISION}`);
-  }
-  badge.dataset.revision = APP_REVISION;
-
-  if (APP_REVISION_FULL) {
-    badge.title = `Commit ${APP_REVISION_FULL}`;
-    badge.dataset.revisionFull = APP_REVISION_FULL;
-  }
-
-  const previewMessage = (() => {
-    if (!APP_REVISION_MESSAGE) {
-      return `Révision ${APP_REVISION}`;
+if (!sessionStore || typeof sessionStore.load !== "function") {
+  const storage = typeof window !== "undefined" ? window.localStorage : null;
+  const cloneValue = (value) => (value ? JSON.parse(JSON.stringify(value)) : value);
+  const readFromStorage = () => {
+    if (!storage) {
+      return null;
     }
-    const maxLength = 80;
-    if (APP_REVISION_MESSAGE.length <= maxLength) {
-      return APP_REVISION_MESSAGE;
+    try {
+      const raw = storage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      console.warn("Impossible de charger la session depuis le stockage local :", error);
+      return null;
     }
-    return `${APP_REVISION_MESSAGE.slice(0, maxLength - 1)}…`;
+  };
+  const writeToStorage = (value) => {
+    if (!storage) {
+      return;
+    }
+    try {
+      if (value) {
+        storage.setItem(STORAGE_KEY, JSON.stringify(value));
+      } else {
+        storage.removeItem(STORAGE_KEY);
+      }
+    } catch (error) {
+      console.warn("Impossible d'enregistrer la session dans le stockage local :", error);
+    }
+  };
+
+  let fallbackSession = readFromStorage();
+
+  sessionStore = {
+    load: () => cloneValue(fallbackSession ?? readFromStorage()),
+    persist(session) {
+      const cloned = cloneValue(session);
+      fallbackSession = cloned;
+      writeToStorage(cloned);
+      return cloned;
+    },
+    clear() {
+      fallbackSession = null;
+      writeToStorage(null);
+    },
+    update(mutator) {
+      const base = cloneValue(fallbackSession ?? readFromStorage());
+      const draft = cloneValue(base) ?? {};
+      const next = typeof mutator === "function" ? mutator(draft) : mutator;
+      const resolved = next === undefined ? draft : next;
+      return this.persist(resolved);
+    },
+    clone: cloneValue,
+    getCurrent: () => cloneValue(fallbackSession ?? readFromStorage()),
+    setCurrent(session) {
+      const cloned = cloneValue(session);
+      fallbackSession = cloned;
+      writeToStorage(cloned);
+      return cloned;
+    },
+    getActive: () => cloneValue(fallbackSession ?? readFromStorage()),
+    deckPersonalizations: {
+      bootstrapCache: () => {},
+      ensureSynced: async () => {},
+      get: () => null,
+      set: async () => null,
+      getEvaluation: () => null,
+      setEvaluation: async () => null,
+      exportForStorage: () => ({}),
+    },
+  };
+  window.EDH_PODLOG = window.EDH_PODLOG || {};
+  window.EDH_PODLOG.session = sessionStore;
+}
+const deckPersonalizationsApi = sessionStore?.deckPersonalizations ?? {};
+const apiClient = window.EDH_PODLOG?.api ?? {};
+
+const buildBackendUrl = (path = "") => {
+  if (apiClient && typeof apiClient.buildUrl === "function") {
+    return apiClient.buildUrl(path);
+  }
+
+  const fallbackBase = (() => {
+    if (runtimeConfig?.api?.baseUrl) {
+      return runtimeConfig.api.baseUrl;
+    }
+    const rawBase = runtimeConfig?.raw?.API_BASE_URL ?? "http://localhost:4310";
+    return rawBase.endsWith("/") ? rawBase.replace(/\/+$/, "") : rawBase;
   })();
 
-  const header = document.createElement("span");
-  header.className = "app-revision-header";
-
-  const messageSpan = document.createElement("span");
-  messageSpan.className = "app-revision-message";
-  messageSpan.textContent = previewMessage;
-
-  const revisionSpan = document.createElement("span");
-  revisionSpan.className = "app-revision-value";
-  revisionSpan.textContent = `(${APP_REVISION})`;
-
-  header.append(messageSpan, revisionSpan);
-  badge.append(header);
-
-  if (APP_REVISION_MESSAGE) {
-    badge.dataset.revisionMessage = APP_REVISION_MESSAGE;
-    const tooltip = document.createElement("div");
-    tooltip.className = "app-revision-tooltip";
-    tooltip.textContent = APP_REVISION_MESSAGE;
-    tooltip.id = "appRevisionTooltip";
-    badge.setAttribute("aria-describedby", tooltip.id);
-    badge.append(tooltip);
-  }
-
-  if (REVISION_DATE) {
-    const display = formatRevisionDate(REVISION_DATE);
-    if (display) {
-      const dateEl = document.createElement("time");
-      dateEl.className = "app-revision-date";
-      dateEl.dateTime = REVISION_DATE.toISOString();
-      dateEl.textContent = `Mis à jour le ${display}`;
-      badge.dataset.revisionDate = REVISION_DATE.toISOString();
-      badge.append(dateEl);
-    }
-  }
-
-  body.appendChild(badge);
-};
-
-const buildBackendUrl = (path) => {
   if (!path) {
-    return API_BASE_URL;
+    return fallbackBase;
   }
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE_URL}${normalized}`;
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${fallbackBase}${normalizedPath}`;
 };
-
-let tokenClient = null;
-let googleAccessToken = null;
-let isGoogleLibraryReady = false;
-let currentSession = null;
-
-let landingSignInButton = null;
-let landingFootnoteTextEl = null;
-let defaultSignInLabel = "Se connecter avec Google";
-let defaultFootnoteText =
-  "Nous n'utiliserons vos données que pour EDH PodLog.";
-
-let moxfieldForm = null;
-let moxfieldHandleInput = null;
-let moxfieldSaveButton = null;
-let moxfieldSyncButton = null;
-let moxfieldStatusEl = null;
-let moxfieldDeckSummaryEl = null;
-let moxfieldDeckSummaryText = null;
-let moxfieldDeckSummaryAction = null;
-let moxfieldMetaEl = null;
-let defaultSyncLabel = "Synchroniser avec Moxfield";
-let deckSummaryEl = null;
-let deckCommanderEl = null;
-let deckInsightsEl = null;
-let deckPerformanceEl = null;
-let currentSyncAbortController = null;
-let deckCollectionEl = null;
-let deckCollectionEmptyEl = null;
-let deckStatusEl = null;
-let deckBulkDeleteBtn = null;
-let deckBulkDeleteContainer = null;
-
-const DECK_COLOR_CODES = ["W", "U", "B", "R", "G", "C"];
-const DECK_COLOR_CODE_SET = new Set(DECK_COLOR_CODES);
-const BRACKET_NONE_KEY = "none";
-const DECK_RATING_SORT_MAP = {
-  "rating-stability": "stability",
-  "rating-acceleration": "acceleration",
-  "rating-interaction": "interaction",
-  "rating-resilience": "resilience",
-  "rating-finish": "finish",
-  "rating-construction": "construction",
-};
-const DECK_SORT_KEYS = new Set([
-  "updated-desc",
-  "updated-asc",
-  "created-desc",
-  "created-asc",
-  "alpha-asc",
-  "alpha-desc",
-  "color-identity",
-  ...Object.keys(DECK_RATING_SORT_MAP),
-]);
-const BRACKET_KEYWORD_ENTRIES = [
-  ["exhibition", "1"],
-  ["core", "2"],
-  ["focus", "3"],
-  ["optimize", "4"],
-  ["optimizee", "4"],
-  ["optimise", "4"],
-  ["optimisee", "4"],
-  ["optimisees", "4"],
-  ["optimisé", "4"],
-  ["optimisée", "4"],
-  ["optimized", "4"],
-  ["optimisé", "4"],
-  ["optimisée", "4"],
-  ["competitive", "5"],
-  ["competitif", "5"],
-  ["compétitif", "5"],
-  ["compet", "5"],
-];
 
 const resolveStoredDeckDisplayMode = () => {
   if (typeof localStorage === "undefined") {
@@ -248,731 +140,251 @@ const deckCollectionState = {
 
 const deckComputedMetaCache = new WeakMap();
 
-let deckSelectionModal = null;
-let deckSelectionListEl = null;
-let deckSelectionForm = null;
-let deckSelectionConfirmBtn = null;
-let deckSelectionCancelBtn = null;
-let deckSelectionCloseBtn = null;
-let deckSelectionSelectAllBtn = null;
-let deckSelectionClearBtn = null;
-let pendingDeckSelection = null;
-
-const deckPersonalizationCache = new Map();
-let deckPersonalizationOwner = null;
-let deckPersonalizationsBootstrapped = false;
-let deckPersonalizationLoadPromise = null;
-let deckPersonalizationsRemoteHydrated = false;
-
-const isGoogleClientConfigured = () =>
-  Boolean(
-    GOOGLE_CLIENT_ID &&
-      GOOGLE_CLIENT_ID !== GOOGLE_CONFIG_PLACEHOLDER &&
-      !GOOGLE_CLIENT_ID.includes("REMPLACEZ")
-  );
-
-const getSession = () => {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return sanitizeSessionForStorage(JSON.parse(raw));
-  } catch (error) {
-    console.warn("Session invalide, nettoyage…", error);
-    localStorage.removeItem(STORAGE_KEY);
-    return null;
-  }
+const DECK_COLOR_CODES = ["W", "U", "B", "R", "G", "C"];
+const DECK_COLOR_CODE_SET = new Set(DECK_COLOR_CODES);
+const BRACKET_NONE_KEY = "none";
+const DECK_RATING_SORT_MAP = {
+  "rating-stability": "stability",
+  "rating-acceleration": "acceleration",
+  "rating-interaction": "interaction",
+  "rating-resilience": "resilience",
+  "rating-finish": "finish",
+  "rating-construction": "construction",
 };
+const DECK_SORT_KEYS = new Set([
+  "updated-desc",
+  "updated-asc",
+  "created-desc",
+  "created-asc",
+  "alpha-asc",
+  "alpha-desc",
+  "color-identity",
+  ...Object.keys(DECK_RATING_SORT_MAP),
+]);
+const BRACKET_KEYWORD_ENTRIES = [
+  ["exhibition", "1"],
+  ["core", "2"],
+  ["focus", "3"],
+  ["optimize", "4"],
+  ["optimizee", "4"],
+  ["optimise", "4"],
+  ["optimisee", "4"],
+  ["optimisé", "4"],
+  ["optimisée", "4"],
+  ["optimized", "4"],
+  ["optimisé", "4"],
+  ["optimisée", "4"],
+  ["competitive", "5"],
+  ["competitif", "5"],
+  ["compétitif", "5"],
+  ["compet", "5"],
+];
 
-const trimMoxfieldDeckForStorage = (deck) => {
-  if (!deck || typeof deck !== "object") {
-    return null;
-  }
-
-  const trimmed = { ...deck };
-
-  if (trimmed.raw && typeof trimmed.raw === "object") {
-    const rawDeck = { ...trimmed.raw };
-
-    if (Array.isArray(rawDeck.boards)) {
-      rawDeck.boards = rawDeck.boards.map((board) => {
-        if (!board || typeof board !== "object") {
-          return null;
-        }
-        const safeBoard = {
-          name: typeof board.name === "string" ? board.name : null,
-        };
-        if (typeof board.count === "number" && Number.isFinite(board.count)) {
-          safeBoard.count = board.count;
-        }
-        if (Array.isArray(board.cards)) {
-          safeBoard.cards = board.cards
-            .map((cardEntry) => {
-              if (!cardEntry || typeof cardEntry !== "object") {
-                return null;
-              }
-              const quantity =
-                typeof cardEntry.quantity === "number" && Number.isFinite(cardEntry.quantity)
-                  ? cardEntry.quantity
-                  : null;
-              const card = cardEntry.card && typeof cardEntry.card === "object"
-                ? {
-                    id:
-                      cardEntry.card.id ??
-                      cardEntry.card.card_id ??
-                      cardEntry.card.uniqueCardId ??
-                      cardEntry.card.unique_card_id ??
-                      null,
-                    name: cardEntry.card.name ?? null,
-                    mana_cost: cardEntry.card.mana_cost ?? cardEntry.card.manaCost ?? null,
-                    type_line: cardEntry.card.type_line ?? cardEntry.card.typeLine ?? null,
-                    oracle_text: cardEntry.card.oracle_text ?? cardEntry.card.oracleText ?? null,
-                    cmc:
-                      typeof cardEntry.card.cmc === "number" && Number.isFinite(cardEntry.card.cmc)
-                        ? cardEntry.card.cmc
-                        : typeof cardEntry.card.mana_value === "number" &&
-                          Number.isFinite(cardEntry.card.mana_value)
-                        ? cardEntry.card.mana_value
-                        : null,
-                    mana_value:
-                      typeof cardEntry.card.mana_value === "number" &&
-                      Number.isFinite(cardEntry.card.mana_value)
-                        ? cardEntry.card.mana_value
-                        : null,
-                    colors: Array.isArray(cardEntry.card.colors) ? [...cardEntry.card.colors] : [],
-                    image_uris:
-                      cardEntry.card.image_uris && typeof cardEntry.card.image_uris === "object"
-                        ? {
-                            small: cardEntry.card.image_uris.small ?? null,
-                            normal: cardEntry.card.image_uris.normal ?? null,
-                            large: cardEntry.card.image_uris.large ?? null,
-                          }
-                        : null,
-                  }
-                : null;
-              return { quantity, card };
-            })
-            .filter(Boolean);
-        }
-        return safeBoard;
-      }).filter(Boolean);
-    }
-
-    trimmed.raw = rawDeck;
-  }
-
-  return trimmed;
-};
-
-const sanitizeSessionForStorage = (session) => {
-  if (!session || typeof session !== "object") {
-    return session;
-  }
-
-  const sanitized = { ...session };
-
-  if (sanitized.integrations && typeof sanitized.integrations === "object") {
-    sanitized.integrations = { ...sanitized.integrations };
-    const moxfield = sanitized.integrations.moxfield;
-    if (moxfield && typeof moxfield === "object") {
-      const trimmedIntegration = { ...moxfield };
-      if (Array.isArray(moxfield.decks)) {
-        trimmedIntegration.decks = moxfield.decks
-          .map(trimMoxfieldDeckForStorage)
-          .filter(Boolean);
-        trimmedIntegration.deckCount = trimmedIntegration.decks.length;
-      }
-      sanitized.integrations.moxfield = trimmedIntegration;
-    }
-  }
-
-  return sanitized;
-};
-
-const isQuotaExceededError = (error) => {
-  if (!error) {
-    return false;
-  }
-  return (
-    error.name === "QuotaExceededError" ||
-    error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
-    error.code === 22 ||
-    error.code === 1014
-  );
-};
-
-const persistSession = (session) => {
-  const sanitized = sanitizeSessionForStorage(session);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
-  } catch (error) {
-    if (isQuotaExceededError(error)) {
-      console.warn(
-        "Stockage local saturé : impossible d'enregistrer l'état de la session.",
-        error
-      );
-      const quotaError = new Error(
-        "Local storage quota exceeded while saving session."
-      );
-      quotaError.code = "STORAGE_QUOTA";
-      throw quotaError;
-    }
-    throw error;
-  }
-  return session;
-};
-
-const clearSession = () => {
-  localStorage.removeItem(STORAGE_KEY);
-};
-
-const loadStoredDeckPersonalizations = () => {
-  const raw = localStorage.getItem(DECK_EVALUATIONS_STORAGE_KEY);
-  if (!raw) {
-    return { owner: null, entries: {} };
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      if (parsed.entries && typeof parsed.entries === "object") {
-        return {
-          owner:
-            typeof parsed.owner === "string" && parsed.owner.trim().length > 0
-              ? parsed.owner.trim()
-              : null,
-          entries: parsed.entries ?? {},
-        };
-      }
-      return { owner: null, entries: parsed };
-    }
-  } catch (error) {
-    console.warn("Évaluations de deck invalides, nettoyage…", error);
-    localStorage.removeItem(DECK_EVALUATIONS_STORAGE_KEY);
-    return { owner: null, entries: {} };
-  }
-
-  return { owner: null, entries: {} };
-};
-
-const persistDeckPersonalizationsToStorage = (owner, entries) => {
-  const payload = {
-    owner: owner ?? null,
-    entries: entries ?? {},
-  };
-  try {
-    localStorage.setItem(DECK_EVALUATIONS_STORAGE_KEY, JSON.stringify(payload));
-  } catch (error) {
-    if (isQuotaExceededError(error)) {
-      console.warn(
-        "Stockage local saturé : impossible d'enregistrer les informations personnalisées du deck.",
-        error
-      );
-      const quotaError = new Error(
-        "Local storage quota exceeded while saving deck personalization."
-      );
-      quotaError.code = "STORAGE_QUOTA";
-      throw quotaError;
-    }
-    throw error;
-  }
-};
-
-const exportDeckPersonalizationsForStorage = () => {
-  const snapshot = {};
-  deckPersonalizationCache.forEach((value, deckId) => {
-    if (!deckId) {
-      return;
-    }
-    const copy = { ...value };
-    delete copy.deckId;
-    snapshot[deckId] = copy;
-  });
-  return snapshot;
-};
-
-const LEGACY_DECK_RATING_KEY_MAP = {
-  consistency: "stability",
-  consistance: "stability",
-  consitance: "stability",
-  acceleration: "acceleration",
-  interaction: "interaction",
-  interraction: "interaction",
-  resilience: "resilience",
-  finition: "finish",
-  finish: "finish",
-};
-
-const clampDeckRatingValue = (value) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return null;
-  }
-  const rounded = Math.round(numeric);
-  if (rounded < 1) {
-    return 1;
-  }
-  if (rounded > 5) {
-    return 5;
-  }
-  return rounded;
-};
-
-const sanitizeDeckRatings = (input) => {
-  if (!input || typeof input !== "object") {
-    return {};
-  }
-  const sanitized = {};
-  Object.entries(input).forEach(([key, value]) => {
-    const sanitizedValue = clampDeckRatingValue(value);
-    if (sanitizedValue !== null) {
-      const normalizedKey = LEGACY_DECK_RATING_KEY_MAP[key] ?? String(key);
-      sanitized[normalizedKey] = sanitizedValue;
-    }
-  });
-  return sanitized;
-};
-
-const toTimestamp = (value) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (value instanceof Date) {
-    const ms = value.getTime();
-    return Number.isFinite(ms) ? ms : null;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  return null;
-};
-
-const sanitizeOptionalString = (value) => {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const sanitizeBracketId = (value) => {
-  if (value === null || typeof value === "undefined") {
-    return null;
-  }
-  if (typeof value === "object") {
-    return sanitizeBracketId(value?.id ?? value?.value ?? value?.bracket);
-  }
-  const numeric = Number(value);
-  if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 5) {
-    return String(Math.round(numeric));
-  }
-  const stringValue = typeof value === "string" ? value.trim() : "";
-  if (stringValue === "") {
-    return null;
-  }
-  if (/^[1-5]$/.test(stringValue)) {
-    return stringValue;
-  }
-  return stringValue;
-};
-
-const sanitizeTagList = (tags, limit = 7) => {
-  if (!Array.isArray(tags) || limit <= 0) {
-    return [];
-  }
-  const sanitized = [];
-  const seen = new Set();
-  tags.forEach((tag) => {
-    const text = typeof tag === "string" ? tag.trim() : "";
-    if (!text) {
-      return;
-    }
-    const fingerprint = text.toLowerCase();
-    if (seen.has(fingerprint)) {
-      return;
-    }
-    if (sanitized.length >= limit) {
-      return;
-    }
-    seen.add(fingerprint);
-    sanitized.push(text);
-  });
-  return sanitized;
-};
-
-const sanitizePersonalTag = (value) => {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 40 ? trimmed.slice(0, 40) : trimmed;
-};
-
-const sanitizePersonalNotes = (value) => {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
-};
+const exportDeckPersonalizationsForStorage = () =>
+  deckPersonalizationsApi.exportForStorage
+    ? deckPersonalizationsApi.exportForStorage()
+    : {};
 
 const bootstrapDeckPersonalizationCache = (owner = null) => {
-  if (deckPersonalizationsBootstrapped && (!owner || deckPersonalizationOwner === owner)) {
+  if (deckPersonalizationsApi.bootstrapCache) {
+    deckPersonalizationsApi.bootstrapCache(owner);
+  }
+};
+
+const ensureDeckPersonalizationsSynced = async (session = null) => {
+  if (!deckPersonalizationsApi.ensureSynced) {
     return;
   }
-
-  const stored = loadStoredDeckPersonalizations();
-  if (owner && stored.owner && stored.owner !== owner) {
-    deckPersonalizationCache.clear();
-    deckPersonalizationOwner = owner;
-    deckPersonalizationsBootstrapped = true;
-    deckPersonalizationsRemoteHydrated = false;
-    return;
-  }
-
-  deckPersonalizationCache.clear();
-  const entries = stored.entries ?? {};
-  Object.entries(entries).forEach(([deckId, rawEntry]) => {
-    const normalized = normalizeDeckPersonalizationEntry(rawEntry);
-    normalized.deckId =
-      normalized.deckId && normalized.deckId.trim().length > 0 ? normalized.deckId : deckId;
-    deckPersonalizationCache.set(deckId, normalized);
-  });
-  deckPersonalizationOwner = owner ?? stored.owner ?? deckPersonalizationOwner ?? null;
-  deckPersonalizationsBootstrapped = true;
-  if (!owner) {
-    deckPersonalizationsRemoteHydrated = false;
-  }
+  await deckPersonalizationsApi.ensureSynced(session);
 };
 
-const createDeckPersonalizationDefaults = () => ({
-  version: 2,
-  ratings: {},
-  bracket: null,
-  playstyle: null,
-  tags: [],
-  personalTag: "",
-  notes: "",
-  deckId: null,
-  createdAt: null,
-  updatedAt: null,
-});
+const getDeckPersonalization = (deckId) =>
+  deckPersonalizationsApi.get ? deckPersonalizationsApi.get(deckId) : null;
 
-const normalizeDeckPersonalizationEntry = (entry) => {
-  const defaults = createDeckPersonalizationDefaults();
-  if (!entry || typeof entry !== "object") {
-    return defaults;
-  }
-
-  const hasStructuredFields =
-    "ratings" in entry ||
-    "bracket" in entry ||
-    "bracket_id" in entry ||
-    "playstyle" in entry ||
-    "tags" in entry ||
-    "personalTag" in entry ||
-    "personal_tag" in entry ||
-    "notes" in entry ||
-    "deckId" in entry ||
-    "deck_id" in entry ||
-    "createdAt" in entry ||
-    "created_at" in entry ||
-    "updated_at" in entry ||
-    "updatedAt" in entry ||
-    entry.version >= 2;
-
-  const normalized = {
-    ...defaults,
-    ratings: sanitizeDeckRatings(hasStructuredFields ? entry.ratings ?? {} : entry),
-  };
-
-  if (hasStructuredFields) {
-    normalized.bracket = sanitizeBracketId(entry.bracket ?? entry.bracket_id);
-    const playstyle = sanitizeOptionalString(entry.playstyle ?? entry.archetype);
-    normalized.playstyle = playstyle;
-    normalized.tags = sanitizeTagList(entry.tags);
-    normalized.personalTag = sanitizePersonalTag(entry.personalTag ?? entry.personal_tag);
-    normalized.notes = sanitizePersonalNotes(entry.notes);
-    normalized.deckId =
-      typeof entry.deckId === "string" && entry.deckId.trim().length > 0
-        ? entry.deckId.trim()
-        : typeof entry.deck_id === "string" && entry.deck_id.trim().length > 0
-        ? entry.deck_id.trim()
-        : defaults.deckId;
-    const createdAt = toTimestamp(entry.createdAt ?? entry.created_at);
-    if (createdAt !== null) {
-      normalized.createdAt = createdAt;
-    }
-    const updatedAt = toTimestamp(entry.updatedAt ?? entry.updated_at);
-    if (updatedAt !== null) {
-      normalized.updatedAt = updatedAt;
-    }
-  }
-
-  return normalized;
-};
-
-const applyDeckPersonalizationUpdates = (existingEntry, updates) => {
-  const base = normalizeDeckPersonalizationEntry(existingEntry);
-  const next = { ...base };
-
-  if (updates && typeof updates === "object") {
-    if ("ratings" in updates) {
-      next.ratings = sanitizeDeckRatings(updates.ratings);
-    }
-    if ("bracket" in updates) {
-      next.bracket = sanitizeBracketId(updates.bracket);
-    }
-    if ("playstyle" in updates) {
-      next.playstyle = sanitizeOptionalString(updates.playstyle);
-    }
-    if ("tags" in updates) {
-      next.tags = sanitizeTagList(updates.tags);
-    }
-    if ("personalTag" in updates) {
-      next.personalTag = sanitizePersonalTag(updates.personalTag);
-    }
-    if ("notes" in updates) {
-      next.notes = sanitizePersonalNotes(updates.notes);
-    }
-  }
-
-  next.version = 2;
-  next.deckId = base.deckId ?? null;
-  next.createdAt = base.createdAt ?? Date.now();
-  next.updatedAt = Date.now();
-  return next;
-};
-
-const getActiveSession = () => {
-  if (typeof currentSession !== "undefined" && currentSession) {
-    return currentSession;
-  }
-  return getSession();
-};
-
-const getDeckPersonalization = (deckId) => {
-  if (!deckId) {
+const setDeckPersonalization = async (deckId, updates) => {
+  if (!deckPersonalizationsApi.set) {
     return null;
   }
-  const session = getActiveSession();
-  const owner = session?.googleSub ?? null;
-  bootstrapDeckPersonalizationCache(owner);
-  const entry = deckPersonalizationCache.get(deckId);
-  if (!entry) {
-    return null;
-  }
-  return {
-    ...entry,
-    ratings: { ...entry.ratings },
-    tags: Array.isArray(entry.tags) ? [...entry.tags] : [],
-  };
+  return deckPersonalizationsApi.set(deckId, updates);
 };
 
-const upsertDeckPersonalizationRemote = async (googleSub, deckId, payload) => {
-  const endpoint = buildDeckPersonalizationDetailEndpoint(googleSub, deckId);
+const getDeckEvaluation = (deckId) =>
+  deckPersonalizationsApi.getEvaluation
+    ? deckPersonalizationsApi.getEvaluation(deckId)
+    : null;
+
+const setDeckEvaluation = async (deckId, evaluation) => {
+  if (!deckPersonalizationsApi.setEvaluation) {
+    return null;
+  }
+  return deckPersonalizationsApi.setEvaluation(deckId, evaluation);
+};
+
+function fetchBackendProfile(googleSub) {
+  if (apiClient.fetchBackendProfile) {
+    return apiClient.fetchBackendProfile(googleSub);
+  }
+  const endpoint = googleSub ? buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}`) : null;
   if (!endpoint) {
-    throw new Error("Point de terminaison d'enregistrement introuvable.");
+    return Promise.resolve(null);
   }
-  const response = await fetch(endpoint, {
+  if (typeof fetch !== "function") {
+    return Promise.resolve(null);
+  }
+  return fetch(endpoint, {
+    headers: { Accept: "application/json" },
+  }).then((response) => {
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`Profil introuvable (${response.status})`);
+    }
+    return response.json();
+  });
+}
+
+function upsertBackendProfile(googleSub, payload) {
+  if (apiClient.upsertBackendProfile) {
+    return apiClient.upsertBackendProfile(googleSub, payload);
+  }
+  const endpoint = googleSub ? buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}`) : null;
+  if (!endpoint || !payload || typeof fetch !== "function") {
+    return Promise.resolve(null);
+  }
+  return fetch(endpoint, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
     body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Impossible d'enregistrer les informations personnelles (${response.status}).`
-    );
-  }
-  return response.json();
-};
-
-const fetchDeckPersonalizationsFromBackend = async (googleSub) => {
-  const endpoint = buildDeckPersonalizationsEndpoint(googleSub);
-  if (!endpoint) {
-    return [];
-  }
-  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
-  if (!response.ok) {
-    throw new Error(
-      `Impossible de charger les informations personnelles (${response.status}).`
-    );
-  }
-  const payload = await response.json();
-  const entries = Array.isArray(payload?.personalizations) ? payload.personalizations : [];
-
-  deckPersonalizationCache.clear();
-  entries.forEach((entry) => {
-    const deckId =
-      (typeof entry?.deckId === "string" && entry.deckId.trim()) ||
-      (typeof entry?.deck_id === "string" && entry.deck_id.trim());
-    if (!deckId) {
-      return;
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error(`Profil indisponible`);
     }
-    const normalized = normalizeDeckPersonalizationEntry(entry);
-    normalized.deckId = normalized.deckId && normalized.deckId.trim().length > 0 ? normalized.deckId : deckId;
-    deckPersonalizationCache.set(deckId, normalized);
+    return response.json();
   });
-  deckPersonalizationOwner = googleSub;
-  deckPersonalizationsBootstrapped = true;
-  persistDeckPersonalizationsToStorage(googleSub, exportDeckPersonalizationsForStorage());
-  return entries;
-};
+}
 
-const ensureDeckPersonalizationsSynced = async (session = null) => {
-  const activeSession = session ?? getActiveSession();
-  const googleSub = activeSession?.googleSub ?? null;
-  if (!googleSub) {
-    bootstrapDeckPersonalizationCache(null);
-    deckPersonalizationsRemoteHydrated = false;
-    return;
+function fetchUserPlaygroups(googleSub) {
+  if (apiClient.fetchUserPlaygroups) {
+    return apiClient.fetchUserPlaygroups(googleSub);
   }
+  return Promise.resolve({ playgroups: [] });
+}
 
-  if (deckPersonalizationOwner && deckPersonalizationOwner !== googleSub) {
-    deckPersonalizationCache.clear();
-    deckPersonalizationsBootstrapped = false;
-    deckPersonalizationsRemoteHydrated = false;
+function fetchUserPlaygroupDetail(googleSub, playgroupId) {
+  if (apiClient.fetchUserPlaygroupDetail) {
+    return apiClient.fetchUserPlaygroupDetail(googleSub, playgroupId);
   }
+  return Promise.resolve(null);
+}
 
-  bootstrapDeckPersonalizationCache(googleSub);
-
-  const isCurrentOwner = deckPersonalizationOwner === googleSub;
-  if (isCurrentOwner && deckPersonalizationsRemoteHydrated && !deckPersonalizationLoadPromise) {
-    return;
+function upsertUserPlaygroup(googleSub, name) {
+  if (apiClient.upsertUserPlaygroup) {
+    return apiClient.upsertUserPlaygroup(googleSub, name);
   }
+  return Promise.resolve(null);
+}
 
-  if (!deckPersonalizationLoadPromise) {
-    deckPersonalizationLoadPromise = fetchDeckPersonalizationsFromBackend(googleSub)
-      .then((entries) => {
-        deckPersonalizationsRemoteHydrated = true;
-        return entries;
-      })
-      .catch((error) => {
-        console.warn("Impossible de synchroniser les personnalisations de deck :", error);
-        throw error;
-      })
-      .finally(() => {
-        deckPersonalizationLoadPromise = null;
-      });
+function updateUserPlaygroup(googleSub, playgroupId, payload) {
+  if (apiClient.updateUserPlaygroup) {
+    return apiClient.updateUserPlaygroup(googleSub, playgroupId, payload);
   }
+  return Promise.resolve(null);
+}
 
-  try {
-    await deckPersonalizationLoadPromise;
-  } catch (error) {
-    // Keep local cache on failure.
+function deleteUserPlaygroup(googleSub, playgroupId) {
+  if (apiClient.deleteUserPlaygroup) {
+    return apiClient.deleteUserPlaygroup(googleSub, playgroupId);
   }
-};
+  return Promise.resolve(false);
+}
 
-const setDeckPersonalization = async (deckId, updates) => {
-  if (!deckId) {
-    throw new Error("Identifiant de deck requis.");
+function fetchUserGames(googleSub, options) {
+  if (apiClient.fetchUserGames) {
+    return apiClient.fetchUserGames(googleSub, options);
   }
-  const session = getActiveSession();
-  const googleSub = session?.googleSub ?? null;
-  if (!googleSub) {
-    throw new Error("Connectez-vous pour enregistrer vos modifications.");
+  return Promise.resolve({ games: [] });
+}
+
+function recordUserGame(googleSub, payload) {
+  if (apiClient.recordUserGame) {
+    return apiClient.recordUserGame(googleSub, payload);
   }
+  return Promise.resolve(null);
+}
 
-  bootstrapDeckPersonalizationCache(googleSub);
-  const existing = deckPersonalizationCache.get(deckId);
-  const nextLocal = applyDeckPersonalizationUpdates(existing, updates);
-  nextLocal.deckId = deckId;
-
-  const payload = {
-    ratings: nextLocal.ratings,
-    bracket: nextLocal.bracket,
-    playstyle: nextLocal.playstyle ?? null,
-    tags: Array.isArray(nextLocal.tags) ? nextLocal.tags : [],
-    personalTag: nextLocal.personalTag ?? "",
-    notes: nextLocal.notes ?? "",
-  };
-
-  const remote = await upsertDeckPersonalizationRemote(googleSub, deckId, payload);
-  const normalizedRemote = normalizeDeckPersonalizationEntry(remote);
-  normalizedRemote.deckId =
-    normalizedRemote.deckId && normalizedRemote.deckId.trim().length > 0
-      ? normalizedRemote.deckId
-      : deckId;
-  if (typeof normalizedRemote.updatedAt !== "number" || !Number.isFinite(normalizedRemote.updatedAt)) {
-    normalizedRemote.updatedAt = Date.now();
+function fetchAvailablePlayers(googleSub) {
+  if (apiClient.fetchAvailablePlayers) {
+    return apiClient.fetchAvailablePlayers(googleSub);
   }
-  if (typeof normalizedRemote.createdAt !== "number" || !Number.isFinite(normalizedRemote.createdAt)) {
-    normalizedRemote.createdAt = normalizedRemote.updatedAt;
+  return Promise.resolve({ players: [] });
+}
+
+function fetchTrackedPlayers(googleSub) {
+  if (apiClient.fetchTrackedPlayers) {
+    return apiClient.fetchTrackedPlayers(googleSub);
   }
+  return Promise.resolve({ players: [] });
+}
 
-  deckPersonalizationCache.set(deckId, normalizedRemote);
-  try {
-    persistDeckPersonalizationsToStorage(
-      googleSub,
-      exportDeckPersonalizationsForStorage()
-    );
-  } catch (error) {
-    if (error && error.code === "STORAGE_QUOTA") {
-      console.warn(
-        "Le profil stratégique distant a été sauvegardé, mais l'écriture en local est impossible (quota atteint).",
-        error
-      );
-    } else {
-      throw error;
-    }
+function createTrackedPlayer(googleSub, name) {
+  if (apiClient.createTrackedPlayer) {
+    return apiClient.createTrackedPlayer(googleSub, name);
   }
-  deckPersonalizationsRemoteHydrated = true;
+  return Promise.resolve(null);
+}
 
-  return normalizedRemote;
-};
-
-const getDeckEvaluation = (deckId) => {
-  const personalization = getDeckPersonalization(deckId);
-  return personalization?.ratings ?? null;
-};
-
-const setDeckEvaluation = async (deckId, evaluation) => {
-  if (!deckId || !evaluation || typeof evaluation !== "object") {
-    return null;
+function updateTrackedPlayer(googleSub, playerId, payload) {
+  if (apiClient.updateTrackedPlayer) {
+    return apiClient.updateTrackedPlayer(googleSub, playerId, payload);
   }
-  const personalization = await setDeckPersonalization(deckId, { ratings: evaluation });
-  return personalization?.ratings ?? null;
-};
+  return Promise.resolve(null);
+}
 
-const cloneSession = (session) => {
-  if (!session) {
-    return null;
+function deleteTrackedPlayer(googleSub, playerId) {
+  if (apiClient.deleteTrackedPlayer) {
+    return apiClient.deleteTrackedPlayer(googleSub, playerId);
   }
+  return Promise.resolve(false);
+}
 
-  return {
-    ...session,
-    integrations: session.integrations
-      ? {
-          ...session.integrations,
-          moxfield: session.integrations.moxfield
-            ? {
-                ...session.integrations.moxfield,
-                decks: Array.isArray(session.integrations.moxfield.decks)
-                  ? [...session.integrations.moxfield.decks]
-                  : [],
-              }
-            : undefined,
-        }
-      : undefined,
-  };
-};
-
-const updateSessionData = (mutator) => {
-  const current = getSession();
-  if (!current) {
-    return null;
+function linkTrackedPlayer(googleSub, playerId, targetSub) {
+  if (apiClient.linkTrackedPlayer) {
+    return apiClient.linkTrackedPlayer(googleSub, playerId, targetSub);
   }
+  return Promise.resolve(null);
+}
 
-  const draft = cloneSession(current);
-  const result = mutator ? mutator(draft) ?? draft : draft;
-  return persistSession(result);
-};
+function searchPublicUsers(params) {
+  if (apiClient.searchPublicUsers) {
+    return apiClient.searchPublicUsers(params);
+  }
+  return Promise.resolve([]);
+}
+
+function fetchPublicUserProfile(googleSub) {
+  if (apiClient.fetchPublicUserProfile) {
+    return apiClient.fetchPublicUserProfile(googleSub);
+  }
+  return Promise.resolve(null);
+}
+
+function followUserAccount(followerSub, targetSub) {
+  if (apiClient.followUserAccount) {
+    return apiClient.followUserAccount(followerSub, targetSub);
+  }
+  return Promise.resolve(false);
+}
+
+function unfollowUserAccount(followerSub, targetSub) {
+  if (apiClient.unfollowUserAccount) {
+    return apiClient.unfollowUserAccount(followerSub, targetSub);
+  }
+  return Promise.resolve(false);
+}
 
 const toISOStringIfValid = (value) => {
   if (!value) {
@@ -985,14 +397,23 @@ const toISOStringIfValid = (value) => {
   return date.toISOString();
 };
 
+if (typeof buildProfileEndpoint === "undefined") {
 const buildProfileEndpoint = (googleSub) => {
+  if (apiClient.endpoints?.profile) {
+    return apiClient.endpoints.profile(googleSub);
+  }
   if (!googleSub) {
     return null;
   }
   return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}`);
 };
+}
 
+if (typeof buildPlaygroupsEndpoint === "undefined") {
 const buildPlaygroupsEndpoint = (googleSub) => {
+  if (apiClient.endpoints?.playgroups) {
+    return apiClient.endpoints.playgroups(googleSub);
+  }
   if (!googleSub) {
     return null;
   }
@@ -1000,8 +421,13 @@ const buildPlaygroupsEndpoint = (googleSub) => {
     `/profiles/${encodeURIComponent(googleSub)}/playgroups`
   );
 };
+}
 
+if (typeof buildPlaygroupDetailEndpoint === "undefined") {
 const buildPlaygroupDetailEndpoint = (googleSub, playgroupId) => {
+  if (apiClient.endpoints?.playgroupDetail) {
+    return apiClient.endpoints.playgroupDetail(googleSub, playgroupId);
+  }
   if (!googleSub || !playgroupId) {
     return null;
   }
@@ -1009,23 +435,38 @@ const buildPlaygroupDetailEndpoint = (googleSub, playgroupId) => {
     `/profiles/${encodeURIComponent(googleSub)}/playgroups/${encodeURIComponent(playgroupId)}`
   );
 };
+}
 
+if (typeof buildPlayersEndpoint === "undefined") {
 const buildPlayersEndpoint = (googleSub) => {
+  if (apiClient.endpoints?.players) {
+    return apiClient.endpoints.players(googleSub);
+  }
   if (!googleSub) {
     return null;
   }
   return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}/players`);
 };
+}
 
+if (typeof buildAvailablePlayersEndpoint === "undefined") {
 const buildAvailablePlayersEndpoint = (googleSub) => {
+  if (apiClient.endpoints?.availablePlayers) {
+    return apiClient.endpoints.availablePlayers(googleSub);
+  }
   const base = buildPlayersEndpoint(googleSub);
   if (!base) {
     return null;
   }
   return `${base}/available`;
 };
+}
 
+if (typeof buildTrackedPlayerEndpoint === "undefined") {
 const buildTrackedPlayerEndpoint = (googleSub, playerId) => {
+  if (apiClient.endpoints?.trackedPlayer) {
+    return apiClient.endpoints.trackedPlayer(googleSub, playerId);
+  }
   if (!googleSub || !playerId) {
     return null;
   }
@@ -1033,546 +474,65 @@ const buildTrackedPlayerEndpoint = (googleSub, playerId) => {
     `/profiles/${encodeURIComponent(googleSub)}/players/${encodeURIComponent(playerId)}`
   );
 };
+}
 
+if (typeof buildTrackedPlayerLinkEndpoint === "undefined") {
 const buildTrackedPlayerLinkEndpoint = (googleSub, playerId) => {
+  if (apiClient.endpoints?.trackedPlayerLink) {
+    return apiClient.endpoints.trackedPlayerLink(googleSub, playerId);
+  }
   const base = buildTrackedPlayerEndpoint(googleSub, playerId);
   if (!base) {
     return null;
   }
   return `${base}/link`;
 };
+}
 
+if (typeof buildGamesEndpoint === "undefined") {
 const buildGamesEndpoint = (googleSub) => {
+  if (apiClient.endpoints?.games) {
+    return apiClient.endpoints.games(googleSub);
+  }
   if (!googleSub) {
     return null;
   }
   return buildBackendUrl(`/profiles/${encodeURIComponent(googleSub)}/games`);
 };
+}
 
-const buildSocialSearchEndpoint = () => buildBackendUrl("/social/users/search");
+if (typeof buildSocialSearchEndpoint === "undefined") {
+const buildSocialSearchEndpoint = () => {
+  return apiClient.endpoints?.socialSearch
+    ? apiClient.endpoints.socialSearch()
+    : buildBackendUrl("/social/users/search");
+};
+}
 
+if (typeof buildPublicProfileEndpoint === "undefined") {
 const buildPublicProfileEndpoint = (googleSub) => {
+  if (apiClient.endpoints?.publicProfile) {
+    return apiClient.endpoints.publicProfile(googleSub);
+  }
   if (!googleSub) {
     return null;
   }
   return buildBackendUrl(`/social/users/${encodeURIComponent(googleSub)}`);
 };
+}
 
+if (typeof buildFollowEndpoint === "undefined") {
 const buildFollowEndpoint = (followerSub) => {
+  if (apiClient.endpoints?.follow) {
+    return apiClient.endpoints.follow(followerSub);
+  }
   if (!followerSub) {
     return null;
   }
   return buildBackendUrl(`/social/users/${encodeURIComponent(followerSub)}/follow`);
 };
+}
 
-const buildDeckPersonalizationsEndpoint = (googleSub) => {
-  if (!googleSub) {
-    return null;
-  }
-  return buildBackendUrl(
-    `/profiles/${encodeURIComponent(googleSub)}/deck-personalizations`
-  );
-};
-
-const buildDeckPersonalizationDetailEndpoint = (googleSub, deckId) => {
-  if (!googleSub || !deckId) {
-    return null;
-  }
-  return buildBackendUrl(
-    `/profiles/${encodeURIComponent(googleSub)}/deck-personalizations/${encodeURIComponent(deckId)}`
-  );
-};
-
-const fetchBackendProfile = async (googleSub) => {
-  const endpoint = buildProfileEndpoint(googleSub);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      headers: {
-        Accept: "application/json",
-      },
-    });
-
-    if (response.status === 404) {
-      return null;
-    }
-
-    if (!response.ok) {
-      throw new Error(`Profil introuvable (${response.status})`);
-    }
-
-    return response.json();
-  } catch (error) {
-    console.warn("Impossible de récupérer le profil depuis le backend :", error);
-    throw error;
-  }
-};
-
-const upsertBackendProfile = async (googleSub, payload) => {
-  const endpoint = buildProfileEndpoint(googleSub);
-  if (!endpoint || !payload || typeof payload !== "object") {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Enregistrement du profil refusé (${response.status})`);
-    }
-
-    return response.json();
-  } catch (error) {
-    console.warn("Impossible d'enregistrer le profil utilisateur :", error);
-    throw error;
-  }
-};
-
-const fetchUserPlaygroups = async (googleSub) => {
-  const endpoint = buildPlaygroupsEndpoint(googleSub);
-  if (!endpoint) {
-    return { playgroups: [] };
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible de récupérer les groupes (${response.status}).`);
-    }
-    const payload = await response.json();
-    if (!payload || typeof payload !== "object") {
-      return { playgroups: [] };
-    }
-    return {
-      playgroups: Array.isArray(payload.playgroups) ? payload.playgroups : [],
-    };
-  } catch (error) {
-    console.warn("Échec de récupération des groupes :", error);
-    throw error;
-  }
-};
-
-const fetchUserPlaygroupDetail = async (googleSub, playgroupId) => {
-  const endpoint = buildPlaygroupDetailEndpoint(googleSub, playgroupId);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      headers: { Accept: "application/json" },
-    });
-    if (response.status === 404) {
-      return null;
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de récupérer le groupe (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de récupération du détail du groupe :", error);
-    throw error;
-  }
-};
-
-const upsertUserPlaygroup = async (googleSub, name) => {
-  const endpoint = buildPlaygroupsEndpoint(googleSub);
-  if (!endpoint) {
-    return null;
-  }
-  const payload = { name };
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible d'enregistrer le groupe (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de l'enregistrement du groupe :", error);
-    throw error;
-  }
-};
-
-const updateUserPlaygroup = async (googleSub, playgroupId, payload) => {
-  const endpoint = buildPlaygroupDetailEndpoint(googleSub, playgroupId);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload || {}),
-    });
-    if (response.status === 404) {
-      throw new Error("Groupe introuvable");
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de mettre à jour le groupe (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de la mise à jour du groupe :", error);
-    throw error;
-  }
-};
-
-const deleteUserPlaygroup = async (googleSub, playgroupId) => {
-  const endpoint = buildPlaygroupDetailEndpoint(googleSub, playgroupId);
-  if (!endpoint) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "DELETE",
-    });
-    if (response.status === 404) {
-      throw new Error("Groupe introuvable");
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de supprimer le groupe (${response.status}).`);
-    }
-    return true;
-  } catch (error) {
-    console.warn("Échec de la suppression du groupe :", error);
-    throw error;
-  }
-};
-
-const fetchUserGames = async (googleSub, { playgroupId } = {}) => {
-  const endpoint = buildGamesEndpoint(googleSub);
-  if (!endpoint) {
-    return { games: [] };
-  }
-  let url = endpoint;
-  if (playgroupId) {
-    const params = new URLSearchParams({ playgroup_id: playgroupId });
-    url = `${endpoint}?${params}`;
-  }
-
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible de récupérer les parties (${response.status}).`);
-    }
-    const payload = await response.json();
-    if (!payload || typeof payload !== "object") {
-      return { games: [] };
-    }
-    return {
-      games: Array.isArray(payload.games) ? payload.games : [],
-    };
-  } catch (error) {
-    console.warn("Échec de récupération des parties :", error);
-    throw error;
-  }
-};
-
-const recordUserGame = async (googleSub, payload) => {
-  const endpoint = buildGamesEndpoint(googleSub);
-  if (!endpoint || !payload || typeof payload !== "object") {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => null);
-      const message =
-        errorBody?.detail ||
-        `Impossible d'enregistrer la partie (${response.status}).`;
-      throw new Error(message);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de l'enregistrement de la partie :", error);
-    throw error;
-  }
-};
-
-const fetchAvailablePlayers = async (googleSub) => {
-  const endpoint = buildAvailablePlayersEndpoint(googleSub);
-  if (!endpoint) {
-    return { players: [] };
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible de récupérer les joueurs (${response.status}).`);
-    }
-    const payload = await response.json();
-    return {
-      players: Array.isArray(payload?.players) ? payload.players : [],
-    };
-  } catch (error) {
-    console.warn("Échec de récupération des joueurs disponibles :", error);
-    throw error;
-  }
-};
-
-const fetchTrackedPlayers = async (googleSub) => {
-  const endpoint = buildPlayersEndpoint(googleSub);
-  if (!endpoint) {
-    return { players: [] };
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible de récupérer les joueurs suivis (${response.status}).`);
-    }
-    const payload = await response.json();
-    return {
-      players: Array.isArray(payload?.players) ? payload.players : [],
-    };
-  } catch (error) {
-    console.warn("Échec de récupération des joueurs suivis :", error);
-    throw error;
-  }
-};
-
-const createTrackedPlayer = async (googleSub, name) => {
-  const endpoint = buildPlayersEndpoint(googleSub);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ name }),
-    });
-    if (!response.ok) {
-      throw new Error(`Création du joueur impossible (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de création d'un joueur suivi :", error);
-    throw error;
-  }
-};
-
-const updateTrackedPlayer = async (googleSub, playerId, payload) => {
-  const endpoint = buildTrackedPlayerEndpoint(googleSub, playerId);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload || {}),
-    });
-    if (response.status === 404) {
-      throw new Error("Joueur introuvable");
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de mettre à jour le joueur (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de mise à jour du joueur suivi :", error);
-    throw error;
-  }
-};
-
-const deleteTrackedPlayer = async (googleSub, playerId) => {
-  const endpoint = buildTrackedPlayerEndpoint(googleSub, playerId);
-  if (!endpoint) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "DELETE",
-    });
-    if (response.status === 404) {
-      throw new Error("Joueur introuvable");
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de supprimer le joueur (${response.status}).`);
-    }
-    return true;
-  } catch (error) {
-    console.warn("Échec de suppression du joueur suivi :", error);
-    throw error;
-  }
-};
-
-const linkTrackedPlayer = async (googleSub, playerId, targetSub) => {
-  const endpoint = buildTrackedPlayerLinkEndpoint(googleSub, playerId);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ google_sub: targetSub }),
-    });
-    if (response.status === 404) {
-      throw new Error("Joueur introuvable");
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de lier le joueur (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec du rattachement du joueur :", error);
-    throw error;
-  }
-};
-
-const searchPublicUsers = async ({ query, viewer }) => {
-  const endpoint = buildSocialSearchEndpoint();
-  if (!endpoint) {
-    return [];
-  }
-
-  const params = new URLSearchParams();
-  if (query) {
-    params.set("q", query);
-  }
-  if (viewer) {
-    params.set("viewer", viewer);
-  }
-
-  const url = params.toString() ? `${endpoint}?${params}` : endpoint;
-
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`Recherche impossible (${response.status}).`);
-    }
-    const payload = await response.json();
-    return Array.isArray(payload?.results) ? payload.results : [];
-  } catch (error) {
-    console.warn("Échec de la recherche d'utilisateurs :", error);
-    throw error;
-  }
-};
-
-const fetchPublicUserProfile = async (googleSub) => {
-  const endpoint = buildPublicProfileEndpoint(googleSub);
-  if (!endpoint) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      headers: { Accept: "application/json" },
-    });
-    if (response.status === 404) {
-      return null;
-    }
-    if (!response.ok) {
-      throw new Error(`Impossible de récupérer le profil public (${response.status}).`);
-    }
-    return response.json();
-  } catch (error) {
-    console.warn("Échec de chargement du profil public :", error);
-    throw error;
-  }
-};
-
-const followUserAccount = async (followerSub, targetSub) => {
-  const endpoint = buildFollowEndpoint(followerSub);
-  if (!endpoint || !targetSub) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ target_sub: targetSub }),
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible de suivre cet utilisateur (${response.status}).`);
-    }
-    return true;
-  } catch (error) {
-    console.warn("Échec du suivi d'utilisateur :", error);
-    throw error;
-  }
-};
-
-const unfollowUserAccount = async (followerSub, targetSub) => {
-  const endpoint = buildFollowEndpoint(followerSub);
-  if (!endpoint || !targetSub) {
-    return false;
-  }
-
-  const url = `${endpoint}/${encodeURIComponent(targetSub)}`;
-
-  try {
-    const response = await fetch(url, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      throw new Error(`Impossible de se désabonner (${response.status}).`);
-    }
-    return true;
-  } catch (error) {
-    console.warn("Échec de la désinscription d'un suivi :", error);
-    throw error;
-  }
-};
 
 const convertDeckToProfilePayload = (deck) => {
   if (!deck || typeof deck !== "object") {
@@ -3323,7 +2283,7 @@ async function handleDeckRemoval(deckId, deckName) {
       (await persistIntegrationToProfile(finalSession, {
         decks: getMoxfieldIntegration(finalSession)?.decks ?? [],
       })) ?? finalSession;
-    currentSession = finalSession ?? currentSession;
+    setCurrentSession(finalSession ?? currentSession);
 
     refreshDeckCollection(currentSession);
     if (typeof renderMoxfieldPanel === "function") {
@@ -3412,7 +2372,7 @@ async function handleDeckBulkRemoval() {
   finalSession = (await persistIntegrationToProfile(finalSession, { decks: [] })) ?? finalSession;
 
   if (typeof currentSession !== "undefined") {
-    currentSession = finalSession ?? currentSession;
+    setCurrentSession(finalSession ?? currentSession);
   }
 
   renderMoxfieldPanel(finalSession, { preserveStatus: true });
@@ -3745,7 +2705,7 @@ const performDeckSync = async (handle, selections, previewMeta) => {
       decks: decksToPersist,
     });
 
-    currentSession = nextSession ?? currentSession;
+    setCurrentSession(nextSession ?? currentSession);
     renderMoxfieldPanel(currentSession);
     refreshDeckCollection(currentSession);
     showMoxfieldStatus(message, "success");

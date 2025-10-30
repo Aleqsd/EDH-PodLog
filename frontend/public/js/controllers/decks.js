@@ -44,7 +44,11 @@
       );
 
     const getEffectiveSession = () =>
-      context.session ?? (typeof getSession === "function" ? getSession() : null);
+      context.session ??
+      ((window.EDH_PODLOG?.session?.getCurrent
+        ? window.EDH_PODLOG.session.getCurrent()
+        : null) ??
+        (window.EDH_PODLOG?.session?.load ? window.EDH_PODLOG.session.load() : null));
 
     const refreshWithSession = () => {
       refreshDeckCollection(getEffectiveSession());

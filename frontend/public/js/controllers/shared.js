@@ -1,5 +1,6 @@
 (() => {
   const api = window.EDH_PODLOG?.controllers;
+  const auth = window.EDH_PODLOG?.auth ?? {};
   if (!api) {
     return;
   }
@@ -18,12 +19,14 @@
     const pageRequiresAuth =
       context.requireAuth || Boolean(profileMenuButton || signOutBtn || document.body?.classList.contains("app-shell"));
 
-    if (context.session?.accessToken) {
-      googleAccessToken = context.session.accessToken;
+    if (context.session?.accessToken && typeof auth.setAccessToken === "function") {
+      auth.setAccessToken(context.session.accessToken);
     }
 
     if (pageRequiresAuth && !context.session) {
-      redirectToLanding();
+      if (typeof auth.redirectToLanding === "function") {
+        auth.redirectToLanding();
+      }
       return;
     }
 
@@ -32,7 +35,7 @@
         const profile = await fetchBackendProfile(context.session.googleSub);
         if (profile) {
           const merged = applyProfileToSession(context.session, profile);
-          persistSession(merged);
+          window.EDH_PODLOG?.session?.persist?.(merged);
           context.session = merged;
         }
       } catch (error) {
@@ -101,11 +104,29 @@
         event.stopPropagation();
         profileMenu?.classList.remove("is-visible");
         profileMenuButton?.setAttribute("aria-expanded", "false");
-        const session = getSession();
-        revokeGoogleToken(session?.accessToken || googleAccessToken);
-        clearSession();
+        const sessionStore = window.EDH_PODLOG?.session ?? {};
+        const session =
+          (sessionStore.getCurrent ? sessionStore.getCurrent() : null) ??
+          (sessionStore.load ? sessionStore.load() : null);
+        const accessToken =
+          (typeof auth.getAccessToken === "function" ? auth.getAccessToken() : null) ||
+          session?.accessToken ||
+          null;
+        if (typeof auth.revokeToken === "function") {
+          auth.revokeToken(accessToken);
+        }
+        if (sessionStore.clear) {
+          sessionStore.clear();
+        } else {
+          clearSession();
+        }
+        sessionStore.setCurrent?.(null);
         context.session = null;
-        redirectToLanding();
+        if (typeof auth.redirectToLanding === "function") {
+          auth.redirectToLanding();
+        } else {
+          window.location.replace("index.html");
+        }
       });
     }
   });

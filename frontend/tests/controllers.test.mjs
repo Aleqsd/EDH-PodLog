@@ -9,6 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const BASE_SCRIPTS = [
+  "../public/js/runtime-config.js",
+  "../public/js/session-store.js",
+  "../public/js/api-client.js",
+  "../public/js/auth.js",
+  "../public/js/ui-badge.js",
   "../public/js/app-core.js",
   "../public/js/app-features.js",
   "../public/js/app-init.js",
@@ -453,7 +458,19 @@ const setupControllerRuntime = async ({
     document,
     localStorage,
     sessionStorage,
-    location: { href: "http://localhost/" },
+    location: {
+      href: "http://localhost/",
+      origin: "http://localhost",
+      hostname: "localhost",
+      pathname: "/",
+      search: "",
+      replace(url) {
+        this.href = url;
+      },
+      assign(url) {
+        this.href = url;
+      },
+    },
     history: { replaceState: () => {}, pushState: () => {} },
     addEventListener: () => {},
     removeEventListener: () => {},

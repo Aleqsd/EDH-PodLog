@@ -39,6 +39,8 @@
     });
   };
 
+  const sessionStore = window.EDH_PODLOG?.session ?? {};
+
   api.registerPageController("synchronisation", (context) => {
     moxfieldForm = document.getElementById("moxfieldForm");
     moxfieldHandleInput = document.getElementById("moxfieldHandle");
@@ -100,6 +102,7 @@
         }));
 
         currentSession = updatedSession ?? currentSession;
+        sessionStore.setCurrent?.(currentSession);
         context.session = currentSession;
         renderMoxfieldPanel(currentSession);
         refreshDeckCollection(currentSession);
@@ -206,6 +209,7 @@
             handleChanged,
             decks: handleChanged ? [] : undefined,
           })) ?? currentSession;
+        sessionStore.setCurrent?.(currentSession);
         context.session = currentSession;
         renderMoxfieldPanel(currentSession, { preserveStatus: true });
         showMoxfieldStatus("Pseudo Moxfield enregistré.", "success");

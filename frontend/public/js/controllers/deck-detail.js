@@ -805,6 +805,7 @@
       });
       if (session) {
         currentSession = session;
+        window.EDH_PODLOG?.session?.setCurrent?.(session);
         context.session = session;
       }
       if (!deck || !deckHasCardDetails(deck)) {

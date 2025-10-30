@@ -36,7 +36,11 @@
       return;
     }
 
-    const session = context.session ?? (typeof getSession === "function" ? getSession() : null);
+    const sessionStore = window.EDH_PODLOG?.session ?? {};
+    const session =
+      context.session ??
+      (sessionStore.getCurrent ? sessionStore.getCurrent() : null) ??
+      (sessionStore.load ? sessionStore.load() : null);
     const googleSub = session?.googleSub || null;
 
     const searchParams = new URLSearchParams(window.location.search);

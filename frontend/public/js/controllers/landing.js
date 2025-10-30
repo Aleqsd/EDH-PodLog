@@ -1,5 +1,6 @@
 (() => {
   const api = window.EDH_PODLOG?.controllers;
+  const auth = window.EDH_PODLOG?.auth ?? {};
   if (!api) {
     return;
   }
@@ -32,12 +33,13 @@
     landingSignInButton.addEventListener("click", (event) => {
       event.preventDefault();
 
-      if (!isGoogleClientConfigured()) {
+      if (!auth.isClientConfigured || !auth.isClientConfigured()) {
         explainMissingGoogleConfig();
         return;
       }
 
-      if (!tokenClient) {
+      const client = auth.getTokenClient ? auth.getTokenClient() : null;
+      if (!client) {
         window.alert(
           "La librairie Google n'est pas encore prête. Veuillez patienter une seconde puis réessayer."
         );
@@ -45,7 +47,7 @@
       }
 
       setSignInButtonLoading(true);
-      tokenClient.requestAccessToken({
+      client.requestAccessToken({
         prompt: context.session ? "" : "consent",
       });
     });

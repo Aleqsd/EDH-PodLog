@@ -209,7 +209,7 @@
       if (
         typeof upsertBackendProfile !== "function" ||
         typeof applyProfileToSession !== "function" ||
-        typeof persistSession !== "function"
+        typeof (window.EDH_PODLOG?.session?.persist) !== "function"
       ) {
         showStatus(
           statusEl,
@@ -269,7 +269,7 @@
           throw new Error("Profil indisponible");
         }
         const merged = applyProfileToSession(context.session, profile);
-        persistSession(merged);
+        window.EDH_PODLOG?.session?.persist?.(merged);
         context.session = merged;
 
         state.displayName = merged.profileDisplayName ?? "";
