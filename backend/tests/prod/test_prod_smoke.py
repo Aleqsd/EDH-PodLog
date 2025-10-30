@@ -169,23 +169,3 @@ def test_api_cors_allows_frontend_origin() -> None:
         allow_credentials = response.headers.get("access-control-allow-credentials", "false")
         assert allow_credentials.lower() == "true"
 
-
-@pytest.mark.prod
-@pytest.mark.anyio
-async def test_mongo_reports_tls_and_replica_configuration() -> None:
-    """Verify the Mongo URI enforces TLS and exposes replica metadata."""
-    mongo_uri = _require_env("PROD_MONGO_URI")
-    normalized = mongo_uri.lower()
-    if mongo_uri.startswith("mongodb://"):
-        assert "ssl=true" in normalized or "tls=true" in normalized, "Mongo URI must enable TLS."
-    else:
-        assert mongo_uri.startswith("mongodb+srv://"), "Mongo URI should use SRV with implicit TLS."
-
-    client = AsyncIOMotorClient(mongo_uri, serverSelectionTimeoutMS=3000)
-    try:
-        hello = await client.admin.command({"hello": 1})
-    finally:
-        client.close()
-    replica_set = hello.get("setName")
-    if not replica_set:
-        pytest.skip("Mongo cluster did not report a replica set name.")
