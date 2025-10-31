@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List
 
@@ -11,11 +12,20 @@ class StubCursor:
 
     def __init__(self, documents: list[dict[str, Any]]) -> None:
         self._documents = documents
+        self._limit: int | None = None
+
+    def limit(self, value: int) -> "StubCursor":
+        self._limit = value
+        return self
 
     async def to_list(self, length: int | None = None) -> list[dict[str, Any]]:
-        if length is None:
-            return deepcopy(self._documents)
-        return deepcopy(self._documents[:length])
+        documents = deepcopy(self._documents)
+        effective_length = length
+        if self._limit is not None:
+            effective_length = self._limit if effective_length is None else min(self._limit, effective_length)
+        if effective_length is None:
+            return documents
+        return documents[:effective_length]
 
 
 class StubCollection:
@@ -30,9 +40,27 @@ class StubCollection:
             if key == "$or":
                 if not any(self._matches(document, clause) for clause in value):
                     return False
-            else:
-                if document.get(key) != value:
+            elif key == "$text":
+                search_terms = value.get("$search", "")
+                if not search_terms:
+                    continue
+                haystack = " ".join(
+                    str(document.get(field, "")) for field in ("display_name", "given_name", "email", "description")
+                ).casefold()
+                if search_terms.casefold() not in haystack:
                     return False
+            else:
+                candidate = document.get(key)
+                if isinstance(value, dict) and "$regex" in value:
+                    pattern = value["$regex"]
+                    options = value.get("$options", "")
+                    flags = re.IGNORECASE if isinstance(options, str) and "i" in options.lower() else 0
+                    compiled = re.compile(pattern, flags)
+                    if not isinstance(candidate, str) or compiled.search(candidate) is None:
+                        return False
+                else:
+                    if candidate != value:
+                        return False
         return True
 
     async def update_one(
@@ -86,13 +114,26 @@ class StubCollection:
                 return deepcopy(document)
         return None
 
-    def find(self, filter_: dict[str, Any]) -> StubCursor:
+    def find(self, filter_: dict[str, Any] | None = None, projection: dict[str, Any] | None = None) -> StubCursor:
+        filter_ = filter_ or {}
         results = [
-            deepcopy(document)
+            self._project(deepcopy(document), projection)
             for document in self.documents
             if self._matches(document, filter_)
         ]
         return StubCursor(results)
+
+    @staticmethod
+    def _project(document: dict[str, Any], projection: dict[str, Any] | None) -> dict[str, Any]:
+        if not projection:
+            return document
+        included = {key for key, value in projection.items() if value}
+        if not included:
+            return document
+        projected = {key: document[key] for key in included if key in document}
+        if "_id" in document and (projection.get("_id", 1)):
+            projected["_id"] = document["_id"]
+        return projected
 
     async def delete_one(self, filter_: dict[str, Any]):
         for index, document in enumerate(self.documents):

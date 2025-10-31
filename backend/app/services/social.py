@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, List
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -50,14 +50,30 @@ async def search_public_profiles(
     settings = get_settings()
     profiles_collection = database[settings.mongo_users_collection]
 
-    raw_documents = await profiles_collection.find({}).to_list(length=None)  # type: ignore[attr-defined]
+    filter_query: dict[str, Any] = {"is_public": True}
+    projection = {
+        "google_sub": 1,
+        "display_name": 1,
+        "given_name": 1,
+        "email": 1,
+        "description": 1,
+        "picture": 1,
+        "is_public": 1,
+    }
+
+    if normalized_query:
+        filter_query["$text"] = {"$search": normalized_query}
+        projection["score"] = {"$meta": "textScore"}
+
+    cursor = profiles_collection.find(filter_query, projection)
+    fetch_limit = max(limit, 20)
+    raw_documents = await cursor.limit(fetch_limit).to_list(length=None)  # type: ignore[attr-defined]
+
     follow_repository = FollowRepository(database)
     followed_targets = await _load_following_set(follow_repository, viewer_sub) if viewer_sub else set()
 
     matches: List[UserSearchResult] = []
     for document in raw_documents:
-        if not document.get("is_public"):
-            continue
         google_sub = document.get("google_sub")
         if not google_sub:
             continue

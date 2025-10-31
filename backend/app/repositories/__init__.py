@@ -8,6 +8,7 @@ from .moxfield_cache import MoxfieldCacheRepository, ensure_moxfield_cache_index
 from .play_data import GameRepository, PlaygroupRepository, ensure_play_data_indexes
 from .players import PlayerRepository, ensure_player_indexes
 from .follows import FollowRepository, ensure_follow_indexes
+from .profiles import ensure_user_profile_indexes
 
 __all__ = [
     "MoxfieldCacheRepository",
@@ -21,4 +22,5 @@ __all__ = [
     "ensure_deck_personalization_indexes",
     "ensure_player_indexes",
     "ensure_follow_indexes",
+    "ensure_user_profile_indexes",
 ]

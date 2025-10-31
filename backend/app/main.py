@@ -11,10 +11,11 @@ from .dependencies import close_mongo_client, get_mongo_database
 from .logging_utils import get_logger
 from .repositories import (
     ensure_deck_personalization_indexes,
+    ensure_follow_indexes,
     ensure_moxfield_cache_indexes,
     ensure_play_data_indexes,
     ensure_player_indexes,
-    ensure_follow_indexes,
+    ensure_user_profile_indexes,
 )
 from .routers import (
     cache_router,
@@ -57,6 +58,10 @@ def create_app() -> FastAPI:
             await ensure_follow_indexes(database)
         except Exception:  # pragma: no cover - defensive logging
             logger.exception("Failed to ensure follow indexes during startup.")
+        try:
+            await ensure_user_profile_indexes(database)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to ensure user profile indexes during startup.")
         try:
             yield
         finally:
