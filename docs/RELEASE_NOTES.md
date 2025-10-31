@@ -1,0 +1,113 @@
+# Release Notes
+
+## v0.1.1 - 2025-10-31
+
+- Optimize social search and add profile indexes
+- Add prod smoke coverage for deck flows
+- Refactor deck personalization sanitization
+- Refactor config utilities and document
+- refactor: inject moxfield cache repository dependency
+- Add social and cache E2E coverage
+- Remove Mongo TLS prod smoke test
+- Add production smoke checks for config, CORS, and Mongo
+- Remove completed storage refactor task
+- Add comprehensive test catalogue
+- Add coverage for social services and playgroup filters
+- Expand platform e2e coverage for personalization and Moxfield errors
+- Gate prod smoke tests behind explicit flag and autoload env files
+- refactor: enhance MoxfieldCacheRepository and storage helpers for improved document handling
+- feat: add environment variable loading and production smoke test configuration
+- feat: add production smoke tests and update Makefile for test execution
+- refactor: simplify health endpoint test by using injected TestClient
+- feat: add end-to-end tests for backend functionality and update Makefile for test execution
+- feat: enhance logging configuration and add end-to-end tests for platform flows
+- feat: initialize shared DOM references for deck selection and Moxfield integration
+- Better logs
+- feat: add French number formatting support
+- feat: implement session data update functionality with cloning and mutation support
+- feat: Refactor session management and enhance module structure
+- Fix tentative
+- feat: Implement session management and configuration updates
+- feat(deck): implement bulk delete functionality and enhance deck display options
+- feat(life-tracker): implement life tracking feature with UI enhancements and state management
+- feat(deck): update personal rating handling and enhance deck performance UI
+- feat(profile): add public profile toggle and update state management
+- feat: add feature and refactor opportunities documentation for deck management
+- feat: add tooltip for app revision badge to enhance user experience
+- feat: Enhance deck management UI with filters, sorting, and display options
+- feat: update .gitignore to include Netlify artifacts and log files
+- feat: add remote hydration state for deck personalizations
+- feat: add error handling for deck personalization storage quota
+- feat: add logging for deck personalization retrieval and upsert operations
+- feat: support slashes in deck IDs for personalization endpoints
+- Add deck personalization feature with API integration and UI updates
+- feat: enhance deck detail page with performance summary and statistics sections feat: add deck performance handling and rendering logic in deck-detail controller feat: implement deck performance data fetching and summarization style: update CSS for deck performance sections and improve layout
+- feat: remove pointer-events from modal styles for improved interaction
+- feat: add handling for APP_REVISION_MESSAGE to trim and validate its value
+- feat: improve revision date formatting and add commit message derivation in config generation
+- feat: enhance revision date formatting with timezone support and improved display
+- feat: add revision date handling and formatting to app revision badge
+- feat: enhance service worker versioning and local development support
+- feat: add serve configuration for frontend with caching headers
+- Readme update
+- Readme update
+- feat: add autodeploy webhook setup instructions to README
+- feat: add documentation automation reminder for AGENTS.md review
+- feat(profile): add description field and avatar management to user profile
+- feat: add app revision badge and derive commit info for display
+- feat: add service worker and manifest for PWA support; update HTML files with theme color and icons
+- Enhance modal and personal card styles
+- feat: update decklist visibility controls and improve mana curve display
+- feat: add groupes and parties controllers with associated HTML and styles
+- Run game feature
+- New deck page design
+- Small fix button radar
+- Enhance game changer display and improve responsive styles for deck rating components
+- graph fix
+- compute color identity
+- Deck calculs update
+- Fix tri
+- Mainboard now renders cards grouped by type, with shared sorting logic across boards.
+- Remove energies
+- Restored the scrollable wrapper around each deck card table
+- Added mana analytics and evaluation UI to the deck detail page
+- CSS Design Tokens & Layering
+- Test Harness Improvements
+- Split the FastAPI surface into feature routers and wired them through the central app bootstrap so each feature owns its own dependencies.
+- Converted the Moxfield client to run async with built-in batching, retries, and timing logs so the API layer stays async-native.
+- Mongo Repository & Index Audit
+- New router & controller setup is in place.
+- update favicon
+- Implemented favicon + metadata and refactored frontend asset loading.
+- new deck page 7
+- new deck page 6
+- new deck page 5
+- new deck page 4
+- new deck page 3
+- new deck page 2
+- New deck page
+- Speed up deck page
+- Trying to show card faster
+- Better delete
+- Mark configure-vps-logs.sh as executable
+- No deck in sync, front logs
+- Fix slow?
+- fix deck not showing
+- Fix vps logs script
+- Refactor log configuration script to allow environment variable overrides and improve Nginx configuration instructions
+- Persistent logs
+- Potential big load fix
+- better log and cleaning
+- Better logs
+- update backend install
+- Add make logs
+- Add vps-deploy target to Makefile and update README with VPS deployment instructions
+- Working deck management
+- User non working atm
+- Mono repo yo
+- remove secrets lol
+- Letzgo
+
+## v0.1.0 - 2025-10-31
+
+- Bootstrap entry to anchor automated release notes. Use `make version-prepare PART=…` to prepend future summaries.

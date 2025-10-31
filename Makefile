@@ -35,12 +35,14 @@ VPS_LOG_ROOT ?= /root/EDH-PodLog
 VPS_BACK_LOG ?= $(VPS_LOG_ROOT)/back.log
 VPS_DB_LOG ?= $(VPS_LOG_ROOT)/db.log
 VPS_FRONT_LOG ?= $(VPS_LOG_ROOT)/front.log
+VERSION_MANAGER := $(PYTHON) scripts/version_manager.py
 
 .PHONY: front back db deps doctor \
 	front-config front-build front-serve front-preview front-deploy front-clean front-test \
 	backend backend-install backend-run backend-test backend-test-e2e backend-test-prod backend-openapi backend-deps \
 	db-start db-stop db-status db-clean db-preview db-test \
-	check-env check-tools test vps-deploy log-db log-back log-front
+	check-env check-tools test vps-deploy log-db log-back log-front \
+	version-current version-prepare version-publish
 
 front: front-serve
 
@@ -291,3 +293,16 @@ doctor: check-tools check-env
 deps: backend-deps
 
 test: front-test backend-test backend-test-e2e db-test
+
+version-current:
+	@$(VERSION_MANAGER) current
+
+version-prepare:
+	@if [ -z "$(PART)" ]; then \
+		echo "Usage: make version-prepare PART=major|minor|patch"; \
+		exit 1; \
+	fi
+	@$(VERSION_MANAGER) prepare $(PART)
+
+version-publish:
+	@$(VERSION_MANAGER) publish $(ARGS)

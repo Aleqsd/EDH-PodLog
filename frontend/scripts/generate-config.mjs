@@ -24,6 +24,7 @@ const outputPath = process.env.EDH_PODLOG_CONFIG_OUT
   ? resolve(repoRoot, process.env.EDH_PODLOG_CONFIG_OUT)
   : resolve(projectRoot, "public/config.js");
 const swVersionOutputPath = resolve(projectRoot, "public/service-worker.version.js");
+const versionFilePath = resolve(repoRoot, "VERSION");
 const envFiles = process.env.EDH_PODLOG_ENV_FILES
   ? process.env.EDH_PODLOG_ENV_FILES.split(":").filter(Boolean)
   : [".env", ".env.local"];
@@ -75,6 +76,19 @@ const resolveGitCommitMessage = () => {
   }
 };
 
+const resolveProjectVersion = async () => {
+  try {
+    const raw = await readFile(versionFilePath, "utf8");
+    const value = raw.trim();
+    if (value) {
+      return value;
+    }
+  } catch (error) {
+    console.warn("[generate-config] Impossible de lire VERSION :", error.message);
+  }
+  return "0.0.0-dev";
+};
+
 const main = async () => {
   const env = await loadEnv();
   const clientId = env.GOOGLE_CLIENT_ID ?? PLACEHOLDER;
@@ -86,9 +100,12 @@ const main = async () => {
     );
   }
 
+  const appVersion = await resolveProjectVersion();
+
   const config = {
     GOOGLE_CLIENT_ID: clientId,
     API_BASE_URL: apiBaseUrl,
+    APP_VERSION: appVersion,
   };
 
   const commitInfo = deriveCommitInfo(env, { getFallbackSha: resolveGitCommitSha });
@@ -111,7 +128,8 @@ const main = async () => {
   await writeFile(outputPath, fileContent, "utf8");
   console.log(`[generate-config] Fichier généré : ${outputPath}`);
 
-  const swVersion = commitInfo.full || `dev-${Date.now()}`;
+  const swVersionBase = commitInfo.full || `dev-${Date.now()}`;
+  const swVersion = `${appVersion}+${swVersionBase}`;
   const swVersionContent = `self.EDH_PODLOG_SW_VERSION = ${JSON.stringify(swVersion)};\n`;
   await writeFile(swVersionOutputPath, swVersionContent, "utf8");
   console.log(`[generate-config] Version du service worker écrite dans : ${swVersionOutputPath}`);

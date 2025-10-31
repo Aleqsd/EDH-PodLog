@@ -14,6 +14,11 @@
     deckLayout: "edhPodlogDeckDisplayMode",
   };
 
+  const appVersion = (() => {
+    const value = rawConfig.APP_VERSION;
+    return typeof value === "string" ? value.trim() : "";
+  })();
+
   const revisionMessage = (() => {
     const value = rawConfig.APP_REVISION_MESSAGE;
     return typeof value === "string" ? value.trim() : "";
@@ -44,6 +49,7 @@
       message: revisionMessage,
       dateRaw: rawConfig.APP_REVISION_DATE ?? "",
     },
+    version: appVersion,
     intl: {
       number: new Intl.NumberFormat("fr-FR"),
     },

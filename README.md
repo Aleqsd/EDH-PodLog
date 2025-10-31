@@ -67,8 +67,18 @@ Run the targeted suite while developing a change, then finish with `make test` b
 - `make test` – aggregate frontend, backend, and db tests.
 - `make doctor` – verify required tooling and sanity-check environment variables.
 - `make deps` – convenience shortcut for installing backend dependencies with the system interpreter.
+- `make version-current` – print the semantic version tracked in `VERSION`.
+- `make version-prepare PART=patch` – bump `VERSION`, prepend release notes, and stage the changes.
+- `make version-publish ARGS="--push --create-release"` – tag the current version and optionally publish a GitHub release (requires the GitHub CLI).
 
 Every backend-oriented target automatically loads `.env` and `.env.local` so the FastAPI app picks up your MongoDB configuration.
+
+## Versioning & Releases
+
+- The canonical project version lives in the root `VERSION` file and is injected into both the FastAPI metadata and the generated frontend config.
+- Run `make version-prepare PART=patch|minor|major` after landing changes to bump the version and prepend the recent commit log to `docs/RELEASE_NOTES.md`.
+- Commit and push those updates, then execute `make version-publish ARGS="--push --create-release"` to tag the commit (and, with `--create-release`, open a GitHub release using the generated notes).
+- Release notes accumulate in `docs/RELEASE_NOTES.md`, with the newest entry always appearing first.
 
 ## Frontend Notes
 

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .dependencies import close_mongo_client, get_mongo_database
 from .logging_utils import get_logger
+from .version import get_application_version
 from .repositories import (
     ensure_deck_personalization_indexes,
     ensure_follow_indexes,
@@ -69,7 +70,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Moxfield Scraping API",
-        version="0.1.0",
+        version=get_application_version(),
         description="Simple proxy API that fetches public Moxfield data.",
         lifespan=lifespan,
     )

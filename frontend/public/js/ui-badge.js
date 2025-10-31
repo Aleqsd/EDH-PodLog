@@ -6,6 +6,12 @@
   }
 
   const revision = config.revision ?? {};
+  const rawVersion = typeof config.version === "string" ? config.version.trim() : "";
+  const normalizedVersion = rawVersion
+    ? rawVersion.startsWith("v")
+      ? rawVersion
+      : `v${rawVersion}`
+    : "";
 
   const parseRevisionDate = (raw) => {
     if (!raw || typeof raw !== "string") {
@@ -43,7 +49,7 @@
   const revisionDate = parseRevisionDate(revision.dateRaw);
 
   const mountRevisionBadge = () => {
-    if (!revision.short || typeof document === "undefined") {
+    if ((!revision.short && !normalizedVersion) || typeof document === "undefined") {
       return;
     }
 
@@ -56,24 +62,39 @@
     badge.id = "appRevisionBadge";
     badge.className = "app-revision-badge";
 
+    const ariaParts = [];
     if (revision.message) {
-      badge.setAttribute(
-        "aria-label",
-        `Dernière mise à jour : ${revision.message} (${revision.short})`
-      );
-    } else {
-      badge.setAttribute("aria-label", `Révision ${revision.short}`);
+      ariaParts.push(`Dernière mise à jour : ${revision.message}`);
     }
-    badge.dataset.revision = revision.short;
+    if (normalizedVersion) {
+      ariaParts.push(`Version ${normalizedVersion}`);
+    } else if (revision.short) {
+      ariaParts.push(`Révision ${revision.short}`);
+    }
+    if (ariaParts.length) {
+      badge.setAttribute("aria-label", ariaParts.join(" • "));
+    }
+
+    if (revision.short) {
+      badge.dataset.revision = revision.short;
+    }
+    if (normalizedVersion) {
+      badge.dataset.version = normalizedVersion;
+    }
 
     if (revision.full) {
-      badge.title = `Commit ${revision.full}`;
+      badge.title = normalizedVersion
+        ? `Version ${normalizedVersion}\nCommit ${revision.full}`
+        : `Commit ${revision.full}`;
       badge.dataset.revisionFull = revision.full;
     }
 
     const previewMessage = (() => {
       if (!revision.message) {
-        return `Révision ${revision.short}`;
+        if (normalizedVersion) {
+          return `Version ${normalizedVersion}`;
+        }
+        return revision.short ? `Révision ${revision.short}` : "Révision inconnue";
       }
       const maxLength = 80;
       if (revision.message.length <= maxLength) {
@@ -91,16 +112,32 @@
 
     const revisionSpan = document.createElement("span");
     revisionSpan.className = "app-revision-value";
-    revisionSpan.textContent = `(${revision.short})`;
+    if (normalizedVersion) {
+      revisionSpan.textContent = normalizedVersion;
+    } else if (revision.short) {
+      revisionSpan.textContent = `(${revision.short})`;
+    }
 
     header.append(messageSpan, revisionSpan);
     badge.append(header);
 
+    const tooltipLines = [];
     if (revision.message) {
       badge.dataset.revisionMessage = revision.message;
+      tooltipLines.push(revision.message);
+    }
+    if (revision.full) {
+      tooltipLines.push(`Commit ${revision.full}`);
+    } else if (revision.short) {
+      tooltipLines.push(`Commit ${revision.short}`);
+    }
+    if (normalizedVersion) {
+      tooltipLines.unshift(`Version ${normalizedVersion}`);
+    }
+    if (tooltipLines.length) {
       const tooltip = document.createElement("div");
       tooltip.className = "app-revision-tooltip";
-      tooltip.textContent = revision.message;
+      tooltip.textContent = tooltipLines.join("\n");
       tooltip.id = "appRevisionTooltip";
       badge.setAttribute("aria-describedby", tooltip.id);
       badge.append(tooltip);

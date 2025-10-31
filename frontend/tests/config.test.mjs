@@ -17,6 +17,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(new URL("../scripts/generate-config.mjs", import.meta.url));
+const versionFilePath = fileURLToPath(new URL("../../VERSION", import.meta.url));
 
 const readGeneratedConfig = async (outputPath) => {
   const raw = await readFile(outputPath, "utf8");
@@ -110,6 +111,8 @@ test("generate-config falls back to defaults without env files", async () => {
   const config = await readGeneratedConfig(outputPath);
   assert.equal(config.GOOGLE_CLIENT_ID, "REMPLACEZ_MOI_PAR_VOTRE_CLIENT_ID");
   assert.equal(config.API_BASE_URL, "http://localhost:4310");
+  const projectVersion = (await readFile(versionFilePath, "utf8")).trim();
+  assert.equal(config.APP_VERSION, projectVersion);
 
   await rm(tempRoot, { recursive: true, force: true });
 });
@@ -139,6 +142,8 @@ test("generate-config honours values provided in env files", async () => {
   const config = await readGeneratedConfig(outputPath);
   assert.equal(config.GOOGLE_CLIENT_ID, "unit-test-client");
   assert.equal(config.API_BASE_URL, "http://localhost:9999");
+  const projectVersion = (await readFile(versionFilePath, "utf8")).trim();
+  assert.equal(config.APP_VERSION, projectVersion);
 
   await rm(tempRoot, { recursive: true, force: true });
 });
