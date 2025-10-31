@@ -21,6 +21,7 @@
 - When touching CSS, introduce values via the tokens catalogue and layer-safe utilities instead of hard-coding hex/rgba literals.
 - Extend or update tests alongside features and bug fixes; add a covering unit or e2e test for each fix whenever feasible. `make test` aggregates Node + pytest suites and guards against regressions.
 - Bump the project version with `make version-prepare PART=patch|minor|major`; it rewrites `VERSION` and prepends release notes before you commit. Use `make version-publish ARGS="--push --create-release"` once pushed to tag and open a GitHub release.
+- Release cadence stays in the automation loop—agents own the decision to cut a release, including version bumps, changelog prep, tagging, pushing, and `gh release` creation without external approval.
 - Let the docs automation ping this file for review every Monday so AGENTS.md stays current with repo and workflow shifts.
 - After `make test`, exercise a manual `/users/{username}/decks` fetch (e.g. via `httpie` or `curl` against a multi-deck account like `BimboLegrand`) and inspect backend logs to confirm batched fetch timings and retry/backoff behaviour remain healthy.
 
