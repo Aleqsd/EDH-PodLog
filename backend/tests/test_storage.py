@@ -26,7 +26,7 @@ from app.schemas import (
     UserDecksResponse,
     UserSummary,
 )
-from app.repositories import ensure_moxfield_cache_indexes
+from app.repositories import MoxfieldCacheRepository, ensure_moxfield_cache_indexes
 from app.services.storage import (
     delete_user_deck,
     fetch_user_deck_summaries,
@@ -175,6 +175,11 @@ class _StubDatabase:
         return self._collections[name]
 
 
+def _build_repository(database: _StubDatabase) -> MoxfieldCacheRepository:
+    """Instantiate the repository using the stub database."""
+    return MoxfieldCacheRepository(database)  # type: ignore[arg-type]
+
+
 def _build_user_payload() -> UserSummary:
     return UserSummary(
         user_name="TestUser",
@@ -215,13 +220,14 @@ def _build_deck_summary() -> DeckSummary:
 async def test_upsert_user_decks_persists_user_and_decks() -> None:
     """Deck details should be upserted under the configured collections."""
     database = _StubDatabase()
+    repository = _build_repository(database)
     payload = UserDecksResponse(
         user=_build_user_payload(),
         total_decks=1,
         decks=[_build_deck_detail()],
     )
 
-    await upsert_user_decks(database, payload)
+    await upsert_user_decks(repository, payload)
 
     stored_users = database["moxfield_users"].documents
     stored_decks = database["decks"].documents
@@ -245,13 +251,14 @@ async def test_upsert_user_decks_persists_user_and_decks() -> None:
 async def test_upsert_user_deck_summaries_persists_user_and_summaries() -> None:
     """Deck summaries should be stored separately from full deck payloads."""
     database = _StubDatabase()
+    repository = _build_repository(database)
     payload = UserDeckSummariesResponse(
         user=_build_user_payload(),
         total_decks=1,
         decks=[_build_deck_summary()],
     )
 
-    await upsert_user_deck_summaries(database, payload)
+    await upsert_user_deck_summaries(repository, payload)
 
     stored_users = database["moxfield_users"].documents
     stored_summaries = database["deck_summaries"].documents
@@ -269,14 +276,15 @@ async def test_upsert_user_deck_summaries_persists_user_and_summaries() -> None:
 async def test_fetch_user_decks_returns_payload_if_present() -> None:
     """fetch_user_decks should reconstruct the response using stored documents."""
     database = _StubDatabase()
+    repository = _build_repository(database)
     payload = UserDecksResponse(
         user=_build_user_payload(),
         total_decks=1,
         decks=[_build_deck_detail()],
     )
-    await upsert_user_decks(database, payload)
+    await upsert_user_decks(repository, payload)
 
-    cached = await fetch_user_decks(database, "TestUser")
+    cached = await fetch_user_decks(repository, "TestUser")
     assert cached is not None
     assert cached.user.user_name == "TestUser"
     assert cached.total_decks == 1
@@ -287,7 +295,8 @@ async def test_fetch_user_decks_returns_payload_if_present() -> None:
 async def test_fetch_user_decks_returns_none_when_missing() -> None:
     """fetch_user_decks should return None when no user document exists."""
     database = _StubDatabase()
-    cached = await fetch_user_decks(database, "Unknown")
+    repository = _build_repository(database)
+    cached = await fetch_user_decks(repository, "Unknown")
     assert cached is None
 
 
@@ -295,20 +304,21 @@ async def test_fetch_user_decks_returns_none_when_missing() -> None:
 async def test_delete_user_deck_matches_case_insensitive_username() -> None:
     """Deleting a deck should match regardless of username casing."""
     database = _StubDatabase()
+    repository = _build_repository(database)
     payload = UserDecksResponse(
         user=_build_user_payload(),
         total_decks=1,
         decks=[_build_deck_detail()],
     )
-    await upsert_user_decks(database, payload)
+    await upsert_user_decks(repository, payload)
     summary_payload = UserDeckSummariesResponse(
         user=_build_user_payload(),
         total_decks=1,
         decks=[_build_deck_summary()],
     )
-    await upsert_user_deck_summaries(database, summary_payload)
+    await upsert_user_deck_summaries(repository, summary_payload)
 
-    deleted = await delete_user_deck(database, "testuser", "deck-public")
+    deleted = await delete_user_deck(repository, "testuser", "deck-public")
     assert deleted is True
 
     assert database["decks"].documents == []
@@ -321,14 +331,15 @@ async def test_delete_user_deck_matches_case_insensitive_username() -> None:
 async def test_fetch_user_deck_summaries_returns_payload_if_present() -> None:
     """fetch_user_deck_summaries should reuse stored summary documents."""
     database = _StubDatabase()
+    repository = _build_repository(database)
     payload = UserDeckSummariesResponse(
         user=_build_user_payload(),
         total_decks=1,
         decks=[_build_deck_summary()],
     )
-    await upsert_user_deck_summaries(database, payload)
+    await upsert_user_deck_summaries(repository, payload)
 
-    cached = await fetch_user_deck_summaries(database, "TestUser")
+    cached = await fetch_user_deck_summaries(repository, "TestUser")
     assert cached is not None
     assert cached.user.user_name == "TestUser"
     assert cached.decks[0].public_id == "deck-public"
@@ -338,7 +349,8 @@ async def test_fetch_user_deck_summaries_returns_payload_if_present() -> None:
 async def test_fetch_user_deck_summaries_returns_none_when_missing() -> None:
     """fetch_user_deck_summaries should return None when nothing is stored."""
     database = _StubDatabase()
-    cached = await fetch_user_deck_summaries(database, "Unknown")
+    repository = _build_repository(database)
+    cached = await fetch_user_deck_summaries(repository, "Unknown")
     assert cached is None
 
 

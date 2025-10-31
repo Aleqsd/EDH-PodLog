@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from ..dependencies import get_mongo_database, get_moxfield_client
+from ..dependencies import get_moxfield_cache_repository, get_moxfield_client
 from ..logging_utils import get_logger
 from ..moxfield import MoxfieldClient, MoxfieldError, MoxfieldNotFoundError
+from ..repositories import MoxfieldCacheRepository
 from ..schemas import UserDeckSummariesResponse, UserDecksResponse
 from ..services.moxfield import build_user_deck_summaries_response, build_user_decks_response
 from ..services.storage import (
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def get_user_deck_summaries(
     username: str,
     client: MoxfieldClient = Depends(get_moxfield_client),
-    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    repository: MoxfieldCacheRepository = Depends(get_moxfield_cache_repository),
 ) -> UserDeckSummariesResponse:
     try:
         response = await build_user_deck_summaries_response(client, username)
@@ -54,7 +54,7 @@ async def get_user_deck_summaries(
         )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    await _try_upsert(upsert_user_deck_summaries, database, response)
+    await _try_upsert(upsert_user_deck_summaries, repository, response)
     return response
 
 
@@ -66,7 +66,7 @@ async def get_user_deck_summaries(
 async def get_user_decks(
     username: str,
     client: MoxfieldClient = Depends(get_moxfield_client),
-    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    repository: MoxfieldCacheRepository = Depends(get_moxfield_cache_repository),
 ) -> UserDecksResponse:
     try:
         response = await build_user_decks_response(client, username)
@@ -89,7 +89,7 @@ async def get_user_decks(
         )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    await _try_upsert(upsert_user_decks, database, response)
+    await _try_upsert(upsert_user_decks, repository, response)
     return response
 
 
@@ -101,22 +101,22 @@ async def get_user_decks(
 async def delete_user_deck_endpoint(
     username: str,
     deck_id: str,
-    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    repository: MoxfieldCacheRepository = Depends(get_moxfield_cache_repository),
 ) -> Response:
-    deleted = await delete_user_deck(database, username, deck_id)
+    deleted = await delete_user_deck(repository, username, deck_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Deck not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 async def _try_upsert(
-    func: Callable[[AsyncIOMotorDatabase, Any], Awaitable[None]],
-    database: AsyncIOMotorDatabase,
+    func: Callable[[MoxfieldCacheRepository, Any], Awaitable[None]],
+    repository: MoxfieldCacheRepository,
     payload: UserDeckSummariesResponse | UserDecksResponse,
 ) -> None:
     """Persist payloads to MongoDB without disrupting the response path."""
     try:
-        await func(database, payload)
+        await func(repository, payload)
     except Exception:  # pragma: no cover - defensive logging
         logger.exception(
             "Deck persistence failed for user '%s' with %d item(s).",

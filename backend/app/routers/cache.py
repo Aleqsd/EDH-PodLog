@@ -1,9 +1,9 @@
 """Routers that expose cached payloads without hitting Moxfield."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from ..dependencies import get_mongo_database
+from ..dependencies import get_moxfield_cache_repository
+from ..repositories import MoxfieldCacheRepository
 from ..schemas import UserDeckSummariesResponse, UserDecksResponse
 from ..services.storage import fetch_user_deck_summaries, fetch_user_decks
 
@@ -17,9 +17,9 @@ router = APIRouter(prefix="/cache", tags=["cache"])
 )
 async def get_cached_user_decks(
     username: str,
-    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    repository: MoxfieldCacheRepository = Depends(get_moxfield_cache_repository),
 ) -> UserDecksResponse:
-    payload = await fetch_user_decks(database, username)
+    payload = await fetch_user_decks(repository, username)
     if not payload:
         raise HTTPException(status_code=404, detail="No cached deck data for this user.")
     return payload
@@ -32,9 +32,9 @@ async def get_cached_user_decks(
 )
 async def get_cached_user_deck_summaries(
     username: str,
-    database: AsyncIOMotorDatabase = Depends(get_mongo_database),
+    repository: MoxfieldCacheRepository = Depends(get_moxfield_cache_repository),
 ) -> UserDeckSummariesResponse:
-    payload = await fetch_user_deck_summaries(database, username)
+    payload = await fetch_user_deck_summaries(repository, username)
     if not payload:
         raise HTTPException(
             status_code=404,

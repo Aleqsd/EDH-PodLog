@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Iterator, Literal
 
-from motor.motor_asyncio import AsyncIOMotorDatabase
-
 from ..logging_utils import get_logger
 from ..repositories import MoxfieldCacheRepository
 from ..schemas import (
@@ -21,10 +19,9 @@ logger = get_logger("storage")
 
 
 async def upsert_user_decks(
-    database: AsyncIOMotorDatabase, payload: UserDecksResponse
+    repository: MoxfieldCacheRepository, payload: UserDecksResponse
 ) -> None:
     """Persist the latest deck snapshot for a user."""
-    repository = MoxfieldCacheRepository(database)
     synced_at = datetime.now(timezone.utc)
     user_doc = _prepare_user_document(payload.user, payload.total_decks, synced_at)
 
@@ -45,10 +42,9 @@ async def upsert_user_decks(
 
 
 async def upsert_user_deck_summaries(
-    database: AsyncIOMotorDatabase, payload: UserDeckSummariesResponse
+    repository: MoxfieldCacheRepository, payload: UserDeckSummariesResponse
 ) -> None:
     """Persist the lighter deck summary snapshot for a user."""
-    repository = MoxfieldCacheRepository(database)
     synced_at = datetime.now(timezone.utc)
     user_doc = _prepare_user_document(payload.user, payload.total_decks, synced_at)
 
@@ -69,10 +65,9 @@ async def upsert_user_deck_summaries(
 
 
 async def fetch_user_decks(
-    database: AsyncIOMotorDatabase, username: str
+    repository: MoxfieldCacheRepository, username: str
 ) -> UserDecksResponse | None:
     """Return the cached deck payload for a user if present."""
-    repository = MoxfieldCacheRepository(database)
     logger.info("Mongo read: fetching cached decks for user '%s'", username)
 
     user_doc = await repository.fetch_user(username)
@@ -96,10 +91,9 @@ async def fetch_user_decks(
 
 
 async def fetch_user_deck_summaries(
-    database: AsyncIOMotorDatabase, username: str
+    repository: MoxfieldCacheRepository, username: str
 ) -> UserDeckSummariesResponse | None:
     """Return the cached deck summaries for a user if present."""
-    repository = MoxfieldCacheRepository(database)
     logger.info("Mongo read: fetching deck summaries for user '%s'", username)
 
     user_doc = await repository.fetch_user(username)
@@ -125,11 +119,9 @@ async def fetch_user_deck_summaries(
 
 
 async def delete_user_deck(
-    database: AsyncIOMotorDatabase, username: str, deck_id: str
+    repository: MoxfieldCacheRepository, username: str, deck_id: str
 ) -> bool:
     """Delete a deck and its summary for the given user. Returns True when a deck was removed."""
-    repository = MoxfieldCacheRepository(database)
-
     logger.info(
         "Mongo write: deleting deck '%s' for user '%s'",
         deck_id,
