@@ -97,6 +97,13 @@ def _require_env(name: str) -> str:
     return value
 
 
+def _prod_test_handle() -> str:
+    """Return the Moxfield handle to exercise in live API smoke tests."""
+    raw = os.getenv("PROD_TEST_MOXFIELD_HANDLE", "BimboLegrand")
+    handle = raw.strip()
+    return handle or "BimboLegrand"
+
+
 @pytest.mark.prod
 def test_frontend_serves_index() -> None:
     """Smoke-test the static frontend served by Nginx."""
@@ -106,6 +113,18 @@ def test_frontend_serves_index() -> None:
     assert response.status_code == 200
     content = response.text.strip()
     assert content, "Frontend returned empty response."
+
+
+@pytest.mark.prod
+def test_frontend_decks_page_loads() -> None:
+    """Ensure the decks page renders for authenticated flows."""
+    base_url = _require_env("PROD_FRONTEND_BASE_URL").rstrip("/")
+    with httpx.Client(timeout=5.0) as client:
+        response = client.get(f"{base_url}/decks.html")
+    assert response.status_code == 200
+    body = response.text
+    assert "<h1>Vos decks importés</h1>" in body
+    assert "js/app-core.js" in body
 
 
 @pytest.mark.prod
@@ -169,3 +188,47 @@ def test_api_cors_allows_frontend_origin() -> None:
         allow_credentials = response.headers.get("access-control-allow-credentials", "false")
         assert allow_credentials.lower() == "true"
 
+
+@pytest.mark.prod
+def test_api_user_deck_summaries_real_account() -> None:
+    """Fetch live deck summaries for a real Moxfield handle."""
+    api_base = _require_env("PROD_API_BASE_URL").rstrip("/")
+    handle = _prod_test_handle()
+    with httpx.Client(timeout=15.0) as client:
+        response = client.get(f"{api_base}/users/{handle}/deck-summaries")
+    assert response.status_code == 200
+    payload = response.json()
+    user = payload.get("user", {})
+    assert user.get("user_name", "").lower() == handle.lower()
+    assert payload.get("total_decks", -1) >= 0
+    decks = payload.get("decks")
+    assert isinstance(decks, list)
+    if decks:
+        sample = decks[0]
+        assert sample.get("public_id")
+        assert sample.get("name")
+        assert sample.get("format")
+
+
+@pytest.mark.prod
+def test_api_user_decks_real_account() -> None:
+    """Fetch live deck details for the same handle to validate the full path."""
+    api_base = _require_env("PROD_API_BASE_URL").rstrip("/")
+    handle = _prod_test_handle()
+    with httpx.Client(timeout=30.0) as client:
+        response = client.get(f"{api_base}/users/{handle}/decks")
+    assert response.status_code == 200
+    payload = response.json()
+    user = payload.get("user", {})
+    assert user.get("user_name", "").lower() == handle.lower()
+    decks = payload.get("decks")
+    assert isinstance(decks, list)
+    assert payload.get("total_decks", -1) >= len(decks)
+    if decks:
+        sample = decks[0]
+        assert sample.get("public_id")
+        assert sample.get("name")
+        assert isinstance(sample.get("boards"), list)
+        if sample["boards"]:
+            first_board = sample["boards"][0]
+            assert isinstance(first_board.get("cards"), list)
