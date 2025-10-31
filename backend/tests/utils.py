@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
+from functools import cmp_to_key
 from typing import Any, Dict, Iterable, List
 
 
@@ -16,6 +17,48 @@ class StubCursor:
 
     def limit(self, value: int) -> "StubCursor":
         self._limit = value
+        return self
+
+    def sort(
+        self,
+        key_or_list: Any,
+        direction: int | str | None = None,
+    ) -> "StubCursor":
+        if isinstance(key_or_list, list):
+            specs = [
+                (
+                    field,
+                    -1
+                    if order in (-1, "desc", "descending")
+                    else 1,
+                )
+                for field, order in key_or_list
+            ]
+        else:
+            order = direction
+            if isinstance(order, str):
+                order = -1 if order.lower().startswith("desc") else 1
+            if order is None:
+                order = 1
+            specs = [(key_or_list, -1 if order in (-1, "desc", "descending") else 1)]
+
+        def comparator(left: dict[str, Any], right: dict[str, Any]) -> int:
+            for field, order in specs:
+                left_value = left.get(field)
+                right_value = right.get(field)
+                if left_value == right_value:
+                    continue
+                if left_value is None:
+                    return 1
+                if right_value is None:
+                    return -1
+                if left_value < right_value:
+                    return -order
+                if left_value > right_value:
+                    return order
+            return 0
+
+        self._documents = sorted(self._documents, key=cmp_to_key(comparator))
         return self
 
     async def to_list(self, length: int | None = None) -> list[dict[str, Any]]:

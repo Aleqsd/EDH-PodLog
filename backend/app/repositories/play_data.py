@@ -10,7 +10,7 @@ import re
 import unicodedata
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
-from pymongo import ASCENDING, IndexModel
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 from ..config import get_settings
 from ..logging_utils import get_logger
@@ -208,18 +208,21 @@ class GameRepository:
         owner_sub: str,
         *,
         playgroup_id: str | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         filter_ = self.owner_filter(owner_sub)
         if playgroup_id:
             filter_["playgroup_id"] = playgroup_id
-        cursor = self._collection.find(filter_)
-        documents = await cursor.to_list(length=None)
-        clean = [_strip_storage_fields(document) for document in documents]
-        clean.sort(
-            key=lambda doc: doc.get("created_at") or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
+
+        projection = {"_id": 0}
+        cursor = self._collection.find(filter_, projection).sort(
+            [("created_at", DESCENDING), ("updated_at", DESCENDING)]
         )
-        return clean
+        if limit is not None and limit > 0:
+            cursor = cursor.limit(limit)
+
+        documents = await cursor.to_list(length=None)
+        return [_strip_storage_fields(document) for document in documents]
 
     async def ensure_indexes(self) -> None:
         logger.info("Ensuring Mongo indexes for games collection.")

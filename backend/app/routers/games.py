@@ -18,9 +18,15 @@ router = APIRouter(prefix="/profiles/{google_sub}/games", tags=["games"])
 async def list_user_games(
     google_sub: str,
     playgroup_id: str | None = Query(default=None, description="Filter games by playgroup identifier."),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=500,
+        description="Optional cap on the number of games to return, sorted by most recent first.",
+    ),
     database: AsyncIOMotorDatabase = Depends(get_mongo_database),
 ) -> GameList:
-    return await list_games(database, google_sub, playgroup_id=playgroup_id)
+    return await list_games(database, google_sub, playgroup_id=playgroup_id, limit=limit)
 
 
 @router.post(

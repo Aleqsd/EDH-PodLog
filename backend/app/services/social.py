@@ -115,7 +115,7 @@ async def get_public_profile(
 
     deck_payloads = [deck.model_dump(mode="python") for deck in profile.moxfield_decks]
 
-    games_payload = await list_games(database, google_sub)
+    games_payload = await list_games(database, google_sub, limit=50)
     recent_games: List[PublicGameSummary] = []
     for record in games_payload.games[:5]:
         winner = None

@@ -403,9 +403,10 @@ async def list_games(
     owner_sub: str,
     *,
     playgroup_id: str | None = None,
+    limit: int | None = None,
 ) -> GameList:
     repository = GameRepository(database)
-    documents = await repository.list_for_owner(owner_sub, playgroup_id=playgroup_id)
+    documents = await repository.list_for_owner(owner_sub, playgroup_id=playgroup_id, limit=limit)
     records = [_map_game_record(document) for document in documents]
     return GameList(games=records)
 
