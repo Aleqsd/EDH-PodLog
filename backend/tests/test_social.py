@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.config import get_settings
-from app.services.social import get_public_profile, search_public_profiles
+from app.services.social import get_public_profile, list_following, search_public_profiles
 from backend.tests.utils import StubDatabase
 
 pytestmark = pytest.mark.anyio
@@ -191,3 +191,56 @@ async def test_get_public_profile_returns_recent_games_and_counts_followers() ->
 
     with pytest.raises(LookupError):
         await get_public_profile(database, "private-hero")
+
+
+async def test_list_following_returns_profiles_and_respects_sorting() -> None:
+    database = StubDatabase()
+    profiles = _profiles_collection(database)
+    follows = _follows_collection(database)
+
+    now = datetime.now(timezone.utc)
+    profiles.documents.extend(
+        [
+            {
+                "google_sub": "target-1",
+                "display_name": "First Target",
+                "picture": "https://example.com/first.png",
+                "created_at": now - timedelta(days=5),
+                "updated_at": now - timedelta(days=2),
+            },
+            {
+                "google_sub": "target-2",
+                "display_name": "Second Target",
+                "picture": "https://example.com/second.png",
+                "created_at": now - timedelta(days=4),
+                "updated_at": now - timedelta(days=1),
+            },
+        ]
+    )
+
+    follows.documents.extend(
+        [
+            {
+                "follower_sub": "viewer",
+                "target_sub": "target-1",
+                "created_at": now - timedelta(days=2),
+            },
+            {
+                "follower_sub": "viewer",
+                "target_sub": "target-2 ",
+                "created_at": now - timedelta(days=1),
+            },
+            {
+                "follower_sub": "viewer",
+                "target_sub": None,
+                "created_at": now,
+            },
+        ]
+    )
+
+    follow_list = await list_following(database, "viewer")
+
+    assert [entry.google_sub for entry in follow_list.following] == ["target-2", "target-1"]
+    assert follow_list.following[0].display_name == "Second Target"
+    assert follow_list.following[0].picture == "https://example.com/second.png"
+    assert follow_list.following[1].display_name == "First Target"

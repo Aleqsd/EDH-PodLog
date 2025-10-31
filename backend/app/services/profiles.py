@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -21,6 +21,38 @@ async def fetch_user_profile(
     if not document:
         return None
     return UserProfile.model_validate(_strip_profile_storage_fields(document))
+
+
+async def fetch_user_profiles(
+    database: AsyncIOMotorDatabase,
+    google_subs: Iterable[str],
+) -> dict[str, UserProfile]:
+    """Return a mapping of Google subject identifiers to their stored profiles."""
+    normalized_subs: set[str] = set()
+    for raw in google_subs:
+        if not isinstance(raw, str):
+            continue
+        trimmed = raw.strip()
+        if trimmed:
+            normalized_subs.add(trimmed)
+
+    if not normalized_subs:
+        return {}
+
+    settings = get_settings()
+    profiles_collection = database[settings.mongo_users_collection]
+    cursor = profiles_collection.find({"google_sub": {"$in": list(normalized_subs)}})
+    documents = await cursor.to_list(length=None)
+
+    profiles_by_sub: dict[str, UserProfile] = {}
+    for document in documents:
+        google_sub = document.get("google_sub")
+        if not isinstance(google_sub, str):
+            continue
+        profiles_by_sub[google_sub] = UserProfile.model_validate(
+            _strip_profile_storage_fields(document)
+        )
+    return profiles_by_sub
 
 
 async def upsert_user_profile(

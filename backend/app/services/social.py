@@ -18,7 +18,7 @@ from ..schemas import (
     UserSearchResult,
 )
 from .play_data import list_games
-from .profiles import fetch_user_profile
+from .profiles import fetch_user_profile, fetch_user_profiles
 
 logger = get_logger("services.social")
 
@@ -178,13 +178,22 @@ async def list_following(
 ) -> FollowList:
     repository = FollowRepository(database)
     entries = await repository.list_following(follower_sub)
+    target_subs = [
+        entry.get("target_sub")
+        for entry in entries
+        if isinstance(entry.get("target_sub"), str) and entry.get("target_sub")
+    ]
+    profiles_by_sub = await fetch_user_profiles(database, target_subs)
     summaries: List[FollowSummary] = []
 
     for entry in entries:
-        google_sub = entry.get("target_sub")
+        raw_target = entry.get("target_sub")
+        if not isinstance(raw_target, str):
+            continue
+        google_sub = raw_target.strip()
         if not google_sub:
             continue
-        profile = await fetch_user_profile(database, google_sub)
+        profile = profiles_by_sub.get(google_sub)
         summaries.append(
             FollowSummary(
                 google_sub=google_sub,

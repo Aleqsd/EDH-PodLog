@@ -51,13 +51,24 @@ class StubCollection:
                     return False
             else:
                 candidate = document.get(key)
-                if isinstance(value, dict) and "$regex" in value:
-                    pattern = value["$regex"]
-                    options = value.get("$options", "")
-                    flags = re.IGNORECASE if isinstance(options, str) and "i" in options.lower() else 0
-                    compiled = re.compile(pattern, flags)
-                    if not isinstance(candidate, str) or compiled.search(candidate) is None:
-                        return False
+                if isinstance(value, dict):
+                    if "$regex" in value:
+                        pattern = value["$regex"]
+                        options = value.get("$options", "")
+                        flags = re.IGNORECASE if isinstance(options, str) and "i" in options.lower() else 0
+                        compiled = re.compile(pattern, flags)
+                        if not isinstance(candidate, str) or compiled.search(candidate) is None:
+                            return False
+                    elif "$in" in value:
+                        choices = value["$in"]
+                        if isinstance(choices, Iterable):
+                            if candidate not in list(choices):
+                                return False
+                        else:
+                            return False
+                    else:
+                        if candidate != value:
+                            return False
                 else:
                     if candidate != value:
                         return False

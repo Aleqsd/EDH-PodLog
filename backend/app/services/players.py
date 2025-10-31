@@ -18,7 +18,7 @@ from ..schemas import (
     PlayerType,
     PlayerUpdate,
 )
-from .profiles import fetch_user_profile
+from .profiles import fetch_user_profile, fetch_user_profiles
 
 logger = get_logger("services.players")
 
@@ -213,26 +213,36 @@ async def list_available_players(
     tracked_players[owner_identifier] = owner_summary
 
     following_entries = await follow_repository.list_following(owner_sub)
+    target_subs = [
+        entry.get("target_sub")
+        for entry in following_entries
+        if isinstance(entry.get("target_sub"), str) and entry.get("target_sub")
+    ]
+    profiles_by_sub = await fetch_user_profiles(database, target_subs)
+
     for entry in following_entries:
-        target_sub = entry.get("target_sub")
+        raw_target = entry.get("target_sub")
+        if not isinstance(raw_target, str):
+            continue
+        target_sub = raw_target.strip()
         if not target_sub:
             continue
-        profile = await fetch_user_profile(database, target_sub)
+
+        profile = profiles_by_sub.get(target_sub)
         identifier = f"user:{target_sub}"
 
-        if target_sub:
-            existing = next(
-                (
-                    player
-                    for player in tracked_players.values()
-                    if player.google_sub == target_sub
-                ),
-                None,
-            )
-            if existing:
-                if profile and profile.moxfield_decks and not existing.decks:
-                    existing.decks = [deck for deck in profile.moxfield_decks]
-                continue
+        existing = next(
+            (
+                player
+                for player in tracked_players.values()
+                if player.google_sub == target_sub
+            ),
+            None,
+        )
+        if existing:
+            if profile and profile.moxfield_decks and not existing.decks:
+                existing.decks = [deck for deck in profile.moxfield_decks]
+            continue
 
         created_at = entry.get("created_at") or now
         summary = _build_summary_from_profile(
