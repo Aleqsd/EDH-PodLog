@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Callable
 
 import pytest
@@ -775,7 +775,11 @@ async def test_linking_player_updates_game_history(e2e_context: dict[str, object
 
     games_before_link = await client.get(f"/profiles/{owner_sub}/games")
     assert games_before_link.status_code == 200
-    first_game_players = games_before_link.json()["games"][0]["players"]
+    games_before_payload = games_before_link.json()["games"]
+    assert games_before_payload, "Expected recorded games before linking."
+    first_game = games_before_payload[0]
+    before_updated_at = first_game["updated_at"]
+    first_game_players = first_game["players"]
     guest_entry = next(player for player in first_game_players if player["id"] == player_id)
     assert guest_entry["playerType"] == "guest"
     assert (guest_entry.get("googleSub") or guest_entry.get("google_sub")) is None
@@ -792,10 +796,339 @@ async def test_linking_player_updates_game_history(e2e_context: dict[str, object
 
     games_after_link = await client.get(f"/profiles/{owner_sub}/games")
     assert games_after_link.status_code == 200
-    updated_players = games_after_link.json()["games"][0]["players"]
+    games_after_payload = games_after_link.json()["games"]
+    assert games_after_payload, "Expected recorded games after linking."
+    updated_game = games_after_payload[0]
+    updated_players = updated_game["players"]
     linked_entry = next(player for player in updated_players if player["id"] == player_id)
     assert linked_entry["playerType"] == "user"
     assert (linked_entry.get("googleSub") or linked_entry.get("google_sub")) == friend_sub
+    after_updated_at = updated_game["updated_at"]
+    assert after_updated_at != before_updated_at
+
+
+async def test_private_profile_hidden_from_social_endpoints(e2e_context: dict[str, object]) -> None:
+    """Private profiles stay hidden from social endpoints and availability lists."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    viewer_sub = "privacy-viewer"
+    public_sub = "privacy-public"
+    private_sub = "privacy-hidden"
+
+    await _upsert_profile(
+        client,
+        viewer_sub,
+        display_name="Viewer",
+        is_public=True,
+    )
+    await _upsert_profile(
+        client,
+        public_sub,
+        display_name="Visible Ally",
+        is_public=True,
+        description="Happy to pod with everyone.",
+    )
+    await _upsert_profile(
+        client,
+        private_sub,
+        display_name="Hidden Ally",
+        is_public=False,
+        description="Stealth mode enabled.",
+    )
+
+    hidden_profile = await client.get(f"/social/users/{private_sub}")
+    assert hidden_profile.status_code == 404
+    assert hidden_profile.json()["detail"] == "Profil introuvable."
+
+    search_response = await client.get(
+        "/social/users/search",
+        params={"q": "Ally", "viewer": viewer_sub},
+    )
+    assert search_response.status_code == 200
+    result_subs = {entry["google_sub"] for entry in search_response.json()["results"]}
+    assert public_sub in result_subs
+    assert private_sub not in result_subs
+
+    available_response = await client.get(f"/profiles/{viewer_sub}/players/available")
+    assert available_response.status_code == 200
+    available_players = available_response.json()["players"]
+    available_google_subs = {
+        entry.get("google_sub") or entry.get("googleSub")
+        for entry in available_players
+        if entry.get("google_sub") or entry.get("googleSub")
+    }
+    assert viewer_sub in available_google_subs
+    assert private_sub not in available_google_subs
+
+
+async def test_deck_personalization_sanitizes_payload(e2e_context: dict[str, object]) -> None:
+    """Deck personalization storage should normalize incoming payloads."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "personalization-owner"
+    deck_id = "deck-public-001"
+
+    await _upsert_profile(client, owner_sub, is_public=True)
+
+    long_notes = "N" * 2100
+    payload = {
+        "ratings": {"consistance": 6, "interaction": 0, "resilience": 3},
+        "bracket": " 4 ",
+        "playstyle": "  Aggro  ",
+        "tags": ["Goblins", " goblins ", "Tokens", "Goblins", ""],
+        "personal_tag": "   League Night   ",
+        "notes": long_notes,
+    }
+    upsert_response = await client.put(
+        f"/profiles/{owner_sub}/deck-personalizations/{deck_id}",
+        json=payload,
+    )
+    assert upsert_response.status_code == 200, upsert_response.text
+    body = upsert_response.json()
+    assert body["deckId"] == deck_id
+    assert body["ratings"] == {"stability": 5, "interaction": 1, "resilience": 3}
+    assert body["bracket"] == "4"
+    assert body["playstyle"] == "Aggro"
+    assert body["tags"] == ["Goblins", "Tokens"]
+    assert body["personalTag"] == "League Night"
+    assert len(body["notes"]) == 2000
+    assert body["notes"] == long_notes[:2000]
+
+    fetch_response = await client.get(
+        f"/profiles/{owner_sub}/deck-personalizations/{deck_id}",
+    )
+    assert fetch_response.status_code == 200
+    fetched = fetch_response.json()
+    assert fetched["ratings"] == body["ratings"]
+    assert fetched["personalTag"] == body["personalTag"]
+    assert fetched["tags"] == body["tags"]
+    assert fetched["notes"] == body["notes"]
+
+    missing_response = await client.get(
+        f"/profiles/{owner_sub}/deck-personalizations/unknown-deck",
+    )
+    assert missing_response.status_code == 404
+
+
+async def test_linking_guest_player_updates_recorded_games(e2e_context: dict[str, object]) -> None:
+    """Linking a guest player retrofits previous games with the user identity."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "link-update-owner"
+    friend_sub = "link-update-friend"
+
+    await _upsert_profile(client, owner_sub, display_name="Owner Linker")
+    await _upsert_profile(client, friend_sub, display_name="Friend Linker")
+
+    create_player = await client.post(
+        f"/profiles/{owner_sub}/players",
+        json={"name": "Linkable Guest"},
+    )
+    assert create_player.status_code == 201
+    player_id = create_player.json()["id"]
+
+    playgroup_response = await client.post(
+        f"/profiles/{owner_sub}/playgroups",
+        json={
+            "name": "Link Update Pod",
+            "members": [
+                {"playerType": "user", "googleSub": owner_sub, "name": "Owner Linker"},
+                {"playerType": "guest", "name": "Linkable Guest"},
+            ],
+        },
+    )
+    assert playgroup_response.status_code == 201
+    playgroup_id = playgroup_response.json()["id"]
+
+    recorded_at = datetime.now(timezone.utc).isoformat()
+    record_response = await client.post(
+        f"/profiles/{owner_sub}/games",
+        json={
+            "playgroup": {"id": playgroup_id, "name": "Link Update Pod"},
+            "players": [
+                {"id": "owner-slot", "name": "Owner Linker", "playerType": "user", "is_owner": True, "googleSub": owner_sub},
+                {"id": player_id, "name": "Linkable Guest", "playerType": "guest"},
+            ],
+            "rankings": [
+                {"player_id": "owner-slot", "rank": 1},
+                {"player_id": player_id, "rank": 2},
+            ],
+            "recorded_at": recorded_at,
+            "notes": "Initial guest entry.",
+        },
+    )
+    assert record_response.status_code == 201
+
+    games_before = await client.get(f"/profiles/{owner_sub}/games")
+    assert games_before.status_code == 200
+    games_payload = games_before.json()["games"]
+    assert len(games_payload) == 1
+    [game_before] = games_payload
+    guest_before = next(player for player in game_before["players"] if player["id"] == player_id)
+    assert guest_before["playerType"] == "guest"
+    assert guest_before.get("googleSub") is None
+
+    link_response = await client.post(
+        f"/profiles/{owner_sub}/players/{player_id}/link",
+        json={"google_sub": friend_sub},
+    )
+    assert link_response.status_code == 200
+
+    games_after = await client.get(f"/profiles/{owner_sub}/games")
+    assert games_after.status_code == 200
+    games_after_payload = games_after.json()["games"]
+    assert len(games_after_payload) == 1
+    [game_after] = games_after_payload
+    guest_after = next(player for player in game_after["players"] if player["id"] == player_id)
+    assert guest_after["playerType"] == "user"
+    assert guest_after["googleSub"] == friend_sub
+    assert guest_after["linkedGoogleSub"] == friend_sub
+
+
+async def test_public_profile_recent_games_rollup(e2e_context: dict[str, object]) -> None:
+    """Public profiles should expose the five most recent games with winners."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "recent-owner"
+    rival_sub = "recent-rival"
+    owner_name = "Recent Owner"
+    rival_name = "Recent Rival"
+
+    await _upsert_profile(client, owner_sub, display_name=owner_name, is_public=True)
+    await _upsert_profile(client, rival_sub, display_name=rival_name, is_public=True)
+
+    playgroup_response = await client.post(
+        f"/profiles/{owner_sub}/playgroups",
+        json={
+            "name": "Recency Pod",
+            "members": [
+                {"playerType": "user", "googleSub": owner_sub, "name": owner_name},
+                {"playerType": "user", "googleSub": rival_sub, "name": rival_name},
+            ],
+        },
+    )
+    assert playgroup_response.status_code == 201
+    playgroup_id = playgroup_response.json()["id"]
+
+    base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    timestamp_sequence: list[str] = []
+    results_lookup: dict[str, dict[str, str | None]] = {}
+
+    for index in range(6):
+        recorded_at = base_time + timedelta(days=index)
+        recorded_iso = recorded_at.isoformat().replace("+00:00", "Z")
+        timestamp_sequence.append(recorded_iso)
+        owner_rank = 1 if index % 2 == 0 else 2
+        rival_rank = 1 if owner_rank == 2 else 2
+        results_lookup[recorded_iso] = {
+            "winner": owner_name if owner_rank == 1 else rival_name,
+            "runner_up": rival_name if owner_rank == 1 else owner_name,
+        }
+
+        response = await client.post(
+            f"/profiles/{owner_sub}/games",
+            json={
+                "playgroup": {"id": playgroup_id, "name": "Recency Pod"},
+                "players": [
+                    {
+                        "id": f"owner-{index}",
+                        "name": owner_name,
+                        "playerType": "user",
+                        "is_owner": True,
+                        "googleSub": owner_sub,
+                        "deck_id": "deck-public-001",
+                        "deck_name": "Krenko Mayhem",
+                    },
+                    {
+                        "id": f"rival-{index}",
+                        "name": rival_name,
+                        "playerType": "user",
+                        "googleSub": rival_sub,
+                    },
+                ],
+                "rankings": [
+                    {"player_id": f"owner-{index}", "rank": owner_rank},
+                    {"player_id": f"rival-{index}", "rank": rival_rank},
+                ],
+                "recorded_at": recorded_iso,
+            },
+        )
+        assert response.status_code == 201
+
+    public_profile = await client.get(f"/social/users/{owner_sub}")
+    assert public_profile.status_code == 200
+    recent_games = public_profile.json()["recent_games"]
+    assert len(recent_games) == 5
+
+    expected_order = list(reversed(timestamp_sequence[1:]))
+    actual_order = [entry["created_at"] for entry in recent_games]
+    assert actual_order == expected_order
+
+    for entry in recent_games:
+        created_at = entry["created_at"]
+        assert created_at in results_lookup
+        expected = results_lookup[created_at]
+        assert entry["winner"] == expected["winner"]
+        assert entry["runner_up"] == expected["runner_up"]
+
+
+async def test_deck_summary_cache_miss_until_sync(e2e_context: dict[str, object]) -> None:
+    """Deck summary cache should report misses until sync runs and clear after deletion."""
+    client = e2e_context["client"]
+    assert isinstance(client, AsyncClient)
+
+    owner_sub = "cache-owner-summary"
+    await _upsert_profile(client, owner_sub, moxfield_handle="podcaster")
+
+    cold_summary = await client.get("/cache/users/podcaster/deck-summaries")
+    assert cold_summary.status_code == 404
+
+    cold_decks = await client.get("/cache/users/podcaster/decks")
+    assert cold_decks.status_code == 404
+
+    summary_sync = await client.get("/users/podcaster/deck-summaries")
+    assert summary_sync.status_code == 200
+    assert summary_sync.json()["total_decks"] == 1
+
+    cached_summaries = await client.get("/cache/users/podcaster/deck-summaries")
+    assert cached_summaries.status_code == 200
+    cached_summary_payload = cached_summaries.json()
+    assert cached_summary_payload["total_decks"] == 1
+    assert cached_summary_payload["decks"][0]["public_id"] == "deck-public-001"
+
+    decks_before_full_sync = await client.get("/cache/users/podcaster/decks")
+    assert decks_before_full_sync.status_code == 200
+    decks_before_payload = decks_before_full_sync.json()
+    assert decks_before_payload["decks"] == []
+    assert decks_before_payload["total_decks"] == 1
+
+    decks_sync = await client.get("/users/podcaster/decks")
+    assert decks_sync.status_code == 200
+    assert decks_sync.json()["total_decks"] == 1
+
+    cached_decks = await client.get("/cache/users/podcaster/decks")
+    assert cached_decks.status_code == 200
+    cached_decks_payload = cached_decks.json()
+    assert cached_decks_payload["decks"][0]["public_id"] == "deck-public-001"
+
+    delete_response = await client.delete("/users/podcaster/decks/deck-public-001")
+    assert delete_response.status_code == 204
+
+    summaries_after_delete = await client.get("/cache/users/podcaster/deck-summaries")
+    assert summaries_after_delete.status_code == 200
+    summaries_after_payload = summaries_after_delete.json()
+    assert summaries_after_payload["total_decks"] == 0
+    assert summaries_after_payload["decks"] == []
+
+    decks_after_delete = await client.get("/cache/users/podcaster/decks")
+    assert decks_after_delete.status_code == 200
+    decks_after_payload = decks_after_delete.json()
+    assert decks_after_payload["decks"] == []
+    assert decks_after_payload["total_decks"] == 0
 
 
 async def test_moxfield_error_handling() -> None:
